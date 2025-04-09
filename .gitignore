@@ -1,0 +1,9 @@
+*.out
+data/
+*.tar.gz
+hf_cache/
+old_*
+code/old_*
+__pycache__
+*.log
+*/.ipynb_checkpoints/
