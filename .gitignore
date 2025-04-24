@@ -7,3 +7,7 @@ code/old_*
 __pycache__
 *.log
 */.ipynb_checkpoints/
+configs/
+data_50k/
+data_80k/
+results/
