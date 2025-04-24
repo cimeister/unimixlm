@@ -1,4 +1,3 @@
-# utils.py
 import math
 from collections import OrderedDict, defaultdict, Counter
 import multiprocessing
@@ -122,6 +121,8 @@ def _segment_word_viterbi(word, token_probs, unk_token="<unk>", max_sub_len=20, 
     Returns a list of sub tokens.
     
     Uses beam search pruning to speed up the algorithm significantly.
+    Implements UNK handling in the style of SentencePiece's UnigramLM.
+    Includes early termination for unreachable positions.
     """
     n = len(word)
     if n == 0:
@@ -132,18 +133,31 @@ def _segment_word_viterbi(word, token_probs, unk_token="<unk>", max_sub_len=20, 
     best_score[0] = 0.0
     best_edge = np.full(n+1, -1, dtype=np.int32)
     
-    # Get the unknown token log probability (keep floor value)
+    # Get the unknown token log probability
     unk_logp = math.log(max(token_probs.get(unk_token, 1e-12), 1e-12))
     
     # For each position, keep track of the best score seen so far (for pruning)
     max_score_at_pos = np.full(n+1, float('-inf'), dtype=np.float64)
     max_score_at_pos[0] = 0.0
+    
+    # Track positions where we need to use UNK
+    requires_unk = np.zeros(n+1, dtype=bool)
+    
+    # Track the furthest position we've reached with valid tokens
+    furthest_valid_pos = 0
 
-    # Main Viterbi loop with beam search pruning
+    # First pass: Try to segment using only known tokens
     for start in range(n):
         current_score = best_score[start]
+        
+        # Skip positions we can't reach
         if current_score == float('-inf'):
             continue
+            
+        # Early termination: if we're beyond the furthest position we can reach,
+        # we can stop the first pass
+        if start > furthest_valid_pos:
+            break
             
         # If this path is already too bad compared to the best path at this position, skip it
         if current_score < max_score_at_pos[start] - beam_width:
@@ -156,8 +170,7 @@ def _segment_word_viterbi(word, token_probs, unk_token="<unk>", max_sub_len=20, 
         for end in range(start+1, max_end+1):
             sub = word[start:end]
             if sub in token_probs:
-                # Calculate log probability on-the-fly instead of precomputing
-                # This saves memory for large vocabularies
+                # Calculate log probability
                 logp = math.log(max(token_probs[sub], 1e-12))
                 score = current_score + logp
                 
@@ -167,17 +180,30 @@ def _segment_word_viterbi(word, token_probs, unk_token="<unk>", max_sub_len=20, 
                     best_edge[end] = start
                     # Update the max score at this position for pruning
                     max_score_at_pos[end] = max(max_score_at_pos[end], score)
+                    # Update furthest valid position
+                    furthest_valid_pos = max(furthest_valid_pos, end)
                 found_valid = True
+        
+        # Mark positions that cannot be reached with valid tokens
+        if not found_valid and best_edge[start+1] == -1:
+            requires_unk[start+1] = True
 
-        # If no valid subword was found, fallback to <unk> for a single char
-        if not found_valid:
-            end = start + 1
-            if end <= n:
-                score = current_score + unk_logp
-                if score > best_score[end]:
-                    best_score[end] = score
-                    best_edge[end] = start
-                    max_score_at_pos[end] = max(max_score_at_pos[end], score)
+    # Second pass: Handle positions requiring UNK tokens
+    for start in range(min(n, furthest_valid_pos + 1)):
+        current_score = best_score[start]
+        if current_score == float('-inf'):
+            continue
+            
+        # Only consider UNK for positions that need it
+        end = start + 1
+        if end <= n and requires_unk[end]:
+            score = current_score + unk_logp
+            best_score[end] = score
+            best_edge[end] = start
+            max_score_at_pos[end] = max(max_score_at_pos[end], score)
+            requires_unk[end] = False  # Mark as handled
+            # Update furthest position in case UNK tokens help us reach further
+            furthest_valid_pos = max(furthest_valid_pos, end)
 
     # Backtrack to build the token list
     tokens = []
@@ -185,7 +211,7 @@ def _segment_word_viterbi(word, token_probs, unk_token="<unk>", max_sub_len=20, 
     
     while current > 0:
         prev = int(best_edge[current])
-        if prev == -1:  # Should be rare, fallback
+        if prev == -1:  # Should never happen with two-pass approach
             tokens.append(unk_token)
             current -= 1
         else:
@@ -196,13 +222,12 @@ def _segment_word_viterbi(word, token_probs, unk_token="<unk>", max_sub_len=20, 
     # Reverse the tokens list
     return tokens[::-1]
 
-def forward_backward_unigram_fast(text, p_lang, unk_token="<unk>", max_sub_len=15, prob_threshold=1e-12):
-    """
-    A faster forward-backward approach for a 'soft' E-step that matches Viterbi behavior.
-    1) We split on whitespace first, just like Viterbi
-    2) We limit each subword to length <= max_sub_len.
-    3) We skip subwords if p_lang[subword] < prob_threshold.
 
+def forward_backward_unigram(text, p_lang, unk_token="<unk>", max_sub_len=15, prob_threshold=1e-12):
+    """
+    Forward-backward algorithm for unigram language model training that matches SentencePiece's
+    UNK handling approach.
+    
     Returns a dict { subword -> fractional_count }.
     """
     # Get probability for unknown token
@@ -221,21 +246,67 @@ def forward_backward_unigram_fast(text, p_lang, unk_token="<unk>", max_sub_len=1
             
         # Initialize alpha and beta arrays
         alpha = [0.0] * (n+1)
+        alpha_without_unk = [0.0] * (n+1)  # Tracks probability mass WITHOUT using UNK
         beta = [0.0] * (n+1)
         alpha[0] = 1.0
+        alpha_without_unk[0] = 1.0
         
-        # Helper function
+        # Track positions that need UNK (cannot be reached with regular tokens)
+        requires_unk = [False] * (n+1)
+        
+        # Track furthest reachable position for early termination
+        furthest_reachable = 0
+        
+        # Helper function for token probabilities with memoization
+        token_prob_cache = {}
         def token_prob(token):
-            return p_lang.get(token, 0.0)
+            if token not in token_prob_cache:
+                token_prob_cache[token] = p_lang.get(token, 0.0)
+            return token_prob_cache[token]
         
-        # Forward pass
+        # Forward pass - first compute alpha_without_unk
+        for i in range(n):
+            base_val = alpha_without_unk[i]
+            if base_val == 0.0:
+                continue
+                
+            # Early termination check - if we're beyond what we can reach with regular tokens
+            if i > furthest_reachable:
+                break
+                
+            # Try all valid subwords
+            end_limit = min(n, i+max_sub_len)
+            found_valid = False
+            
+            for j in range(i+1, end_limit+1):
+                sub = word[i:j]
+                p_sub = token_prob(sub)
+                if p_sub > prob_threshold:
+                    alpha_without_unk[j] += base_val * p_sub
+                    found_valid = True
+                    furthest_reachable = max(furthest_reachable, j)
+            
+            # Mark positions that need UNK
+            if not found_valid and i+1 <= n:
+                requires_unk[i+1] = True
+        
+        # Forward pass with UNK - compute full alpha values
+        # Reset furthest reachable to account for UNK tokens
+        furthest_reachable_with_unk = furthest_reachable
+        
         for i in range(n):
             base_val = alpha[i]
             if base_val == 0.0:
                 continue
                 
-            # Allow single character <unk> at this position
-            alpha[i+1] += base_val * p_unk
+            # Early termination check
+            if i > furthest_reachable_with_unk:
+                break
+                
+            # Only allow UNK for positions that require it
+            if i+1 <= n and requires_unk[i+1]:
+                alpha[i+1] += base_val * p_unk
+                furthest_reachable_with_unk = max(furthest_reachable_with_unk, i+1)
             
             # Try all valid subwords
             end_limit = min(n, i+max_sub_len)
@@ -244,7 +315,9 @@ def forward_backward_unigram_fast(text, p_lang, unk_token="<unk>", max_sub_len=1
                 p_sub = token_prob(sub)
                 if p_sub > prob_threshold:
                     alpha[j] += base_val * p_sub
+                    furthest_reachable_with_unk = max(furthest_reachable_with_unk, j)
         
+        # Calculate normalization factor
         Z = alpha[n]
         if Z <= 0:
             # If we can't segment this word, count it as one <unk>
@@ -254,8 +327,12 @@ def forward_backward_unigram_fast(text, p_lang, unk_token="<unk>", max_sub_len=1
         # Backward pass
         beta[n] = 1.0
         for i in range(n-1, -1, -1):
-            # Allow single character <unk> at this position
-            if i+1 <= n:
+            # Skip positions that can't contribute to any valid path
+            if alpha[i] == 0.0:
+                continue
+                
+            # Only allow UNK for positions that require it
+            if i+1 <= n and requires_unk[i+1]:
                 beta[i] += p_unk * beta[i+1]
                 
             # Try all valid subwords
@@ -266,14 +343,18 @@ def forward_backward_unigram_fast(text, p_lang, unk_token="<unk>", max_sub_len=1
                 if p_sub > prob_threshold:
                     beta[i] += p_sub * beta[j]
         
-        # Accumulate expected usage
+        # Accumulate expected counts
         for i in range(n):
             ai = alpha[i]
             if ai == 0.0:
                 continue
                 
-            # Count <unk> token usage
-            if i+1 <= n:
+            # Early termination check
+            if i > furthest_reachable_with_unk:
+                break
+                
+            # Count <unk> token usage only where required
+            if i+1 <= n and requires_unk[i+1] and beta[i+1] > 0:
                 frac_unk = (ai * p_unk * beta[i+1]) / Z
                 if frac_unk > 0:
                     total_counts[unk_token] = total_counts.get(unk_token, 0.0) + frac_unk
@@ -281,6 +362,10 @@ def forward_backward_unigram_fast(text, p_lang, unk_token="<unk>", max_sub_len=1
             # Count subword token usage
             end_limit = min(n, i+max_sub_len)
             for j in range(i+1, end_limit+1):
+                # Skip if this can't possibly contribute
+                if beta[j] == 0.0:
+                    continue
+                    
                 sub = word[i:j]
                 p_sub = token_prob(sub)
                 if p_sub > prob_threshold:
@@ -290,77 +375,6 @@ def forward_backward_unigram_fast(text, p_lang, unk_token="<unk>", max_sub_len=1
     
     return total_counts
 
-def forward_backward_unigram_fast_old(
-    line, 
-    p_lang, 
-    unk_token="<unk>",
-    max_sub_len=15,
-    prob_threshold=1e-12
-):
-    """
-    A faster forward-backward approach for a 'soft' E-step. 
-    1) We limit each subword to length <= max_sub_len.
-    2) We skip subwords if p_lang[subword] < prob_threshold.
-
-    Returns a dict { subword -> fractional_count }.
-    If line can't be segmented in a normal way, we fallback to counting <unk>=1.
-    """
-    n = len(line)
-    alpha = [0.0]*(n+1)
-    beta  = [0.0]*(n+1)
-    alpha[0] = 1.0
-
-    def token_prob(token):
-        return p_lang.get(token, 0.0)
-
-    # Forward pass
-    for i in range(n):
-        base_val = alpha[i]
-        if base_val == 0.0:
-            continue
-        # only j up to i+max_sub_len
-        end_limit = min(n, i+max_sub_len)
-        for j in range(i+1, end_limit+1):
-            sub = line[i:j]
-            p_sub = token_prob(sub)
-            # skip low or zero
-            if p_sub > prob_threshold:
-                alpha[j]+= base_val * p_sub
-
-    Z = alpha[n]
-    if Z <= 0:
-        # fallback => entire line as <unk>
-        return {unk_token: 1.0}
-
-    # backward pass
-    beta[n] = 1.0
-    for i in range(n-1,-1,-1):
-        tmp = 0.0
-        end_limit = min(n, i+max_sub_len)
-        for j in range(i+1,end_limit+1):
-            sub=line[i:j]
-            p_sub = token_prob(sub)
-            if p_sub>prob_threshold:
-                tmp+= p_sub*beta[j]
-        beta[i]= tmp
-
-    # accumulate expected usage
-    usage_counts_line = {}
-    for i in range(n):
-        ai = alpha[i]
-        if ai==0.0:
-            continue
-        end_limit=min(n,i+max_sub_len)
-        for j in range(i+1, end_limit+1):
-            sub=line[i:j]
-            p_sub=token_prob(sub)
-            if p_sub>prob_threshold:
-                # fractional usage
-                frac = (ai * p_sub * beta[j])/ Z
-                if frac>0:
-                    usage_counts_line[sub] = usage_counts_line.get(sub,0.0)+ frac
-
-    return usage_counts_line
 
 def _accumulate_usage_worker_soft(args):
     """
@@ -372,7 +386,7 @@ def _accumulate_usage_worker_soft(args):
     total = 0.0
 
     for line in chunk_lines:
-        usage_line = forward_backward_unigram_fast(line, p_lang, unk_token=unk_token)
+        usage_line = forward_backward_unigram(line, p_lang, unk_token=unk_token)
         line_count = sum(usage_line.values())  # total subwords in a segmentation => expected # of tokens
         total+= line_count
         for tk, frac in usage_line.items():
@@ -501,3 +515,8 @@ def set_special_tokens(fast_tokenizer):
                 # This sets the pad_token to <pad> if the user wants it recognized as special
             setattr(fast_tokenizer, token_name, token)
             setattr(fast_tokenizer, token_name + '_id', vocab[token])
+
+class SafeFormattingDict(dict):
+    def __missing__(self, key):
+        return "{" + key + "}"
+
