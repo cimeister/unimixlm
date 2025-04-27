@@ -8,53 +8,34 @@ import numpy as np
 import io 
 from typing import Dict, List, Tuple, Set
 
+import logging
+logging.basicConfig(
+    level=logging.INFO,
+    format='%(asctime)s - %(name)s - %(levelname)s - %(message)s'
+)
+logger = logging.getLogger(__name__)
+
 SPECIAL_TOKENS = OrderedDict([("bos_token", "<s>"), ("eos_token", "</s>"), ("pad_token","<pad>"), ("unk_token","<unk>")])
 NUM_TRIMMING_ITERATIONS = 3
 INITIAL_VOCAB_MULT_FACTOR = 5
-MIN_CHAR_OCCURENCE_THRESHOLD = 5
+MIN_CHAR_OCCURENCE_THRESHOLD = 2
+MIN_TOKEN_PROB = 1e-8
 
-
-def count_characters_in_file(file_path: str, chunk_size: int = 1024 * 1024) -> Counter:
+def get_baseline_characters(training_data_files, character_coverage=0.9995, min_occurence_threshold=MIN_CHAR_OCCURENCE_THRESHOLD):
     """
-    Count character frequencies in a single file by reading in chunks.
-    
-    Args:
-        file_path: Path to the text file
-        chunk_size: Size of chunks to read at once (default: 1MB)
-        
-    Returns:
-        Counter object with character counts
-    """
-    char_counts = Counter()
-    
-    try:
-        with open(file_path, 'r', encoding='utf-8', errors='replace') as f:
-            # Read the file in chunks to avoid memory issues
-            while True:
-                chunk = f.read(chunk_size)
-                if not chunk:
-                    break
-                # Update counts directly from the chunk
-                char_counts.update(chunk)
-    except Exception as e:
-        print(f"Error reading file {file_path}: {str(e)}")
-    
-    return char_counts
-
-def _count_worker(file_path):
-    """Worker function for parallel processing"""
-    return file_path, count_characters_in_file(file_path)
-
-def get_baseline_characters(training_data_files, min_occurence_threshold=5):
-    """
-    Get baseline characters from training data files with efficient parallel processing.
+    Get baseline characters from training data files, matching SentencePiece's approach.
     
     Args:
         training_data_files: List of file paths to process
-        min_occurence_threshold: Minimum number of occurrences for a character to be kept
+        character_coverage: Target character coverage ratio (between 0.0 and 1.0)
+                           Default is 0.9995 which is SentencePiece's default
+        min_occurence_threshold: Minimum number of occurrences for a character
+                                to be included regardless of coverage
         
     Returns:
-        Tuple of (chars_to_keep, char_freqs)
+        Tuple of (chars_to_keep, char_freqs) where chars_to_keep includes:
+        1. Characters that are part of the character_coverage set
+        2. Characters that appear at least min_occurence_threshold times
     """
     # Use multiprocessing for faster file processing
     num_processes = min(multiprocessing.cpu_count() or 1, len(training_data_files), 20)
@@ -71,18 +52,79 @@ def get_baseline_characters(training_data_files, min_occurence_threshold=5):
             chars_by_file[file_path] = counts
             total_char_counts.update(counts)
     
+    # Calculate total character occurrences
     total_chars = sum(total_char_counts.values())
     
     # Get relative frequencies
     char_freqs = {char: count/total_chars for char, count in total_char_counts.items()}
     
-    # Filter by threshold
-    chars_to_keep = [ch for ch, ct in total_char_counts.items() if ct >= min_occurence_threshold]
+    # Sort characters by frequency (descending)
+    sorted_chars = sorted(total_char_counts.items(), key=lambda x: x[1], reverse=True)
+    
+    # First set: Characters that meet the coverage threshold
+    coverage_chars = set()
+    cumulative_coverage = 0.0
+    target_coverage = total_chars * character_coverage
+    
+    for char, count in sorted_chars:
+        coverage_chars.add(char)
+        cumulative_coverage += count
+        
+        # Stop once we reach the target coverage
+        if cumulative_coverage >= target_coverage:
+            break
+    
+    # Second set: Characters that appear at least min_occurence_threshold times
+    frequency_chars = {char for char, count in total_char_counts.items() 
+                      if count >= min_occurence_threshold}
+    
+    # Union of the two sets
+    chars_to_keep = list(coverage_chars.union(frequency_chars))
+    
+    # Calculate actual character coverage percentage
+    covered_count = sum(total_char_counts[char] for char in coverage_chars)
+    actual_coverage = covered_count / total_chars * 100.0
+    
+    # Count chars included only due to frequency threshold
+    freq_only_chars = frequency_chars - coverage_chars
+    freq_only_count = len(freq_only_chars)
+    
+    # Log coverage statistics
+    logger.info(f"Character coverage: {len(coverage_chars)}/{len(total_char_counts)} "
+                f"characters ({actual_coverage:.4f}%)")
+    logger.info(f"Additional characters from frequency threshold: {freq_only_count}")
+    logger.info(f"Total characters kept: {len(chars_to_keep)}")
+    logger.info(f"Characters not included: {len(total_char_counts) - len(chars_to_keep)}")
     
     return chars_to_keep, char_freqs
 
 
-def segment_text_viterbi(text, token_probs, unk_token="<unk>", max_sub_len=20, beam_width=5.0):
+def _count_worker(file_path):
+    """
+    Worker function to count character frequencies in a file.
+    
+    Args:
+        file_path: Path to the file to process
+        
+    Returns:
+        Tuple of (file_path, character_counts)
+    """
+    try:
+        # Initialize character counter
+        char_counts = Counter()
+        
+        # Process the file
+        with open(file_path, 'r', encoding='utf-8', errors='replace') as f:
+            for line in f:
+                char_counts.update(line)
+        
+        return file_path, char_counts
+    except Exception as e:
+        logger.error(f"Error processing {file_path}: {e}")
+        return file_path, Counter()
+
+
+def segment_text_viterbi(text, token_probs, unk_token="<unk>", max_sub_len=15, beam_width=5.0):
     """
     Segment `text` into tokens using a whitespace split + Viterbi subword approach,
     under the distribution given by `token_probs` (a dict mapping token->prob).
@@ -420,7 +462,7 @@ def _accumulate_usage_worker_hard(args):
                 line, 
                 p_lang, 
                 unk_token=unk_token, 
-                max_sub_len=20
+                max_sub_len=15
             )
 
             total += len(tokens)

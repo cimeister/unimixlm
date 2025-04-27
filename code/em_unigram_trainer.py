@@ -4,7 +4,7 @@ import math
 import numpy as np
 from collections import Counter, defaultdict
 
-from code.utils import _accumulate_usage, segment_text_viterbi
+from code.utils import _accumulate_usage, segment_text_viterbi, MIN_TOKEN_PROB
 
 logger = logging.getLogger(__name__)
 
@@ -49,7 +49,7 @@ class EMUnigramTrainer:
 
         self.token_probs = None  # final distribution
 
-    def train(self, corpus_file, batch_size=1000, num_processes=None, is_low_resource=False):
+    def train(self, corpus_file, batch_size=1000, num_processes=None):
         """
         Run the EM algorithm over `corpus_file` using the same approach as
         StandardUnigramLMTokenizer.
@@ -58,7 +58,6 @@ class EMUnigramTrainer:
             corpus_file: path to text
             batch_size: how many lines to process in memory (passed to _accumulate_usage)
             num_processes: concurrency (passed to _accumulate_usage)
-            is_low_resource: don't skip files for small languages if True
 
         Returns:
             dict(token -> float probability)
@@ -77,11 +76,6 @@ class EMUnigramTrainer:
             # Reset usage counts for E-step
             usage_counts = {tk: 0.0 for tk in self.vocab}
             total_subwords = 0.0
-            
-            # Keep UNK prob small
-            if self.unk_token in p_token:
-                p_token[self.unk_token] = 1.0 / vocab_size
-                logger.info(f"Resetting UNK prob to {p_token[self.unk_token]}")
             
             # Save current parameters for convergence check
             if iteration > 0:
@@ -116,7 +110,12 @@ class EMUnigramTrainer:
             # Keep probabilities positive
             for tk in self.vocab:
                 if p_token[tk] <= 0.0:
-                    p_token[tk] = 1e-12
+                    p_token[tk] = MIN_TOKEN_PROB
+
+            # Keep UNK prob small
+            if self.unk_token in p_token:
+                p_token[self.unk_token] = MIN_TOKEN_PROB
+                logger.info(f"Resetting UNK prob to {p_token[self.unk_token]}")
             
             total_prob = sum(p_token.values())
             if total_prob > 0:
@@ -140,11 +139,3 @@ class EMUnigramTrainer:
     def get_token_probs(self):
         """Return the trained token probabilities."""
         return self.token_probs
-
-    def tokenize(self, text):
-        """
-        If you want to do a single-line tokenize with the final distribution:
-        """
-        if not self.token_probs:
-            raise ValueError("No token_probs learned yet!")
-        return segment_text_viterbi(text, self.token_probs, unk_token=self.unk_token)

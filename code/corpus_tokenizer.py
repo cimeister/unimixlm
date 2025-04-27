@@ -226,7 +226,6 @@ class CorpusTokenizer:
                             
                         except Exception as e:
                             logger.error(f"Error tokenizing text with {tokenizer_name}: {str(e)}")
-                    logger.info()
                 
                 logger.info(f"[{tokenizer_name}] {lang_code}-{split_name} => {line_count} lines with {unk_count} UNK tokens.")
                 if line_count > 0:
