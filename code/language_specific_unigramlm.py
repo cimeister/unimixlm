@@ -22,9 +22,6 @@ logger = logging.getLogger(__name__)
 DEFAULT_BASE_NAME = "langspec_base_tokenizer.json"
 DEFAULT_PROB_FILES_NAME = "langspec_{em_mode}_{lang_code}_em_probs.npy"
 
-from code.language_selection import LANGUAGES
-
-
 class LanguageSpecificUnigramLMTokenizer(StandardUnigramLMTokenizer):
     """
     Extends StandardUnigramLMTokenizer to handle language-specific models.
@@ -45,17 +42,15 @@ class LanguageSpecificUnigramLMTokenizer(StandardUnigramLMTokenizer):
     def __init__(self, vocab_size=8000, 
                  unk_token=SPECIAL_TOKENS['unk_token'], 
                  special_tokens=None,
-                 reestimation_em_mode="hard",
-                 num_iterations=20,
-                 max_sub_len=15):
+                 reestimation_em_mode="soft",
+                 num_iterations=20):
         
         # Initialize the parent class with the base tokenizer settings
         super().__init__(
             vocab_size=vocab_size,
             unk_token=unk_token,
             special_tokens=special_tokens,
-            em_mode="soft",
-            max_sub_len=max_sub_len
+            em_mode="soft"
         )
         self.num_reestimation_iterations = num_iterations
         self.reestimation_em_mode = reestimation_em_mode
@@ -132,11 +127,6 @@ class LanguageSpecificUnigramLMTokenizer(StandardUnigramLMTokenizer):
             if token_probs is None:
                 logger.info(f"Running EM trainer for {lang_code} (no saved file found/used).")
 
-                # Check resource level
-                is_low_resource = False
-                if lang_code in LANGUAGES and LANGUAGES[lang_code].get('resource_level') == 'low':
-                    is_low_resource = True
-
                 em_trainer = EMUnigramTrainer(
                     vocab=base_vocab,
                     unk_token=self.unk_token,
@@ -144,7 +134,7 @@ class LanguageSpecificUnigramLMTokenizer(StandardUnigramLMTokenizer):
                     em_mode=self.reestimation_em_mode,
                     max_iterations = self.num_reestimation_iterations
                 )
-                token_probs = em_trainer.train(train_file, is_low_resource=is_low_resource)
+                token_probs = em_trainer.train(train_file)
                 np.save(np_path, token_probs)
                 logger.info(f"Saved EM distribution for {lang_code} to {np_path}")
             else:

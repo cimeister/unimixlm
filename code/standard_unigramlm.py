@@ -11,7 +11,7 @@ from tokenizers.models import Unigram
 from tokenizers.trainers import UnigramTrainer
 from tokenizers.pre_tokenizers import Whitespace
 from code.utils import _accumulate_usage, get_baseline_characters
-from code.utils import SPECIAL_TOKENS, INITIAL_VOCAB_MULT_FACTOR, NUM_TRIMMING_ITERATIONS, MIN_CHAR_OCCURENCE_THRESHOLD
+from code.utils import SPECIAL_TOKENS, INITIAL_VOCAB_MULT_FACTOR, NUM_TRIMMING_ITERATIONS, MIN_TOKEN_PROB
 
 logging.basicConfig(
     level=logging.INFO,
@@ -34,7 +34,6 @@ class StandardUnigramLMTokenizer:
         special_tokens=None,
         em_mode=None,            # "hf", "hard", or "soft"
         num_iterations=10,       # If em_mode != "hf", how many EM iterations
-        max_sub_len=15,          # for forward-backward, to speed up
         multigram=False,         # Whether to use per-language EM with mixture combining
         mixture_weights=None     # Used only if multigram=True
     ):
@@ -47,7 +46,6 @@ class StandardUnigramLMTokenizer:
         self.base_tokenizer = None
         self.em_mode = em_mode
         self.num_iterations = num_iterations
-        self.max_sub_len = max_sub_len
         self.multigram = multigram
         self.mixture_weights = mixture_weights
         
@@ -128,10 +126,8 @@ class StandardUnigramLMTokenizer:
         Train using custom EM algorithm (hard or soft).
         """
 
-        logger.info("Getting baseline char set...")
-        chars_to_keep, char_freq = get_baseline_characters(corpus_files, MIN_CHAR_OCCURENCE_THRESHOLD)
-        logger.info(f"{len(char_freq)} unique characters found in dataset. Attempting to keep all with "
-            f"at least {MIN_CHAR_OCCURENCE_THRESHOLD} occurrences, which is {len(chars_to_keep)} characters.")
+        logger.info("Getting baseline char set to include in vocabulary...")
+        chars_to_keep, char_freq = get_baseline_characters(corpus_files)
         
         # 1) Build an initial big Unigram model
         logger.info(f"Custom EM approach ({self.em_mode}). Building an initial oversized vocab with HF tools...")
@@ -175,11 +171,6 @@ class StandardUnigramLMTokenizer:
             usage_counts = {tk: 0.0 for tk in all_tokens}
             total_subwords = 0.0
 
-            # keep UNK prob small
-            if self.unk_token in p_token:
-                p_token[self.unk_token] = 1.0 / len(all_tokens) 
-            logger.info(f"Resetting UNK prob to {p_token[self.unk_token]}")
-
             # For each corpus file
             for fpath in corpus_files:
                 c_dict, tot = _accumulate_usage(fpath, p_token, self.unk_token, mode=self.em_mode)
@@ -205,6 +196,8 @@ class StandardUnigramLMTokenizer:
                 for tk in all_tokens:
                     p_token[tk] = 1.0 / len(all_tokens)
 
+            min_observed_token_prob = min(p_token.values())
+            logger.info(f"Minimum observed probability: {min_observed_token_prob}")
             logger.info(f"Current UNK prob: {p_token[self.unk_token]}")
             
         # Finalize the token list after EM
@@ -223,7 +216,7 @@ class StandardUnigramLMTokenizer:
         vocab_list = []
         special_tokens = []
         for tk, prob in sorted_final:
-            score = math.log(max(prob, 1e-12))
+            score = math.log(max(prob, MIN_TOKEN_PROB))
             if tk in self.special_tokens:
                 special_tokens.append((tk, score))
             else:
@@ -281,9 +274,7 @@ class StandardUnigramLMTokenizer:
         
         # Get baseline characters (identical to _train_custom_em)
         logger.info("Getting baseline char set...")
-        chars_to_keep, char_freq = get_baseline_characters(train_files, MIN_CHAR_OCCURENCE_THRESHOLD)
-        logger.info(f"{len(char_freq)} unique characters found in dataset. Attempting to keep all with "
-            f"at least {MIN_CHAR_OCCURENCE_THRESHOLD} occurrences, which is {len(chars_to_keep)} characters.")
+        chars_to_keep, char_freq = get_baseline_characters(train_files)
 
         # 1) Build an initial big Unigram model (identical to _train_custom_em)
         logger.info(f"Multigram approach with {self.em_mode} EM. Building an initial oversized vocab with HF tools...")
@@ -352,12 +343,6 @@ class StandardUnigramLMTokenizer:
             }
             lang_total_subwords = {lc: 0.0 for lc in self.lang_codes}
             
-            # Keep UNK prob small in each language distribution
-            for lang_code in self.lang_codes:
-                if self.unk_token in self.per_lang_probs[lang_code]:
-                    self.per_lang_probs[lang_code][self.unk_token] = 1.0 / len(all_tokens) 
-                logger.info(f"Resetting UNK prob for {lang_code} to {self.per_lang_probs[lang_code][self.unk_token]}")
-            
             # E-step: For each language, collect usage counts
             for lang_code in self.lang_codes:
                 train_file = corpus_info[lang_code]['splits']['train']
@@ -388,6 +373,10 @@ class StandardUnigramLMTokenizer:
                     logger.warning(f"No usage for {lang_code} => fallback uniform distribution.")
                     for tk in all_tokens:
                         self.per_lang_probs[lang_code][tk] = 1.0 / len(all_tokens)
+
+                min_observed_token_prob = min(self.per_lang_probs[lang_code].values())
+                logger.info(f"Minimum observed probability: {min_observed_token_prob}")
+                logger.info(f"Current UNK prob: {self.per_lang_probs[lang_code][self.unk_token]}")
             
             # Combine per-language distributions into global distribution
             for tk in all_tokens:
@@ -434,7 +423,7 @@ class StandardUnigramLMTokenizer:
         vocab_list = []
         special_tokens = []
         for tk, prob in sorted_final:
-            score = math.log(max(prob, 1e-12))
+            score = math.log(max(prob, MIN_TOKEN_PROB))
             if tk in self.special_tokens:
                 special_tokens.append((tk, score))
             else:

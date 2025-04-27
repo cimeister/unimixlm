@@ -1008,9 +1008,9 @@ def main():
     parser = argparse.ArgumentParser(description="Evaluate language models on tokenized test sets")
     
     # Input options
-    parser.add_argument("--models-dir", type=str, require=True, 
+    parser.add_argument("--models-dir", type=str, required=True, 
                        help="Directory containing trained models")
-    parser.add_argument("--tokenized-dir", type=str, require=True,
+    parser.add_argument("--tokenized-dir", type=str, required=True,
                        help="Directory containing tokenized data")
     parser.add_argument("--output-dir", type=str, default=os.path.join(DEFAULT_DATA_DIR, 'evaluation_results'),
                        help="Directory to save evaluation results")
