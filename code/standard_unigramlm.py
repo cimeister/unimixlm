@@ -56,7 +56,7 @@ class StandardUnigramLMTokenizer:
     
     def load(self, base_path):
         """
-        Load a saved tokenizer and optionally, global probabilities.
+        Load a saved tokenizer
         
         Args:
             base_path: Path to the tokenizer file
@@ -201,6 +201,7 @@ class StandardUnigramLMTokenizer:
             logger.info(f"Current UNK prob: {p_token[self.unk_token]}")
             
         # Finalize the token list after EM
+        p_token[self.unk_token] = MIN_TOKEN_PROB
         if len(p_token) > self.vocab_size:
             sorted_final = _order_token_list_by_prob(p_token)
             sorted_final = sorted_final[:self.vocab_size]
@@ -408,6 +409,7 @@ class StandardUnigramLMTokenizer:
             logger.info(f"Current UNK prob in global distribution: {p_token[self.unk_token]}")
         
         # Final pruning if needed (identical to _train_custom_em)
+        p_token[self.unk_token] = MIN_TOKEN_PROB
         if len(p_token) > self.vocab_size:
             sorted_final = _order_token_list_by_prob(p_token)
             sorted_final = sorted_final[:self.vocab_size]

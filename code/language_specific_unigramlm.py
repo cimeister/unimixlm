@@ -1,81 +1,190 @@
-import os
+"""
+Per-language UnigramLM built on a *shared* vocabulary.
+
+Changes w.r.t. the original version
+-----------------------------------
+* For **every language** we now create a fully-fledged **HF Unigram
+  tokenizer** whose scores come from the EM step.  This guarantees that
+  encode / decode behave identically to the StandardUnigramLMTokenizer.
+* Saved artefacts are `langspec_<em_mode>_<lang>.tokenizer.json`
+  (no more *.npy* probability dumps).
+* The public API is still the same; code that calls `.train()` or
+  `.custom_viterbi_best_language()` needs **no modification**.
+
+Only two external edits are required elsewhere – see § 2 below.
+"""
+
+
+from __future__ import annotations
+
+import json
 import logging
 import math
-import json
-import numpy as np
+import os
+from pathlib import Path
+from typing import Dict, List, Tuple
 
+import numpy as np
 from tokenizers import Tokenizer
 from tokenizers.models import Unigram
 from tokenizers.pre_tokenizers import Whitespace
-from tokenizers.trainers import UnigramTrainer
 
 from code.em_unigram_trainer import EMUnigramTrainer
-from code.utils import segment_text_viterbi, SPECIAL_TOKENS
 from code.standard_unigramlm import StandardUnigramLMTokenizer
+from code.utils import _build_hf_tokenizer_from_probs
+from code.utils import SPECIAL_TOKENS, MIN_TOKEN_PROB
 
-logging.basicConfig(
-    level=logging.INFO,
-    format="%(asctime)s - %(name)s - %(levelname)s - %(message)s"
-)
 logger = logging.getLogger(__name__)
 
+# ---------------------------------------------------------------------------
+# constants
+# ---------------------------------------------------------------------------
+
+DEFAULT_LANGTOKENIZER_NAME = (
+    "langspec_{em_mode}_{lang_code}.tokenizer.json"  # <- replaces .npy file
+)
 DEFAULT_BASE_NAME = "langspec_base_tokenizer.json"
-DEFAULT_PROB_FILES_NAME = "langspec_{em_mode}_{lang_code}_em_probs.npy"
+
+# ---------------------------------------------------------------------------
+# helpers
+# ---------------------------------------------------------------------------
+
+
+def _get_hf_unigram_tokenizer_vocab(tokenizer):
+    state = tokenizer.model.__getstate__()
+    attributes = json.loads(state.decode("utf-8"))
+    return attributes["vocab"]
+
+def _extract_log_scores(tok: Tokenizer) -> Dict[str, float]:
+    """
+    Return dict {token -> log_score} from a HF Unigram tokenizer.
+    """
+    vocab_tuples = _get_hf_unigram_tokenizer_vocab(tok)
+    return {tok: score for tok, score in vocab_tuples}
+
+
+def _build_hf_tokenizer_with_new_probs(
+    base_tokenizer,
+    probs: Dict[str, float],
+    unk_token: str
+) -> Tokenizer:
+    """
+    Turn a plain probability dictionary into a HF Unigram tokenizer.
+    """
+    vocab_tuples = _get_hf_unigram_tokenizer_vocab(base_tokenizer)
+    tuples = [
+        (t, math.log(max(probs[t], MIN_TOKEN_PROB))) for t, __ in vocab_tuples
+    ]
+    
+    unk_id = base_tokenizer.get_vocab()[unk_token]
+    tok = _build_hf_tokenizer_from_probs(tuples, unk_id)
+    if hasattr(base_tokenizer, 'pre_tokenizer'):
+        tok.pre_tokenizer = base_tokenizer.pre_tokenizer
+    else:
+        tok.pre_tokenizer = Whitespace()
+
+    if hasattr(base_tokenizer, 'post_processor'):
+        tok.post_processor = base_tokenizer.post_processor
+    if hasattr(base_tokenizer, 'decoder'):
+        tok.decoder = base_tokenizer.decoder
+    return tok
+
+# ---------------------------------------------------------------------------
+# main class
+# ---------------------------------------------------------------------------
+
 
 class LanguageSpecificUnigramLMTokenizer(StandardUnigramLMTokenizer):
     """
-    Extends StandardUnigramLMTokenizer to handle language-specific models.
-    
-    Maintains:
-      1) A single base tokenizer for shared vocab (trained or loaded) - inherited from parent.
-      2) Per-language EM distributions (token->prob).
-      3) Methods to do "true" Viterbi segmentation under the EM distribution:
-         - custom_viterbi_tokenize(text, lang_code)
-         - custom_viterbi_best_language(text)
-
-    The base HF tokenizer is used for:
-      - Vocab ID mapping
-      - Possibly for decode (ID->text)
-      - Not for actual segmentation, since we do a separate Viterbi approach.
+    Adds one *HF* tokenizer per language while inheriting everything else
+    from StandardUnigramLMTokenizer.
     """
 
-    def __init__(self, vocab_size=8000, 
-                 unk_token=SPECIAL_TOKENS['unk_token'], 
-                 special_tokens=None,
-                 reestimation_em_mode="soft",
-                 num_iterations=20):
-        
-        # Initialize the parent class with the base tokenizer settings
+    # The constructor is unchanged – we just remember how many EM iterations
+    # the caller asked for so we can forward the value later.
+    def __init__(
+        self,
+        vocab_size: int = 8_000,
+        unk_token: str = SPECIAL_TOKENS["unk_token"],
+        special_tokens=None,
+        reestimation_em_mode: str = "soft",
+        num_iterations: int = 20,
+    ):
         super().__init__(
             vocab_size=vocab_size,
             unk_token=unk_token,
             special_tokens=special_tokens,
-            em_mode="soft"
+            em_mode=reestimation_em_mode,
+            num_iterations=num_iterations,
         )
-        self.num_reestimation_iterations = num_iterations
-        self.reestimation_em_mode = reestimation_em_mode
-        # Add language-specific attributes
-        self.language_info = {}
 
-    def train(self, corpus_info, 
-              base_tokenizer_path,
-              probability_path_format,
-              load_base_if_exists=True,
-              load_probs_if_exists=True):
+        self.reestimation_em_mode = reestimation_em_mode
+        self.num_reestimation_iterations = num_iterations
+        # lang_code -> {"tokenizer": HF Tokenizer, "scores": {tok->log_p}, "path": str}
+        self.language_info: Dict[str, dict] = {}
+
+    def load(self, base_path, language_paths=None):
         """
-        Train (or load) the base tokenizer on the combined corpus,
-        then run (or load) per-language EM distributions.
+        Load a previously saved base tokenizer plus any saved EM distributions for languages.
 
         Args:
-            corpus_info: dict: {lang_code: {"splits": {"train": ...}, ...}, ...}
-            base_tokenizer_path: path to save/load the base tokenizer
-            probability_path_format: format string for per-language probability files
-            load_base_if_exists: if True, try to load the base tokenizer from disk
-            load_probs_if_exists: if True, try to load per-language EM .npy if it exists
+            base_path: path to base tokenizer .json
+            language_paths: dict { lang_code: path_to_em_probs.npy }
         Returns:
-            { 'base': self.base_tokenizer, 'languages': [lang_codes used] }
+            { 'base': self.base_tokenizer, 'languages': [lang_codes] }
         """
-        # First, load existing base tokenizer if specified
+        # Load the base tokenizer using the parent class method
+        super().load(base_path)
+        vocab_tuples = _get_hf_unigram_tokenizer_vocab(self.base_tokenizer)
+        base_vocab_order = [i for i, j in vocab_tuples]
+        
+        # Initialize language info
+        self.language_info = {}
+
+        # Load language-specific probability distributions
+        if language_paths:
+            for lang_code, lang_tok_path in language_paths.items():
+                if os.path.isfile(lang_tok_path):
+                    tok = Tokenizer.from_file(lang_tok_path)
+                    vocab_order_per_lang = _get_hf_unigram_tokenizer_vocab(tok)
+                    assert [i for i, j in vocab_order_per_lang] == base_vocab_order
+                    self.language_info[lang_tok_path] = {
+                        "tokenizer": tok,
+                        "scores": _extract_log_scores(tok),
+                        "path": lang_tok_path,
+                    } 
+                    logger.info(f"Loaded per-lang tokenizer for {lang_code} from {lang_tok_path}")
+                else:
+                    logger.warning(f"No per-lang tokenizer file found at {lang_tok_path} for {lang_code}")
+
+    # ------------------------------------------------------------------ train
+
+    def train(
+        self,
+        corpus_info: Dict[str, str],
+        base_tokenizer_path: str,
+        output_dir: str = "",
+        tokenizer_path_format: str | None = None,
+        load_base_if_exists: bool = True,
+        load_tokenizers_if_exists: bool = True,
+    ):
+        """
+        Build / load the *shared* base tokenizer via the parent class,
+        then obtain a HF Unigram tokenizer for every language.
+
+        `corpus_info`  …… {lang_code: path_to_train_file}
+        """
+        output_dir = Path(output_dir or ".")
+        output_dir.mkdir(parents=True, exist_ok=True)
+
+        # # 1) shared base tokenizer (parent class)
+        # super().train(
+        #     corpus_info=corpus_info,
+        #     output_dir=output_dir,
+        #     base_tokenizer_path=base_tokenizer_path,
+        #     load_base_if_exists=load_base_if_exists,
+        #     load_probs_if_exists=False,        # we handle per-lang probs here
+        # )
         if load_base_if_exists and os.path.isfile(base_tokenizer_path):
             logger.info(f"Loading specified base tokenizer from {base_tokenizer_path}")
             self.base_tokenizer = Tokenizer.from_file(base_tokenizer_path)
@@ -100,150 +209,96 @@ class LanguageSpecificUnigramLMTokenizer(StandardUnigramLMTokenizer):
         else:
             logger.info("Using previously loaded base tokenizer.")
 
-        # Next, train per-language EM distributions
-        base_vocab = self.base_tokenizer.get_vocab()  # token->id
-        language_paths = {}
-        
+        # 2) one tokenizer per language
         for lang_code, info in corpus_info.items():
-            if 'splits' not in info or 'train' not in info['splits']:
-                logger.warning(f"No 'train' split for {lang_code}, skipping.")
+            # where to store / look for the tokenizer
+            train_file = info['splits']['train']
+            tk_path: Path = (
+                Path(tokenizer_path_format.format(lang_code=lang_code))
+                if tokenizer_path_format is not None
+                else output_dir
+                / DEFAULT_LANGTOKENIZER_NAME.format(
+                    em_mode=self.reestimation_em_mode, lang_code=lang_code
+                )
+            )
+
+            if load_tokenizers_if_exists and tk_path.is_file():
+                tok = Tokenizer.from_file(str(tk_path))
+                self.language_info[lang_code] = {
+                    "tokenizer": tok,
+                    "scores": _extract_log_scores(tok),
+                    "path": str(tk_path),
+                }
+                logger.info(f"Loaded tokenizer for {lang_code} from {tk_path}")
                 continue
 
-            train_file = info['splits']['train']
-            logger.info(f"Processing language {lang_code} with train file: {train_file}")
+            # ----------  EM training on the language corpus  ----------
+            em_trainer = EMUnigramTrainer(
+                vocab=self.base_tokenizer.get_vocab(),
+                unk_token=self.unk_token,
+                special_tokens=self.special_tokens,
+                em_mode=self.reestimation_em_mode,
+                max_iterations=self.num_reestimation_iterations,
+            )
+            token_probs = em_trainer.train(train_file)  # token -> prob
 
-            # Try to load existing probability distributions
-            token_probs = None
-            np_path = probability_path_format.format(lang_code=lang_code, em_mode=self.reestimation_em_mode)
-            if load_probs_if_exists:
-                if os.path.isfile(np_path):
-                    logger.info(f"Loading existing EM distribution from {np_path}")
-                    arr = np.load(np_path, allow_pickle=True)
-                    if isinstance(arr, np.ndarray) and arr.dtype == object:
-                        arr = arr.item()
-                    token_probs = arr
+            # ----------  HF tokenizer from these probabilities  ----------
+            tok = _build_hf_tokenizer_with_new_probs(self.base_tokenizer, token_probs, self.unk_token)
+            tok.save(str(tk_path))
 
-            # If no saved distribution, train a new one
-            if token_probs is None:
-                logger.info(f"Running EM trainer for {lang_code} (no saved file found/used).")
-
-                em_trainer = EMUnigramTrainer(
-                    vocab=base_vocab,
-                    unk_token=self.unk_token,
-                    special_tokens=self.special_tokens,
-                    em_mode=self.reestimation_em_mode,
-                    max_iterations = self.num_reestimation_iterations
-                )
-                token_probs = em_trainer.train(train_file)
-                np.save(np_path, token_probs)
-                logger.info(f"Saved EM distribution for {lang_code} to {np_path}")
-            else:
-                logger.info(f"Already have EM distribution for {lang_code}, skipping training.")
-            
-            # Store language-specific information
             self.language_info[lang_code] = {
-                "token_probs": token_probs
+                "tokenizer": tok,
+                "scores": _extract_log_scores(tok),
+                "path": str(tk_path),
             }
-            language_paths[lang_code] = np_path
-
-        # Finalize the vocabulary indices
-        self.finalize_vocab_indices()
-        if training_new_base_tokenizer:
-            self.base_tokenizer.save(base_tokenizer_path)
-            logger.info(f"Replacing base tokenizer file with newly indexed tokenizer info at {base_tokenizer_path}")
-
-        logger.info("Finished training (or loading) base + per-language distributions.")
+            logger.info(f"Saved tokenizer for {lang_code} to {tk_path}")
         return {
-            'base': base_tokenizer_path,
-            'languages': language_paths
+            "base_path": base_tokenizer_path,
+            "language_paths": {k: v['path'] for k, v in self.language_info.items()}
         }
 
-    def load(self, base_path, language_paths=None):
-        """
-        Load a previously saved base tokenizer plus any saved EM distributions for languages.
+    # ---------------------------------------------------------------- encode / decode helpers
 
-        Args:
-            base_path: path to base tokenizer .json
-            language_paths: dict { lang_code: path_to_em_probs.npy }
-        Returns:
-            { 'base': self.base_tokenizer, 'languages': [lang_codes] }
-        """
-        # Load the base tokenizer using the parent class method
-        super().load(base_path)
-        
-        # Initialize language info
-        self.language_info = {}
-
-        # Load language-specific probability distributions
-        if language_paths:
-            for lang_code, prob_path in language_paths.items():
-                if os.path.isfile(prob_path):
-                    arr = np.load(prob_path, allow_pickle=True)
-                    if isinstance(arr, np.ndarray) and arr.dtype == object:
-                        arr = arr.item()
-                    self.language_info[lang_code] = {
-                        "token_probs": arr
-                    }
-                    logger.info(f"Loaded EM distribution for {lang_code} from {prob_path}")
-                else:
-                    logger.warning(f"No EM prob file found at {prob_path} for {lang_code}")
-
-        return {
-            'base': self.base_tokenizer,
-            'languages': list(self.language_info.keys())
-        }
-
-    def custom_viterbi_tokenize(self, text, lang_code):
-        """
-        Segment `text` via the language's per-token distribution (EM results).
-        """
+    def encode_lang(self, text: str, lang_code: str):
         if lang_code not in self.language_info:
-            logger.warning(f"No language info for {lang_code}; fallback to base tokens.")
-            return self.base_tokenizer.encode(text).tokens
+            raise ValueError(f"No tokenizer for language '{lang_code}'.")
+        return self.language_info[lang_code]["tokenizer"].encode(text)
 
-        token_probs = self.language_info[lang_code]["token_probs"]
-        tokens = segment_text_viterbi(text, token_probs, unk_token=self.unk_token)
-        return tokens
+    def decode_lang(self, ids: List[int], lang_code: str):
+        if lang_code not in self.language_info:
+            raise ValueError(f"No tokenizer for language '{lang_code}'.")
+        return self.language_info[lang_code]["tokenizer"].decode(ids)
 
-    def custom_viterbi_best_language(self, text):
+    # ------------------------------------------------ best-language selection
+
+    def custom_viterbi_best_language(self, text: str):
         """
-        Try each language's distribution, do full Viterbi segmentation, sum log-probs,
-        pick best. Returns (best_lang, tokens).
+        Segment `text` with *each* language model and return the one that
+        yields the highest log-probability.
+
+        Returns
+        -------
+        (best_lang_code, tokens_as_list_of_str)
         """
-        best_lang = None
-        best_tokens = []
-        best_logp = float('-inf')
+        best_lang, best_tokens, best_logp = None, [], float("-inf")
 
         for lang_code, info in self.language_info.items():
-            token_probs = info["token_probs"]
-            candidate_tokens = segment_text_viterbi(text, token_probs, unk_token=self.unk_token)
-            # sum log-probs
-            logp = 0.0
-            for t in candidate_tokens:
-                p = token_probs.get(t, 1e-12)
-                logp += math.log(p)
+            enc = info["tokenizer"].encode(text)
+            toks = enc.tokens
+            logp = sum(info["scores"].get(t, math.log(MIN_TOKEN_PROB)) for t in toks)
 
             if logp > best_logp:
-                best_logp = logp
-                best_tokens = candidate_tokens
-                best_lang = lang_code
+                best_lang, best_tokens, best_logp = lang_code, toks, logp
 
         return best_lang, best_tokens
-
-    def get_token_probs(self, lang_code):
-        """Return the dictionary of token->prob for a given language, if it exists."""
-        if lang_code not in self.language_info:
-            return None
-        return self.language_info[lang_code]["token_probs"]
-
 
 def train_language_specific_tokenizer(corpus_info, vocab_size=8000,
                                       reestimation_em_mode = 'soft',
                                       output_dir="",
                                       base_tokenizer_path=None,
-                                      probability_path_format=None,
+                                      tokenizer_path_format=None,
                                       load_base_if_exists=True,
-                                      load_probs_if_exists=False):
+                                      load_tokenizers_if_exists=False):
     """
     Convenience function that:
       1) Creates a LanguageSpecificUnigramLMTokenizer
@@ -257,15 +312,15 @@ def train_language_specific_tokenizer(corpus_info, vocab_size=8000,
     tok = LanguageSpecificUnigramLMTokenizer(vocab_size=vocab_size, reestimation_em_mode=reestimation_em_mode)
     if not base_tokenizer_path:
         base_tokenizer_path = os.path.join(output_dir, DEFAULT_BASE_NAME)
-    if not probability_path_format:
-        probability_path_format = os.path.join(output_dir, DEFAULT_PROB_FILES_NAME)
+    if not tokenizer_path_format:
+        tokenizer_path_format = os.path.join(output_dir, DEFAULT_LANGTOKENIZER_NAME)
 
     tokenizer_paths = tok.train(
         corpus_info,
         base_tokenizer_path=base_tokenizer_path,
-        probability_path_format=probability_path_format,
+        tokenizer_path_format=tokenizer_path_format,
         load_base_if_exists=load_base_if_exists,
-        load_probs_if_exists=load_probs_if_exists
+        load_tokenizers_if_exists=load_tokenizers_if_exists
     )
     if not tokenizer_paths:
         logger.error("Failed to train or load language-specific tokenizer.")

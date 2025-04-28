@@ -107,20 +107,6 @@ class EMUnigramTrainer:
                 for tk in self.vocab:
                     p_token[tk] = 1.0 / len(self.vocab)
             
-            # Keep probabilities positive
-            for tk in self.vocab:
-                if p_token[tk] <= 0.0:
-                    p_token[tk] = MIN_TOKEN_PROB
-
-            # Keep UNK prob small
-            if self.unk_token in p_token:
-                p_token[self.unk_token] = MIN_TOKEN_PROB
-                logger.info(f"Resetting UNK prob to {p_token[self.unk_token]}")
-            
-            total_prob = sum(p_token.values())
-            if total_prob > 0:
-                p_token = {tk: prob/total_prob for tk, prob in p_token.items()}
-
             # Check for convergence
             if prev_p_token and iteration > 0:
                 diffs = [abs(p_token[tk] - prev_p_token[tk]) for tk in self.vocab]
@@ -130,12 +116,20 @@ class EMUnigramTrainer:
                 if total_diff < self.convergence_threshold:
                     logger.info(f"Converged at iteration {iteration+1}, total_diff={total_diff:.8g}")
                     break
+
+        # Keep probabilities positive
+        for tk in self.vocab:
+            p_token[tk] = max(p_token[tk], MIN_TOKEN_PROB)
         
-        self.token_probs = p_token
+        del p_token[self.unk_token] # don't include UNK prob in counts   
+        total_prob = sum(p_token.values())
+        if total_prob > 0:
+            p_token = {tk: prob/total_prob for tk, prob in p_token.items()}
+
+        p_token[self.unk_token] = MIN_TOKEN_PROB
+        logger.info(f"Resetting UNK prob to {p_token[self.unk_token]}")
+        
         logger.info(f"EM training completed with {self.max_iterations} iterations")
         
         return p_token
-
-    def get_token_probs(self):
-        """Return the trained token probabilities."""
-        return self.token_probs
+    

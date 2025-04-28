@@ -178,8 +178,8 @@ def train_tokenizers(config: Dict[str, Any], corpus_info: Dict[str, Any]) -> Dic
             if not base_tokenizer_name:
                 logger.info(f"Missing base_tokenizer for language-specific tokenizer: {tokenizer_name}. Will train a new one...")
                 
-            probability_path_format = tokenizer_config.get(
-                "probability_path_format", ""
+            tokenizer_path_format = tokenizer_config.get(
+                "tokenizer_path_format", ""
             ).format_map(SafeFormattingDict(tokenizers_dir=tokenizers_dir, em_mode=em_mode))
             
             # Train language-specific tokenizer
@@ -190,18 +190,14 @@ def train_tokenizers(config: Dict[str, Any], corpus_info: Dict[str, Any]) -> Dic
                 reestimation_em_mode=em_mode,
                 output_dir=tokenizers_dir,
                 base_tokenizer_path=base_tokenizer_name,
-                probability_path_format=probability_path_format,
+                tokenizer_path_format=tokenizer_path_format,
                 load_base_if_exists=base_tokenizer_name and tokenizer_config.get("skip_base_if_exists", True),
-                load_probs_if_exists=tokenizer_config.get("skip_if_exists", True)
+                load_tokenizers_if_exists=tokenizer_config.get("skip_if_exists", True)
             )
             
             if paths:
-                tokenizer_paths[tokenizer_name] = {
-                    "base_path": paths["base"],
-                    "language_paths": paths.get("languages", {}),
-                    "type": "langspec"
-                }
-        
+                paths["type"] ="langspec"
+                tokenizer_paths[tokenizer_name] = paths
         else:
             logger.warning(f"Unsupported tokenizer type: {tokenizer_type}")
     
