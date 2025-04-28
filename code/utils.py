@@ -8,6 +8,10 @@ import numpy as np
 import io 
 from typing import Dict, List, Tuple, Set
 
+from tokenizers import Tokenizer
+from tokenizers.models import Unigram
+from tokenizers.pre_tokenizers import Whitespace
+
 import logging
 logging.basicConfig(
     level=logging.INFO,
@@ -157,111 +161,106 @@ def segment_text_viterbi(text, token_probs, unk_token="<unk>", max_sub_len=15, b
     return all_tokens
 
 
-def _segment_word_viterbi(word, token_probs, unk_token="<unk>", max_sub_len=20, beam_width=5.0):
+def _segment_word_viterbi(
+    word: str,
+    token_probs: dict,
+    unk_token: str = "<unk>",
+    max_sub_len: int = 20,
+    beam_width: float = 5.0,
+):
     """
-    Viterbi subword segmentation for a single 'word' (no internal spaces).
-    Returns a list of sub tokens.
-    
-    Uses beam search pruning to speed up the algorithm significantly.
-    Implements UNK handling in the style of SentencePiece's UnigramLM.
-    Includes early termination for unreachable positions.
+    Efficient Viterbi-style sub-word segmentation (SentencePiece UnigramLM).
+
+    * First pass  – explore paths that use only **known** tokens.
+    * Second pass – insert required <unk> tokens **and immediately keep
+                    exploring from the position that follows each <unk>**,
+                    so later characters are no longer forced to become <unk>.
+    The algorithm still runs in O(n · max_sub_len) time with beam pruning.
     """
     n = len(word)
     if n == 0:
         return []
 
-    # Initialize arrays with appropriate values
-    best_score = np.full(n+1, float('-inf'), dtype=np.float64)
-    best_score[0] = 0.0
-    best_edge = np.full(n+1, -1, dtype=np.int32)
-    
-    # Get the unknown token log probability
+    # --- tables -------------------------------------------------------------
+    best_score = np.full(n + 1, float("-inf"), dtype=np.float64)
+    best_edge = np.full(n + 1, -1, dtype=np.int32)
+    max_score_at_pos = np.full(n + 1, float("-inf"), dtype=np.float64)
+    best_score[0] = max_score_at_pos[0] = 0.0
+
     unk_logp = math.log(max(token_probs.get(unk_token, 1e-12), 1e-12))
-    
-    # For each position, keep track of the best score seen so far (for pruning)
-    max_score_at_pos = np.full(n+1, float('-inf'), dtype=np.float64)
-    max_score_at_pos[0] = 0.0
-    
-    # Track positions where we need to use UNK
-    requires_unk = np.zeros(n+1, dtype=bool)
-    
-    # Track the furthest position we've reached with valid tokens
-    furthest_valid_pos = 0
+    requires_unk = np.zeros(n + 1, dtype=bool)
 
-    # First pass: Try to segment using only known tokens
+    # ------------------------------------------------------------------------
+    # Pass 1 – only known tokens
+    # ------------------------------------------------------------------------
     for start in range(n):
-        current_score = best_score[start]
-        
-        # Skip positions we can't reach
-        if current_score == float('-inf'):
+        cur_score = best_score[start]
+        if cur_score == float("-inf"):
             continue
-            
-        # Early termination: if we're beyond the furthest position we can reach,
-        # we can stop the first pass
-        if start > furthest_valid_pos:
-            break
-            
-        # If this path is already too bad compared to the best path at this position, skip it
-        if current_score < max_score_at_pos[start] - beam_width:
+        if cur_score < max_score_at_pos[start] - beam_width:
             continue
 
-        # Try all substring lengths from start
         max_end = min(n, start + max_sub_len)
-        found_valid = False
-
-        for end in range(start+1, max_end+1):
+        found = False
+        for end in range(start + 1, max_end + 1):
             sub = word[start:end]
             if sub in token_probs:
-                # Calculate log probability
-                logp = math.log(max(token_probs[sub], 1e-12))
-                score = current_score + logp
-                
-                # Update best score and path
+                score = cur_score + math.log(max(token_probs[sub], 1e-12))
                 if score > best_score[end]:
                     best_score[end] = score
                     best_edge[end] = start
-                    # Update the max score at this position for pruning
                     max_score_at_pos[end] = max(max_score_at_pos[end], score)
-                    # Update furthest valid position
-                    furthest_valid_pos = max(furthest_valid_pos, end)
-                found_valid = True
-        
-        # Mark positions that cannot be reached with valid tokens
-        if not found_valid and best_edge[start+1] == -1:
-            requires_unk[start+1] = True
+                found = True
 
-    # Second pass: Handle positions requiring UNK tokens
-    for start in range(min(n, furthest_valid_pos + 1)):
-        current_score = best_score[start]
-        if current_score == float('-inf'):
+        if not found and best_edge[start + 1] == -1:
+            requires_unk[start + 1] = True
+
+    # ------------------------------------------------------------------------
+    # Pass 2 – insert <unk> where required *and* keep exploring forward
+    # ------------------------------------------------------------------------
+    for start in range(n):                       # <— no early-exit break
+        cur_score = best_score[start]
+        if cur_score == float("-inf"):
             continue
-            
-        # Only consider UNK for positions that need it
+
+        # 2a. insert exactly one-char <unk> if we still need it here
         end = start + 1
         if end <= n and requires_unk[end]:
-            score = current_score + unk_logp
-            best_score[end] = score
-            best_edge[end] = start
-            max_score_at_pos[end] = max(max_score_at_pos[end], score)
-            requires_unk[end] = False  # Mark as handled
-            # Update furthest position in case UNK tokens help us reach further
-            furthest_valid_pos = max(furthest_valid_pos, end)
+            score = cur_score + unk_logp
+            if score > best_score[end]:
+                best_score[end] = score
+                best_edge[end] = start
+                max_score_at_pos[end] = max(max_score_at_pos[end], score)
+            requires_unk[end] = False    # handled – don’t revisit
 
-    # Backtrack to build the token list
+        # 2b. now try *normal* tokens that begin right after start
+        if cur_score < max_score_at_pos[start] - beam_width:
+            continue                      # (reuse beam pruning)
+        max_end = min(n, start + max_sub_len)
+        for end in range(start + 1, max_end + 1):
+            sub = word[start:end]
+            if sub in token_probs:
+                score = cur_score + math.log(max(token_probs[sub], 1e-12))
+                if score > best_score[end]:
+                    best_score[end] = score
+                    best_edge[end] = start
+                    max_score_at_pos[end] = max(max_score_at_pos[end], score)
+
+    # ------------------------------------------------------------------------
+    # Back-trace
+    # ------------------------------------------------------------------------
     tokens = []
-    current = n
-    
-    while current > 0:
-        prev = int(best_edge[current])
-        if prev == -1:  # Should never happen with two-pass approach
+    pos = n
+    while pos > 0:
+        prev = int(best_edge[pos])
+        if prev == -1:
             tokens.append(unk_token)
-            current -= 1
+            pos -= 1
         else:
-            sub = word[prev:current]
+            sub = word[prev:pos]
             tokens.append(sub if sub in token_probs else unk_token)
-            current = prev
-    
-    # Reverse the tokens list
+            pos = prev
+
     return tokens[::-1]
 
 
@@ -561,4 +560,19 @@ def set_special_tokens(fast_tokenizer):
 class SafeFormattingDict(dict):
     def __missing__(self, key):
         return "{" + key + "}"
+
+def _build_hf_tokenizer_from_probs(
+    probs_tuples: List[Tuple[str, float]],
+    unk_id: int,
+    pre_tokenizer = Whitespace()
+) -> Tokenizer:
+    """
+    Turn a plain probability dictionary into a HF Unigram tokenizer.
+    """
+    model = Unigram(probs_tuples, unk_id)
+    tok = Tokenizer(model)
+    tok.pre_tokenizer = pre_tokenizer
+
+    return tok
+
 
