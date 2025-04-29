@@ -24,12 +24,6 @@ logging.basicConfig(
 )
 logger = logging.getLogger(__name__)
 
-# Directory setup
-DATA_DIR = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), "data")
-TOKENIZED_DIR = os.path.join(DATA_DIR, "tokenized")
-MODELS_DIR = os.path.join(DATA_DIR, "models")
-os.makedirs(MODELS_DIR, exist_ok=True)
-
 
 class TokenizedDatasetLoader:
     """
@@ -218,7 +212,7 @@ class CustomCausalLMModel:
         
         return result
     
-    def evaluate(self, test_dataset):
+    def evaluate(self, test_dataset, output_dir):
         """Evaluate the model on a test dataset."""
         if self.model is None or self.tokenizer is None:
             logger.error("No model/Tokenizer for evaluation.")
@@ -229,7 +223,7 @@ class CustomCausalLMModel:
         test_dataset = test_dataset.filter(nonempty)
 
         # Setup evaluation arguments
-        temp_dir = os.path.join(MODELS_DIR, "temp_eval")
+        temp_dir = os.path.join(output_dir, "temp_eval")
         eval_args = TrainingArguments(
             output_dir=temp_dir,
             per_device_eval_batch_size=8,
@@ -322,7 +316,7 @@ def train_model_on_tokenized_data(tokenized_files,
         return None
     
     # 6) Evaluate model
-    eval_metrics = wrapper.evaluate(test_ds)
+    eval_metrics = wrapper.evaluate(test_ds, output_dir)
     if eval_metrics:
         eval_path = os.path.join(output_dir, "eval_results.json")
         with open(eval_path, 'w') as f:
