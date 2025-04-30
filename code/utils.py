@@ -6,11 +6,12 @@ import os
 import json
 import numpy as np
 import io 
-from typing import Dict, List, Tuple, Set
+from typing import Dict, List, Tuple, Set, Any
+import random
 
 from tokenizers import Tokenizer
 from tokenizers.models import Unigram
-from tokenizers.pre_tokenizers import Whitespace
+from tokenizers.pre_tokenizers import Whitespace, ByteLevel
 
 import logging
 logging.basicConfig(
@@ -23,7 +24,13 @@ SPECIAL_TOKENS = OrderedDict([("bos_token", "<s>"), ("eos_token", "</s>"), ("pad
 NUM_TRIMMING_ITERATIONS = 3
 INITIAL_VOCAB_MULT_FACTOR = 5
 MIN_CHAR_OCCURENCE_THRESHOLD = 2
-MIN_TOKEN_PROB = 1e-8
+MIN_TOKEN_PROB = 1e-10
+
+# build once, reuse
+_B2U = {i: c for i, c in enumerate(ByteLevel.alphabet())}
+
+def _apply_bytelevel_mapping(raw: str) -> str:
+    return "".join(_B2U[b] for b in raw.encode("utf-8"))
 
 def get_baseline_characters(training_data_files, character_coverage=0.9995, min_occurence_threshold=MIN_CHAR_OCCURENCE_THRESHOLD):
     """
@@ -105,27 +112,32 @@ def get_baseline_characters(training_data_files, character_coverage=0.9995, min_
 
 def _count_worker(file_path):
     """
-    Worker function to count character frequencies in a file.
+    Worker function to count character/byte frequencies in a file.
     
     Args:
         file_path: Path to the file to process
         
     Returns:
-        Tuple of (file_path, character_counts)
+        Tuple of (file_path, token_counts)
     """
     try:
-        # Initialize character counter
-        char_counts = Counter()
+        # Initialize token counter
+        token_counts = Counter()
         
         # Process the file
         with open(file_path, 'r', encoding='utf-8', errors='replace') as f:
             for line in f:
-                char_counts.update(line)
+                token_counts.update(line)
         
-        return file_path, char_counts
+        return file_path, token_counts
     except Exception as e:
         logger.error(f"Error processing {file_path}: {e}")
         return file_path, Counter()
+
+
+def get_baseline_bytes() -> Tuple[Set[str], Dict[str,int]]:
+    alphabet = ByteLevel.alphabet()
+    return set(alphabet), {c:1 for c in alphabet}
 
 
 def segment_text_viterbi(text, token_probs, unk_token="<unk>", max_sub_len=15, beam_width=5.0):
@@ -145,6 +157,7 @@ def segment_text_viterbi(text, token_probs, unk_token="<unk>", max_sub_len=15, b
         A list of tokens (subwords).
     """
     # The final list of subword tokens across all whitespace-delimited words
+    # TODO: make work for byte level
     all_tokens = []
 
     # 1) Whitespace split
@@ -174,7 +187,7 @@ def _segment_word_viterbi(
     * First pass  – explore paths that use only **known** tokens.
     * Second pass – insert required <unk> tokens **and immediately keep
                     exploring from the position that follows each <unk>**,
-                    so later characters are no longer forced to become <unk>.
+                    so later characters/bytes are no longer forced to become <unk>.
     The algorithm still runs in O(n · max_sub_len) time with beam pruning.
     """
     n = len(word)
@@ -264,7 +277,7 @@ def _segment_word_viterbi(
     return tokens[::-1]
 
 
-def forward_backward_unigram(text, p_lang, unk_token="<unk>", max_sub_len=15, prob_threshold=1e-12):
+def forward_backward_unigram(text, p_lang, unk_token="<unk>", max_sub_len=15, prob_threshold=1e-12, byte_level=False):
     """
     Forward-backward algorithm for unigram language model training that matches SentencePiece's
     UNK handling approach.
@@ -275,7 +288,11 @@ def forward_backward_unigram(text, p_lang, unk_token="<unk>", max_sub_len=15, pr
     p_unk = p_lang.get(unk_token, prob_threshold)
     
     # Split on whitespace first, like in Viterbi
-    words = text.strip().split()
+    if byte_level:
+        text = _apply_bytelevel_mapping(text)
+
+    # --- 2. Use the *whole* line; leading spaces matter --------------
+    words = [text.rstrip("\n")]
     
     # Initialize global counts
     total_counts = {}
@@ -421,13 +438,13 @@ def _accumulate_usage_worker_soft(args):
     """
     Worker for the 'soft' E-step, i.e. forward-backward to accumulate fractional usage.
     """
-    chunk_lines, p_lang, unk_token = args
+    chunk_lines, p_lang, unk_token, byte_level = args
 
     c_dict = defaultdict(float)
     total = 0.0
 
     for line in chunk_lines:
-        usage_line = forward_backward_unigram(line, p_lang, unk_token=unk_token)
+        usage_line = forward_backward_unigram(line, p_lang, unk_token=unk_token, byte_level=byte_level)
         line_count = sum(usage_line.values())  # total subwords in a segmentation => expected # of tokens
         total+= line_count
         for tk, frac in usage_line.items():
@@ -444,7 +461,7 @@ def _accumulate_usage_worker_hard(args):
         unk_token: string for unknown token
     Returns: (counts_dict, total_subwords)
     """
-    chunk_lines, p_lang, unk_token = args
+    chunk_lines, p_lang, unk_token, byte_level = args
 
     c_dict = defaultdict(float)
     total = 0
@@ -461,7 +478,8 @@ def _accumulate_usage_worker_hard(args):
                 line, 
                 p_lang, 
                 unk_token=unk_token, 
-                max_sub_len=15
+                max_sub_len=15,
+                byte_level=byte_level
             )
 
             total += len(tokens)
@@ -476,7 +494,8 @@ def _accumulate_usage(train_file,
                       unk_token,
                       batch_size=1000,
                       num_processes=None,
-                      mode='hard'):
+                      mode='soft',
+                      byte_level=False):
         """
         For a single language's corpus:
           - segment each line with distribution p_lang
@@ -489,7 +508,7 @@ def _accumulate_usage(train_file,
 
         # 1) read entire file's lines into memory (if feasible)
         lines = []
-        with open(train_file, 'r', encoding='utf-8') as fin:
+        with open(train_file, 'r', encoding='utf-8', errors="replace") as fin:
             for line in fin:
                 line = line.strip()
                 if line:
@@ -516,7 +535,7 @@ def _accumulate_usage(train_file,
         # we pass p_lang + unk_token for the segmentation
         worker_args = []
         for ch in chunks:
-            worker_args.append((ch, p_lang, unk_token))
+            worker_args.append((ch, p_lang, unk_token, byte_level))
 
         # 4) Launch pool
         worker_func = _accumulate_usage_worker_hard if mode == 'hard' else _accumulate_usage_worker_soft
@@ -530,6 +549,44 @@ def _accumulate_usage(train_file,
                 c_dict[tk] += cnt
 
         return (c_dict, total)
+
+
+def _accumulate_usage_dummy(
+    file_path: str,
+    p_token: Dict[str, float],
+    unk_token: str,
+    mode: str = "soft",
+    avg_tokens_per_line: int = 20,
+) -> Tuple[Dict[str, float], float]:
+    """
+    Return synthetic token-usage counts without touching `file_path`.
+
+    • Keeps the signature (and return types) identical to the real
+      `_accumulate_usage`, so the rest of the pipeline works unmodified.
+    • Draws counts from a Dirichlet distribution centred on the current
+      probabilities `p_token`, then scales them to mimic `avg_tokens_per_line`
+      over 1 000 virtual lines.
+    """
+    # ---------- synthetic corpus size ----------
+    virtual_lines = 1_000
+    tot_subwords  = avg_tokens_per_line * virtual_lines   # e.g. 20k
+
+    # ---------- sample a Dirichlet centred on p_token ----------
+    # α = p * β; choose β so the sample variance is reasonably small.
+    beta = 10_000                                         # larger = lower var
+    alpha = [max(p * beta, 1e-9) for p in p_token.values()]
+    sample = random.gammavariate  # alias
+
+    dirichlet = [sample(a, 1.0) for a in alpha]
+    z = sum(dirichlet)
+    probs = [d / z for d in dirichlet]
+
+    counts = {tk: p * tot_subwords for tk, p in zip(p_token.keys(), probs)}
+
+    # ---------- enforce fixed UNK prior ----------
+    counts[unk_token] = p_token[unk_token] * tot_subwords
+
+    return counts, float(tot_subwords)
 
 
    # Flatten/truncate
@@ -561,17 +618,32 @@ class SafeFormattingDict(dict):
     def __missing__(self, key):
         return "{" + key + "}"
 
+
+def load_tokenizer_with_mode(path: str):
+    tok = Tokenizer.from_file(path)
+    byte_level = isinstance(tok.pre_tokenizer, ByteLevel)
+    try:
+        # sanity-check the model as well
+        byte_fallback = bool(tok.model.byte_fallback)
+    except AttributeError:
+        byte_fallback = False
+    if byte_level and not byte_fallback:
+        logger.warning(f"{path} looks byte-level but byte_fallback==False (currently known issue for HF Unigram Tokenizers).")
+    return tok, byte_level
+
+
 def _build_hf_tokenizer_from_probs(
     probs_tuples: List[Tuple[str, float]],
     unk_id: int,
-    pre_tokenizer = Whitespace()
+    byte_level: bool = False
 ) -> Tokenizer:
     """
     Turn a plain probability dictionary into a HF Unigram tokenizer.
     """
+    #TODO: Add byte_fallback=self.byte_level when feature becomes available
     model = Unigram(probs_tuples, unk_id)
     tok = Tokenizer(model)
-    tok.pre_tokenizer = pre_tokenizer
+    tok.pre_tokenizer = Whitespace() if byte_level else ByteLevel(add_prefix_space=False)
 
     return tok
 

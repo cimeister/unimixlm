@@ -27,7 +27,7 @@ from typing import Dict, List, Tuple
 import numpy as np
 from tokenizers import Tokenizer
 from tokenizers.models import Unigram
-from tokenizers.pre_tokenizers import Whitespace
+from tokenizers.pre_tokenizers import Whitespace, ByteLevel
 
 from code.em_unigram_trainer import EMUnigramTrainer
 from code.standard_unigramlm import StandardUnigramLMTokenizer
@@ -75,7 +75,7 @@ def _build_hf_tokenizer_with_new_probs(
     tuples = [
         (t, math.log(max(probs[t], MIN_TOKEN_PROB))) for t, __ in vocab_tuples
     ]
-    
+
     unk_id = base_tokenizer.get_vocab()[unk_token]
     tok = _build_hf_tokenizer_from_probs(tuples, unk_id)
     if hasattr(base_tokenizer, 'pre_tokenizer'):
@@ -87,6 +87,8 @@ def _build_hf_tokenizer_with_new_probs(
         tok.post_processor = base_tokenizer.post_processor
     if hasattr(base_tokenizer, 'decoder'):
         tok.decoder = base_tokenizer.decoder
+    if hasattr(base_tokenizer.model, 'byte_fallback'):
+        tok.model.byte_fallback = base_tokenizer.model.byte_fallback
     return tok
 
 # ---------------------------------------------------------------------------
@@ -109,6 +111,7 @@ class LanguageSpecificUnigramLMTokenizer(StandardUnigramLMTokenizer):
         special_tokens=None,
         reestimation_em_mode: str = "soft",
         num_iterations: int = 20,
+        byte_level: bool = False
     ):
         super().__init__(
             vocab_size=vocab_size,
@@ -116,6 +119,7 @@ class LanguageSpecificUnigramLMTokenizer(StandardUnigramLMTokenizer):
             special_tokens=special_tokens,
             em_mode=reestimation_em_mode,
             num_iterations=num_iterations,
+            byte_level=byte_level
         )
 
         self.reestimation_em_mode = reestimation_em_mode
@@ -148,7 +152,7 @@ class LanguageSpecificUnigramLMTokenizer(StandardUnigramLMTokenizer):
                     tok = Tokenizer.from_file(lang_tok_path)
                     vocab_order_per_lang = _get_hf_unigram_tokenizer_vocab(tok)
                     assert [i for i, j in vocab_order_per_lang] == base_vocab_order
-                    self.language_info[lang_tok_path] = {
+                    self.language_info[lang_code] = {
                         "tokenizer": tok,
                         "scores": _extract_log_scores(tok),
                         "path": lang_tok_path,
@@ -177,17 +181,10 @@ class LanguageSpecificUnigramLMTokenizer(StandardUnigramLMTokenizer):
         output_dir = Path(output_dir or ".")
         output_dir.mkdir(parents=True, exist_ok=True)
 
-        # # 1) shared base tokenizer (parent class)
-        # super().train(
-        #     corpus_info=corpus_info,
-        #     output_dir=output_dir,
-        #     base_tokenizer_path=base_tokenizer_path,
-        #     load_base_if_exists=load_base_if_exists,
-        #     load_probs_if_exists=False,        # we handle per-lang probs here
-        # )
         if load_base_if_exists and os.path.isfile(base_tokenizer_path):
             logger.info(f"Loading specified base tokenizer from {base_tokenizer_path}")
-            self.base_tokenizer = Tokenizer.from_file(base_tokenizer_path)
+            super().load(base_path)
+            logger.warning(f"Will use byte-level settings from {base_tokenizer_path} regardless of user input: byte-level={self.byte}")
         
         training_new_base_tokenizer = not self.base_tokenizer
         
@@ -239,6 +236,7 @@ class LanguageSpecificUnigramLMTokenizer(StandardUnigramLMTokenizer):
                 special_tokens=self.special_tokens,
                 em_mode=self.reestimation_em_mode,
                 max_iterations=self.num_reestimation_iterations,
+                unk_prior=self.unk_prior
             )
             token_probs = em_trainer.train(train_file)  # token -> prob
 
@@ -295,6 +293,7 @@ class LanguageSpecificUnigramLMTokenizer(StandardUnigramLMTokenizer):
 def train_language_specific_tokenizer(corpus_info, vocab_size=8000,
                                       reestimation_em_mode = 'soft',
                                       output_dir="",
+                                      byte_level=False,
                                       base_tokenizer_path=None,
                                       tokenizer_path_format=None,
                                       load_base_if_exists=True,
@@ -309,9 +308,10 @@ def train_language_specific_tokenizer(corpus_info, vocab_size=8000,
     You can skip re-training if 'langspec_base_tokenizer.json' is found (load_if_exists=True),
     and skip re-running EM if 'langspec_{lang_code}_em_probs.npy' is found (load_available_probs=True).
     """
-    tok = LanguageSpecificUnigramLMTokenizer(vocab_size=vocab_size, reestimation_em_mode=reestimation_em_mode)
+    tok = LanguageSpecificUnigramLMTokenizer(vocab_size=vocab_size, reestimation_em_mode=reestimation_em_mode, byte_level=byte_level)
     if not base_tokenizer_path:
         base_tokenizer_path = os.path.join(output_dir, DEFAULT_BASE_NAME)
+        
     if not tokenizer_path_format:
         tokenizer_path_format = os.path.join(output_dir, DEFAULT_LANGTOKENIZER_NAME)
 

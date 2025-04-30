@@ -69,22 +69,25 @@ class CorpusTokenizer:
         for name, config in self.tokenizer_configs.items():
             try:
                 tokenizer_type = config.get('type', 'standard')
+                byte_level = config.get('byte_level', False)
                 
                 if tokenizer_type == 'standard':
                     from code.standard_unigramlm import StandardUnigramLMTokenizer
                     tokenizer = StandardUnigramLMTokenizer(
+                        byte_level=byte_level,
                         multigram=False
                     )
                     tokenizer.load(config['path'])
                     
                 elif tokenizer_type == 'langspec':
                     from code.language_specific_unigramlm import LanguageSpecificUnigramLMTokenizer
-                    tokenizer = LanguageSpecificUnigramLMTokenizer()
+                    tokenizer = LanguageSpecificUnigramLMTokenizer(byte_level=byte_level)
                     tokenizer.load(config['base_path'], config.get('language_paths'))
                     
                 elif tokenizer_type == 'multigram':
                     from code.standard_unigramlm import StandardUnigramLMTokenizer
                     tokenizer = StandardUnigramLMTokenizer(
+                        byte_level=byte_level,
                         multigram=True
                     )
                     tokenizer.load(config['base_path'])
@@ -184,7 +187,7 @@ class CorpusTokenizer:
                     continue
                 
                 line_count = 0
-                with open(split_file, 'r', encoding='utf-8') as fin, \
+                with open(split_file, 'r', encoding='utf-8', errors="replace") as fin, \
                      open(out_path, 'w', encoding='utf-8') as fout:
                     for i, line in enumerate(tqdm(fin, desc=f"{tokenizer_name} {lang_code}-{split_name}")):
                         if self.max_lines_per_file and i >= self.max_lines_per_file:
@@ -270,7 +273,7 @@ class CorpusTokenizer:
                 
                 # Read lines
                 lines = []
-                with open(split_file, 'r', encoding='utf-8') as fin:
+                with open(split_file, 'r', encoding='utf-8', errors="replace") as fin:
                     for i, line in enumerate(fin):
                         if self.max_lines_per_file and i >= self.max_lines_per_file:
                             break
@@ -412,7 +415,7 @@ def load_config(config_path):
     Returns:
         Configuration dictionary
     """
-    with open(config_path, 'r', encoding='utf-8') as f:
+    with open(config_path, 'r', encoding='utf-8', errors="replace") as f:
         return json.load(f)
 
 

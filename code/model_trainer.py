@@ -46,7 +46,7 @@ class TokenizedDatasetLoader:
         
         data = []
         try:
-            with open(file_path, 'r', encoding='utf-8') as f:
+            with open(file_path, 'r', encoding='utf-8', errors="replace") as f:
                 for line in f:
                     item = json.loads(line.strip())
                     data.append({

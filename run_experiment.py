@@ -98,9 +98,10 @@ def train_tokenizers(config: Dict[str, Any], corpus_info: Dict[str, Any]) -> Dic
     for tokenizer_config in config["tokenizers"]:
         tokenizer_name = tokenizer_config["name"]
         tokenizer_type = tokenizer_config["type"]
+        byte_level = config["experiment"].get("byte_level", False)
         em_mode = tokenizer_config.get("em_mode", "soft")
-        
-        logger.info(f"Processing tokenizer: {tokenizer_name} (type: {tokenizer_type})")
+
+        logger.info(f"Processing tokenizer: {tokenizer_name} (type: {tokenizer_type} at {'byte' if byte_level else 'char'}-level)")
         
         # Check if we should use a pretrained tokenizer
         if tokenizer_config.get("skip_if_exists", False):
@@ -160,6 +161,7 @@ def train_tokenizers(config: Dict[str, Any], corpus_info: Dict[str, Any]) -> Dic
                 vocab_size=vocab_size, 
                 em_mode=em_mode, 
                 multigram=multigram,
+                byte_level=byte_level,
                 output_path=output_file
             )
             
@@ -188,6 +190,7 @@ def train_tokenizers(config: Dict[str, Any], corpus_info: Dict[str, Any]) -> Dic
                 corpus_info,
                 vocab_size=vocab_size,
                 reestimation_em_mode=em_mode,
+                byte_level=byte_level,
                 output_dir=tokenizers_dir,
                 base_tokenizer_path=base_tokenizer_name,
                 tokenizer_path_format=tokenizer_path_format,
@@ -455,6 +458,8 @@ def main():
     # Vocabulary options
     parser.add_argument("--vocab-size", type=int, default=None, 
                       help="Vocabulary size for tokenizers (overrides config)")
+    parser.add_argument("--byte-level", action="store_true", 
+                      help="Use byte level tokenizers (overrides config)")
     
     # Step control
     step_group = parser.add_argument_group("Step control")
@@ -479,6 +484,8 @@ def main():
         os.makedirs(sub_dir, exist_ok=True)
     
     # Override configuration with command-line arguments
+    if args.byte_level:
+        config["experiment"]["byte_level"] = True
     if args.vocab_size:
         config["experiment"]["vocab_size"] = args.vocab_size
     
