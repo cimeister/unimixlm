@@ -52,8 +52,6 @@ logging.basicConfig(
 logger = logging.getLogger(__name__)
 
 # Directory setup
-BASE_DIR = os.path.dirname(os.path.abspath(__file__))
-DEFAULT_DATA_DIR = os.path.join(BASE_DIR, "data")
 MODEL_EVAL_JSON_NAME = "all_models_evaluation.json"
 
 
@@ -238,7 +236,7 @@ class ModelEvaluator:
         # Load test data
         test_data = []
         try:
-            with open(test_file_path, 'r', encoding='utf-8') as f:
+            with open(test_file_path, 'r', encoding='utf-8', errors="replace") as f:
                 for i, line in enumerate(f):
                     if max_samples is not None and i >= max_samples:
                         break
@@ -476,7 +474,7 @@ def evaluate_all_models_on_all_languages(
     tokenized_data: Dict[str, Dict[str, Dict[str, str]]],
     max_samples_per_language: Optional[int] = None,
     batch_size: int = 8,
-    output_dir: str = os.path.join(DEFAULT_DATA_DIR, 'evaluation_results')
+    output_dir: str = 'evaluation_results'
 ) -> Dict[str, Any]:
     """
     Evaluate all models on all languages.
@@ -642,7 +640,7 @@ def create_dataframes(
 def generate_plots(
     per_language_df: pd.DataFrame, 
     aggregate_df: pd.DataFrame,
-    output_dir: str = os.path.join(DEFAULT_DATA_DIR, "plots")
+    output_dir: str =  "plots"
 ) -> Dict[str, str]:
     """
     Generate evaluation plots using plotnine.
@@ -854,7 +852,7 @@ def generate_byte_perplexity_plots(
     return plot_paths
 
 def find_tokenized_test_data(
-    data_dir: str = os.path.join(DEFAULT_DATA_DIR, 'tokenized')
+    data_dir: str = 'tokenized'
 ) -> Dict[str, Dict[str, Dict[str, str]]]:
     """
     Find all tokenized test data files.
@@ -895,8 +893,8 @@ def find_tokenized_test_data(
 
 
 def find_models_and_tokenizers(
-    models_dir: str = os.path.join(DEFAULT_DATA_DIR, "models"),
-    tokenizers_dir: str = os.path.join(DEFAULT_DATA_DIR, "tokenizers")
+    models_dir: str = "models",
+    tokenizers_dir: str = "tokenizers"
 ) -> List[Dict[str, Any]]:
     """
     Find all trained models and their corresponding tokenizers.
@@ -966,7 +964,7 @@ def read_evaluation_results(
     combined_path = os.path.join(results_dir, combined_file)
     if os.path.exists(combined_path):
         try:
-            with open(combined_path, 'r', encoding='utf-8') as f:
+            with open(combined_path, 'r', encoding='utf-8', errors="replace") as f:
                 return json.load(f)
         except Exception as e:
             print(f"Error reading combined results file: {str(e)}")
@@ -988,7 +986,7 @@ def read_evaluation_results(
         for file_name in json_files:
             try:
                 file_path = os.path.join(results_dir, file_name)
-                with open(file_path, 'r', encoding='utf-8') as f:
+                with open(file_path, 'r', encoding='utf-8', errors="replace") as f:
                     model_results = json.load(f)
                 
                 # Extract model name from file name
@@ -1010,9 +1008,11 @@ def main():
     # Input options
     parser.add_argument("--models-dir", type=str, required=True, 
                        help="Directory containing trained models")
+    parser.add_argument("--tokenizers-dir", type=str, required=True, 
+                       help="Directory containing trained models")
     parser.add_argument("--tokenized-dir", type=str, required=True,
                        help="Directory containing tokenized data")
-    parser.add_argument("--output-dir", type=str, default=os.path.join(DEFAULT_DATA_DIR, 'evaluation_results'),
+    parser.add_argument("--output-dir", type=str, default='evaluation_results', required=True,
                        help="Directory to save evaluation results")
     
     # Evaluation options
@@ -1036,7 +1036,7 @@ def main():
     if not args.use_saved_results:
     
     # Find models and tokenizers
-        model_configs = find_models_and_tokenizers(args.models_dir)
+        model_configs = find_models_and_tokenizers(args.models_dir, args.tokenizers_dir)
         
         if args.models:
             # Filter models by name

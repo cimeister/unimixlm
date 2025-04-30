@@ -190,14 +190,14 @@ class TokenizerAnalyzer:
         out_path = os.path.join(self.tokenized_lines_output_dir, f"analysis_{lang}.jsonl")
         existing_results = {}
         if os.path.isfile(out_path):
-            with open(out_path, 'r', encoding='utf-8') as f:
+            with open(out_path, 'r', encoding='utf-8', errors="replace") as f:
                 for line in f:
                     data = json.loads(line)
                     existing_results[data['text']] = data
         
         records = []
         
-        with open(path, 'r', encoding='utf-8') as f:
+        with open(path, 'r', encoding='utf-8', errors="replace") as f:
             for line in tqdm(f, desc=f"Analyzing {lang}"):
                 text = line.strip()
                 if not text:
@@ -420,6 +420,7 @@ class TokenizerAnalyzer:
                            if any(self.best_lang_proportion[t_name].values())]
         
         if not valid_tokenizers:
+            logger.info("No valid tokenizers for lang specific decoding")
             return
         
         for t_name in valid_tokenizers:
@@ -567,7 +568,7 @@ def main():
     args = parser.parse_args()
     
     # Load configuration
-    with open(args.config, 'r', encoding='utf-8') as f:
+    with open(args.config, 'r', encoding='utf-8', errors="replace") as f:
         config = json.load(f)
     
     # Load parallel files

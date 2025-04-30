@@ -15,7 +15,7 @@ class EMUnigramTrainer:
     """
 
     def __init__(self, vocab, unk_token="<unk>", special_tokens=None,
-                 max_iterations=20, em_mode="hard", convergence_threshold=1e-7):
+                 max_iterations=20, em_mode="hard", convergence_threshold=1e-7, unk_prior=MIN_TOKEN_PROB):
         """
         Args:
             vocab: dict(token -> ID), the shared vocabulary.
@@ -31,6 +31,7 @@ class EMUnigramTrainer:
         self.max_iterations = max_iterations
         self.em_mode = em_mode
         self.convergence_threshold = convergence_threshold
+        self.unk_prior = unk_prior
         
         # Ensure em_mode is valid
         if self.em_mode not in ["hard", "soft"]:
@@ -75,7 +76,6 @@ class EMUnigramTrainer:
             
             # Reset usage counts for E-step
             usage_counts = {tk: 0.0 for tk in self.vocab}
-            total_subwords = 0.0
             
             # Save current parameters for convergence check
             if iteration > 0:
@@ -83,7 +83,7 @@ class EMUnigramTrainer:
             
             # E-step: directly use _accumulate_usage from utils
             # This function handles parallelization internally
-            c_dict, tot = _accumulate_usage(
+            c_dict, total_subwords = _accumulate_usage(
                 corpus_file, 
                 p_token,
                 self.unk_token, 
@@ -91,17 +91,17 @@ class EMUnigramTrainer:
                 num_processes=num_processes,
                 mode=self.em_mode
             )
-            
             # Update counts
-            for tk, val in c_dict.items():
-                usage_counts[tk] += val
-            total_subwords += tot
+            usage_counts.update(c_dict)
             
             # M-step: Update token probabilities based on counts
             if total_subwords > 0:
-                # Calculate new probabilities based on observed counts
-                for tk in self.vocab:
-                    p_token[tk] = usage_counts[tk] / total_subwords
+                scale = 1.0 - self.unk_prior
+                for tk in all_tokens:
+                    if tk == self.unk_token:
+                        p_token[tk] = self.unk_prior
+                    else:
+                        p_token[tk] = usage_counts[tk] / (total_subwords - unk_occ) * scale
             else:
                 logger.warning("No usage => fallback to uniform distribution.")
                 for tk in self.vocab:
@@ -117,18 +117,18 @@ class EMUnigramTrainer:
                     logger.info(f"Converged at iteration {iteration+1}, total_diff={total_diff:.8g}")
                     break
 
+        del p_token[self.unk_token] # don't include UNK prob in counts   
+        total_prob = sum(p_token.values()) + self.unk_prior
+        if total_prob > 0:
+            p_token = {tk: prob/total_prob for tk, prob in p_token.items()}
+        p_token[self.unk_token] = self.unk_prior
+
         # Keep probabilities positive
         for tk in self.vocab:
             p_token[tk] = max(p_token[tk], MIN_TOKEN_PROB)
         
-        del p_token[self.unk_token] # don't include UNK prob in counts   
-        total_prob = sum(p_token.values())
-        if total_prob > 0:
-            p_token = {tk: prob/total_prob for tk, prob in p_token.items()}
-
-        p_token[self.unk_token] = MIN_TOKEN_PROB
+        # TODO: rescale other probs
         logger.info(f"Resetting UNK prob to {p_token[self.unk_token]}")
-        
         logger.info(f"EM training completed with {self.max_iterations} iterations")
         
         return p_token
