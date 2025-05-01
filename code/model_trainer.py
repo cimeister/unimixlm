@@ -156,12 +156,49 @@ class CustomCausalLMModel:
         val_dataset = val_dataset.filter(nonempty)
         logger.info(f"After filtering: {len(val_dataset)} samples")
 
+        # Default number of epochs
+        total_epochs = 5
+        resume_from_checkpoint = False
+        
+        # Check for existing checkpoints to resume training
+        checkpoints = []
+        if os.path.exists(output_dir):
+            checkpoints = [d for d in os.listdir(output_dir) if d.startswith("checkpoint-")]
+        
         # Setup default training arguments optimized for A5000 GPU
         if training_args is None:
+            # If we have checkpoints, set up for resuming
+            if checkpoints:
+                checkpoints = sorted(checkpoints, key=lambda x: int(x.split("-")[1]))
+                latest_checkpoint = os.path.join(output_dir, checkpoints[-1])
+                logger.info(f"Found checkpoint: {latest_checkpoint}")
+                resume_from_checkpoint = latest_checkpoint
+                
+                # Load training state to determine epochs already completed
+                trainer_state_path = os.path.join(latest_checkpoint, "trainer_state.json")
+                if os.path.exists(trainer_state_path):
+                    with open(trainer_state_path, 'r') as f:
+                        trainer_state = json.load(f)
+                    
+                    # Calculate epochs completed so far
+                    if "epoch" in trainer_state:
+                        epochs_done = trainer_state["epoch"]
+                        # Calculate remaining epochs (round down to be safe)
+                        remaining_epochs = max(0, total_epochs - epochs_done)
+                        logger.info(f"Already completed {epochs_done:.2f} epochs. {remaining_epochs:.2f} remaining.")
+                        
+                        # If we've already completed the requested epochs, just do validation
+                        if remaining_epochs <= 0:
+                            logger.info(f"Training already completed {epochs_done:.2f}/{total_epochs} epochs. Skipping to evaluation.")
+                            
+                            # Load the model from the latest checkpoint
+                            self.model = AutoModelForCausalLM.from_pretrained(latest_checkpoint)
+                            return {"status": "already_trained", "epochs_completed": epochs_done}
+            
             training_args = TrainingArguments(
                 output_dir=output_dir,
-                overwrite_output_dir=True,
-                num_train_epochs=5,
+                overwrite_output_dir=False,  # Don't overwrite to preserve checkpoints
+                num_train_epochs=total_epochs,
                 per_device_train_batch_size=8,
                 per_device_eval_batch_size=8,
                 fp16=True,  # Use mixed precision for faster training
@@ -181,6 +218,7 @@ class CustomCausalLMModel:
                 weight_decay=0.01,
                 # Enable more efficient attention computation
                 torch_compile=torch.cuda.is_available(),  # Use torch.compile if available (PyTorch 2.0+)
+                disable_tqdm=True
             )
         
         # Set up data collator
@@ -201,8 +239,13 @@ class CustomCausalLMModel:
         )
 
         # Train the model
-        logger.info(f"Starting training with {self.model_name} base model on ~1.6M tokens.")
-        result = trainer.train()
+        if resume_from_checkpoint:
+            logger.info(f"Resuming training from checkpoint: {resume_from_checkpoint}")
+            result = trainer.train(resume_from_checkpoint=resume_from_checkpoint)
+        else:
+            logger.info(f"Starting training with {self.model_name} base model.")
+            result = trainer.train()
+        
         logger.info("Finished training.")
         
         # Save the model
@@ -251,10 +294,11 @@ class CustomCausalLMModel:
 
 
 def train_model_on_tokenized_data(tokenized_files, 
-                                  tokenization_method, 
-                                  base_tokenizer_path, 
-                                  model_config=None, 
-                                  output_dir=""):
+                              tokenization_method, 
+                              base_tokenizer_path, 
+                              model_config=None, 
+                              output_dir="",
+                              resume_training=True):
     """
     Train a language model with recommended hyperparams on a single A5000 GPU.
     
@@ -263,11 +307,26 @@ def train_model_on_tokenized_data(tokenized_files,
         tokenization_method: String identifier for the tokenization method
         base_tokenizer_path: Path to the base tokenizer JSON file
         model_config: Optional custom model configuration
+        output_dir: Directory to save model outputs
+        resume_training: Whether to resume training if a checkpoint exists
     
     Returns:
         Path to the saved model or None if training failed
     """
     logger.info(f"Training language model on '{tokenization_method}' tokenized data...")
+    
+    # Check if output directory already contains a checkpoint
+    checkpoints_exist = False
+    if os.path.exists(output_dir):
+        checkpoints = [d for d in os.listdir(output_dir) if d.startswith("checkpoint-")]
+        checkpoints_exist = len(checkpoints) > 0
+        
+        if checkpoints_exist and resume_training:
+            logger.info(f"Found existing checkpoints in {output_dir}. Will attempt to resume training.")
+        elif checkpoints_exist and not resume_training:
+            logger.info(f"Found existing checkpoints in {output_dir}, but resume_training=False. Starting fresh.")
+            # Optionally back up the old directory if needed
+            # We're not overwriting, as the TrainingArguments will handle this
 
     # 1) Load datasets
     loader = TokenizedDatasetLoader(tokenized_files)
@@ -281,7 +340,6 @@ def train_model_on_tokenized_data(tokenized_files,
 
     # 2) Create HuggingFace tokenizer from the tokenizer JSON
     try:
-        from transformers import PreTrainedTokenizerFast
         hf_tok = PreTrainedTokenizerFast(tokenizer_file=base_tokenizer_path)
         set_special_tokens(hf_tok)
         
@@ -297,25 +355,41 @@ def train_model_on_tokenized_data(tokenized_files,
     except Exception as e:
         logger.error(f"Failed to load tokenizer: {str(e)}")
         return None
-
-    # 3) Build model
+        
+    # 3) Build or load model
     model_name = model_config.get("base_model", "distilgpt2") if model_config else "distilgpt2"
     logger.info(f"Using {model_name} as base model")
     
     set_seed(42)  # For reproducibility
     wrapper = CustomCausalLMModel(hf_tok, model_name=model_name, config=model_config)
-    wrapper.create_model()
-
-    # 4) Define output directory
-    model_size = "distil" if "distil" in model_name else model_name.replace("gpt2", "").strip("-") or "base"
     
-    # 5) Train model
+    # If we're resuming and have checkpoints, load the latest checkpoint model
+    if checkpoints_exist and resume_training:
+        checkpoints = [d for d in os.listdir(output_dir) if d.startswith("checkpoint-")]
+        checkpoints = sorted(checkpoints, key=lambda x: int(x.split("-")[1]))
+        latest_checkpoint = os.path.join(output_dir, checkpoints[-1])
+        
+        try:
+            logger.info(f"Attempting to load model from checkpoint: {latest_checkpoint}")
+            wrapper.model = AutoModelForCausalLM.from_pretrained(latest_checkpoint)
+            logger.info(f"Successfully loaded model from checkpoint")
+        except Exception as e:
+            logger.warning(f"Failed to load model from checkpoint: {str(e)}. Creating new model.")
+            wrapper.create_model()
+    else:
+        wrapper.create_model()
+
+    # 4) Train model
     train_result = wrapper.train(train_ds, val_ds, output_dir)
     if train_result is None:
         logger.error("Training failed.")
         return None
     
-    # 6) Evaluate model
+    # Check if we skipped training because it was already complete
+    if isinstance(train_result, dict) and train_result.get("status") == "already_trained":
+        logger.info(f"Model already trained for the requested number of epochs ({train_result.get('epochs_completed', '?')}).")
+    
+    # 5) Evaluate model
     eval_metrics = wrapper.evaluate(test_ds, output_dir)
     if eval_metrics:
         eval_path = os.path.join(output_dir, "eval_results.json")
@@ -339,6 +413,9 @@ def train_models_from_config(config_dict):
         return {}
     
     models_output_dir = global_settings.get("model_output_dir", "")
+    # Get global resume_training setting (default to True)
+    global_resume_training = global_settings.get("resume_training", True)
+    
     # Train models for each tokenizer
     results = {}
     for tokenizer_config in tokenizers:
@@ -360,25 +437,29 @@ def train_models_from_config(config_dict):
         model_size = "distil" if "distil" in model_size else model_size.replace("gpt2", "").strip("-") or "base"
         output_dir = os.path.join(models_output_dir, f"{name}_model_{model_size}")
         
-        if os.path.exists(output_dir) and global_settings.get("skip_existing", False):
+        # Get tokenizer-specific resume_training setting (use global as default)
+        resume_training = model_config.get("resume_training", global_resume_training)
+        
+        # Skip if the model exists and we're using pretrained and not resuming
+        if os.path.exists(output_dir) and model_config.get("pretrained", {}).get("enabled", False) and not resume_training:
             logger.info(f"Model for {name} already exists, skipping (skip_existing=True)")
             results[name] = output_dir
             continue
             
-        logger.info(f"Training model for tokenizer: {name}")
+        logger.info(f"Training model for tokenizer: {name} (resume_training={resume_training})")
         model_path = train_model_on_tokenized_data(
             tokenized_files, 
             name,
             tokenizer_path,
             model_config,
-            output_dir
+            output_dir,
+            resume_training=resume_training
         )
         
         if model_path:
             results[name] = model_path
             
     return results
-
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser(description="Train language models on tokenized data")

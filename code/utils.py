@@ -28,9 +28,15 @@ MIN_TOKEN_PROB = 1e-10
 
 # build once, reuse
 _B2U = {i: c for i, c in enumerate(ByteLevel.alphabet())}
+BY_PRETOK = ByteLevel(add_prefix_space=False)
 
 def _apply_bytelevel_mapping(raw: str) -> str:
     return "".join(_B2U[b] for b in raw.encode("utf-8"))
+
+def _apply_bytelevel_mapping_hf(text: str) -> str:
+    
+    normalized = BY_PRETOK.pre_tokenize_str(text)
+    return ''.join(piece[0] for piece in normalized)
 
 def get_baseline_characters(training_data_files, character_coverage=0.9995, min_occurence_threshold=MIN_CHAR_OCCURENCE_THRESHOLD):
     """
@@ -277,7 +283,7 @@ def _segment_word_viterbi(
     return tokens[::-1]
 
 
-def forward_backward_unigram(text, p_lang, unk_token="<unk>", max_sub_len=15, prob_threshold=1e-12, byte_level=False):
+def forward_backward_unigram(text, p_lang, unk_token="<unk>", max_sub_len=20, prob_threshold=1e-12, byte_level=False):
     """
     Forward-backward algorithm for unigram language model training that matches SentencePiece's
     UNK handling approach.
@@ -289,7 +295,7 @@ def forward_backward_unigram(text, p_lang, unk_token="<unk>", max_sub_len=15, pr
     
     # Split on whitespace first, like in Viterbi
     if byte_level:
-        text = _apply_bytelevel_mapping(text)
+        text = _apply_bytelevel_mapping_hf(text)
 
     # --- 2. Use the *whole* line; leading spaces matter --------------
     words = [text.rstrip("\n")]
@@ -444,7 +450,7 @@ def _accumulate_usage_worker_soft(args):
     total = 0.0
 
     for line in chunk_lines:
-        usage_line = forward_backward_unigram(line, p_lang, unk_token=unk_token, byte_level=byte_level)
+        usage_line = forward_backward_unigram(line, p_lang, unk_token=unk_token, byte_level=byte_level, max_sub_len=30 if byte_level else 20)
         line_count = sum(usage_line.values())  # total subwords in a segmentation => expected # of tokens
         total+= line_count
         for tk, frac in usage_line.items():
@@ -643,7 +649,7 @@ def _build_hf_tokenizer_from_probs(
     #TODO: Add byte_fallback=self.byte_level when feature becomes available
     model = Unigram(probs_tuples, unk_id)
     tok = Tokenizer(model)
-    tok.pre_tokenizer = Whitespace() if byte_level else ByteLevel(add_prefix_space=False)
+    tok.pre_tokenizer = ByteLevel(add_prefix_space=False) if byte_level else Whitespace()
 
     return tok
 

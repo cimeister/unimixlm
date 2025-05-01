@@ -346,8 +346,7 @@ def train_models(config: Dict[str, Any], tokenized_info: Dict[str, Dict[str, Dic
         "tokenizers": [],
         "global_settings": {
             "model_output_dir": models_dir,
-            "skip_existing": True,
-            "seed": 42
+            "seed": config["experiment"]["seed"]
         }
     }
     
