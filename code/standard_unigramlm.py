@@ -77,28 +77,24 @@ class StandardUnigramLMTokenizer:
             if self.byte_level
             else Whitespace()
         )
+        seed_vocab_size = self.vocab_size * INITIAL_VOCAB_MULT_FACTOR
+        logger.info(f"Attempting to find seed vocab of size {seed_vocab_size}...")
         trainer = UnigramTrainer(
-            vocab_size=self.vocab_size * INITIAL_VOCAB_MULT_FACTOR,
+            vocab_size=seed_vocab_size,
             special_tokens=self.special_tokens,
             unk_token=self.unk_token,
             initial_alphabet=ByteLevel.alphabet() if self.byte_level else [],
+            #n_sub_iterations=1
         )
         tok.train(train_files, trainer)
-        return set(tok.get_vocab().keys())
-
-    def _initial_vocab_fast(self, files):
-        tok = Tokenizer(Unigram())
-        tok.pre_tokenizer = ByteLevel(add_prefix_space=False) if self.byte_level else Whitespace()
-
-        trainer = UnigramTrainer(
-            vocab_size = self.vocab_size * INITIAL_VOCAB_MULT_FACTOR,
-            special_tokens=self.special_tokens,
-            unk_token = self.unk_token,
-            initial_alphabet = ByteLevel.alphabet() if self.byte_level else [],
-            n_sub_iterations = 0        # <─ no EM refinement
-        )
-        tok.train(files, trainer)
-        return set(tok.get_vocab().keys())
+        init_vocab = tok.get_vocab()
+        logger.info(f"Initial vocabulary size: {len(init_vocab)}")
+        if self.byte_level:
+            # Get actual bytes from the vocabulary
+            byte_tokens = [k for k in init_vocab.keys() if any(ord(c) > 127 for c in k)]
+            logger.info(f"Byte-level tokens in vocabulary: {len(byte_tokens)}")
+        
+        return set(init_vocab.keys())
 
     @staticmethod
     def _normalise(counts: Dict[str, float], unk_token: str, unk_prior: float) -> Dict[str, float]:
@@ -169,7 +165,7 @@ class StandardUnigramLMTokenizer:
 
         # ------------------ shared preparation ------------------
         baseline = self._baseline_tokens(corpus_files)
-        all_tokens = self._initial_vocab_fast(corpus_files)
+        all_tokens = self._initial_vocab(corpus_files)
         all_tokens.update(baseline)
         all_tokens.update(self.special_tokens)
 
@@ -194,7 +190,7 @@ class StandardUnigramLMTokenizer:
             # ===================== E & M – identical maths ==================
             
             if per_lang:
-                lang_counts = {lc: defaultdict(float) for lc in self.lang_codes}
+                lang_counts = {lc: {tk: 0.0 for tk in all_tokens} for lc in self.lang_codes}
                 unk_count = 0
                 total_counts = 0
                 for lc, file in zip(self.lang_codes, corpus_files):
@@ -208,7 +204,7 @@ class StandardUnigramLMTokenizer:
                     self.per_lang_probs[lc] = self._normalise(lang_counts[lc], self.unk_token, self.unk_prior)
                 p_token = {tk: sum(self.mixture_weights[lc] * self.per_lang_probs[lc].get(tk, 0.0) for lc in self.lang_codes) for tk in all_tokens}
             else:
-                counts = defaultdict(float)
+                counts = {tk: 0.0 for tk in all_tokens}
                 for file in corpus_files:
                     c_dict, _ = _accumulate_usage(file, p_token, self.unk_token, mode=self.em_mode, byte_level=self.byte_level)
                     for tk, v in c_dict.items():
@@ -234,6 +230,7 @@ class StandardUnigramLMTokenizer:
             #import ipdb; ipdb.set_trace()
             # -------------------- pruning ----------------------------------
             k_drop = k_step[it]
+            k_drop = min(k_drop, len(all_tokens) - self.vocab_size)
             if k_drop > 0:
                 before = len(all_tokens)
                 all_tokens = self._trim_tokens(p_token, k_drop, pinned)
@@ -254,6 +251,7 @@ class StandardUnigramLMTokenizer:
             prev_p_token = p_token.copy()
 
             logger.info(f"Total probability mass: {sum(p_token.values())}")
+            assert all(x in p_token for x in pinned)
 
         # ---------------- store results ----------------
         self.global_probs = p_token

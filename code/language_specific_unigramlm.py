@@ -183,8 +183,8 @@ class LanguageSpecificUnigramLMTokenizer(StandardUnigramLMTokenizer):
 
         if load_base_if_exists and os.path.isfile(base_tokenizer_path):
             logger.info(f"Loading specified base tokenizer from {base_tokenizer_path}")
-            super().load(base_path)
-            logger.warning(f"Will use byte-level settings from {base_tokenizer_path} regardless of user input: byte-level={self.byte}")
+            super().load(base_tokenizer_path)
+            logger.warning(f"Will use byte-level settings from {base_tokenizer_path} regardless of user input: byte-level={self.byte_level}")
         
         training_new_base_tokenizer = not self.base_tokenizer
         
@@ -236,7 +236,8 @@ class LanguageSpecificUnigramLMTokenizer(StandardUnigramLMTokenizer):
                 special_tokens=self.special_tokens,
                 em_mode=self.reestimation_em_mode,
                 max_iterations=self.num_reestimation_iterations,
-                unk_prior=self.unk_prior
+                unk_prior=self.unk_prior,
+                byte_level=self.byte_level
             )
             token_probs = em_trainer.train(train_file)  # token -> prob
 
