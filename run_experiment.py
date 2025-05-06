@@ -3,7 +3,7 @@ import logging
 import argparse
 import json
 from datetime import datetime
-from typing import Dict, List, Any, Optional
+from typing import Dict, Any
 
 # Import and setup environment variables
 from code.environment_setup import setup_environment
@@ -35,6 +35,7 @@ def load_config(config_path: str) -> Dict[str, Any]:
     except Exception as e:
         logger.error(f"Failed to load config from {config_path}: {str(e)}")
         raise
+
 
 def process_corpora(config: Dict[str, Any], args: argparse.Namespace) -> Dict[str, Any]:
     """Download and process corpora."""
@@ -146,7 +147,6 @@ def train_tokenizers(config: Dict[str, Any], corpus_info: Dict[str, Any]) -> Dic
                     logger.info(f"Loaded pretrained language-specific tokenizer from {pretrained_base_path}")
                     continue
 
-        
         if tokenizer_type == "standard":
             # Handle standard tokenizer
             em_mode = tokenizer_config.get("em_mode", "soft")
@@ -207,57 +207,34 @@ def train_tokenizers(config: Dict[str, Any], corpus_info: Dict[str, Any]) -> Dic
     return tokenizer_paths
 
 
-def tokenize_corpora(config: Dict[str, Any], corpus_info: Dict[str, Any], tokenizer_paths: Dict[str, Dict[str, Any]]) -> Dict[str, Dict[str, Dict[str, str]]]:
+def tokenize_corpora(config: Dict[str, Any], corpus_info: Dict[str, Any], tokenizer_paths: Dict[str, Dict[str, Any]]) -> Dict[str, Dict[str, Dict[str, str]]]: 
     """Tokenize corpora using the trained tokenizers."""
     
     # Check if we should use pre-tokenized data
     tokenized_data_dir = config["experiment"].get("tokenized_data_dir", "").format(data_dir=config["experiment"]["data_dir"])
-    if config.get("tokenized_data", {}).get("use_pretokenized", False):
-        logger.info("Using pre-tokenized data (skipping tokenization)")
-        
-        pretokenized_dirs = config["tokenized_data"].get("pretokenized_dirs", {})
-        tokenized_info = {}
-        
-        for tokenizer_name, dir_path in pretokenized_dirs.items():
-            dir_path = dir_path.format(tokenized_data_dir=tokenized_data_dir)
-            if os.path.exists(dir_path):
-                tokenized_info[tokenizer_name] = {}
-                logger.info(f"Using files from {dir_path} (expecting one directory per language)...")
-                for lang_code in os.listdir(dir_path):
-                    lang_dir = os.path.join(dir_path, lang_code)
-                    
-                    if os.path.isdir(lang_dir):
-                        tokenized_info[tokenizer_name][lang_code] = {
-                            'train': os.path.join(lang_dir, "train.jsonl"),
-                            'val': os.path.join(lang_dir, "val.jsonl"),
-                            'test': os.path.join(lang_dir, "test.jsonl")
-                        }
-        return tokenized_info
-
+    
     """Tokenize corpora using the trained tokenizers."""
     if not config["steps"].get("tokenize_corpora", True):
-        logger.info("Skipping corpus tokenization (configured to skip)")
-        # Create a tokenized_info structure from tokenized directory
+        logger.info("Skipping corpus tokenization (configured to skip)") 
         tokenized_info = {}
         for tokenizer_config in config["tokenizers"]:
-            name = tokenizer_config["name"]
-            output_dir = tokenizer_config.get("output_dir", name)
-            dir_path = os.path.join(tokenized_data_dir, output_dir)
-            
-            if os.path.exists(dir_path):
-                tokenized_info[name] = {}
-                for lang_code in os.listdir(dir_path):
-                    lang_dir = os.path.join(dir_path, lang_code)
-                    if os.path.isdir(lang_dir):
-                        tokenized_info[name][lang_code] = {
-                            'train': os.path.join(lang_dir, "train.jsonl"),
-                            'val': os.path.join(lang_dir, "val.jsonl"),
-                            'test': os.path.join(lang_dir, "test.jsonl")
-                        }
-        
+            tokenizer_name = tokenizer_config["name"]
+            output_dir = tokenizer_config.get("tokenized_data", tokenizer_name)
+            dir_path = os.path.join(tokenized_data_dir, output_dir)   
+            for lang_code in os.listdir(dir_path):
+                lang_dir = os.path.join(dir_path, lang_code)
+                
+                if os.path.isdir(lang_dir):
+                    tokenized_info[tokenizer_name][lang_code] = {
+                        'train': os.path.join(lang_dir, "train.jsonl"),
+                        'val': os.path.join(lang_dir, "val.jsonl"),
+                        'test': os.path.join(lang_dir, "test.jsonl")
+                    }
         return tokenized_info
     
     logger.info("Step 3: Tokenizing corpora...")
+    use_pretokenized_data_if_exists = config["tokenized_data"].get("use_pretokenized_data_if_exists", False)
+
     # Prepare tokenizer configurations for the corpus tokenizer
     tokenizer_configs = {}
     for tokenizer_config in config["tokenizers"]:
@@ -291,7 +268,7 @@ def tokenize_corpora(config: Dict[str, Any], corpus_info: Dict[str, Any], tokeni
         tokenizers=tokenizer_configs,
         output_dir=tokenized_data_dir,
         max_lines_per_file=max_lines,
-        skip_if_exists=True
+        skip_if_exists=use_pretokenized_data_if_exists
     )
     
     # Tokenize all corpora
@@ -383,7 +360,76 @@ def train_models(config: Dict[str, Any], tokenized_info: Dict[str, Dict[str, Dic
     return model_paths
 
 
-def evaluate_models(
+def finetune_models(
+    config: Dict[str, Any],
+    model_paths: Dict[str, str],
+    tokenizer_paths: Dict[str, Dict[str, Any]],
+) -> Dict[str, Dict[str, str]]:
+    """
+    Fine‑tune each language model on the tasks listed in
+    config['finetune_tasks'] and return
+        { tokenizer_name -> { task -> metrics_path } }
+    """
+
+    # 0) quick exit ---------------------------------------------------------
+    if not config["steps"].get("finetune_models", True):
+        logger.info("Skipping fine‑tuning (configured to skip).")
+        return {}
+
+    if not config.get("finetune_tasks"):
+        logger.info("No finetune_tasks found in config; nothing to do.")
+        return {}
+
+    # 1) check for existing results ----------------------------------------
+    results_dir = config["experiment"]["finetune_dir"].format(
+        data_dir=config["experiment"]["data_dir"]
+    )
+    ft_results: Dict[str, Dict[str, str]] = {}
+    for tok_cfg in config["tokenizers"]:
+        name = tok_cfg["name"]
+        model_dir = model_paths.get(name)
+        if not model_dir:
+            logger.warning("No trained model for %s; skipping fine‑tune.", name)
+            continue
+
+        pretrained_ft = config["finetune"].get(name, {}).get("pretrained", {})
+        if pretrained_ft.get("enabled", False):
+            res_path = pretrained_ft["path"].format(finetune_dir=results_dir)
+            if os.path.exists(res_path):
+                logger.info("Using pretrained fine‑tune results for %s from %s", name, res_path)
+                with open(res_path) as fh:
+                    ft_results[name] = json.load(fh)
+                continue  # next tokenizer
+
+        # 2) build per‑model entry -----------------------------------------
+        if name not in tokenizer_paths:
+            logger.warning("Tokenizer path missing for %s; skipping.", name)
+            continue
+
+        ft_entry = {
+            "name":          name,
+            "model_path":    model_dir,
+            "tokenizer_path": tokenizer_paths[name]["path"]
+            if tokenizer_paths[name]["type"] == "standard"
+            else tokenizer_paths[name]["base_path"],
+            "tasks":         config["finetune_tasks"],
+            "hyper":         config.get("finetune_hyper", {}),
+            "output_dir":    os.path.join(results_dir, name),
+        }
+
+        # 3) launch in‑process fine‑tune -----------------------------------
+        from code.model_finetuner import finetune_from_config  # import here to avoid heavy deps at startup
+        metrics = finetune_from_config(ft_entry)   # returns {task: json_path}
+        ft_results[name] = metrics
+
+        # optional: save a pointer for later runs
+        cache_path = os.path.join(results_dir, f"{name}_metrics_ptr.json")
+        json.dump(metrics, open(cache_path, "w"))
+
+    return ft_results
+
+
+def evaluate_model_perpexity(
     config: Dict[str, Any], 
     model_paths: Dict[str, str], 
     tokenized_info: Dict[str, Dict[str, Dict[str, str]]],
@@ -515,7 +561,9 @@ def main():
         # Step 4: Train language models
         model_paths = train_models(config, tokenized_info, tokenizer_paths)
         
+        ft_results = finetune_models(config, model_paths, tokenizer_paths)
         # Step 5: Evaluate models
+        # TODO: update evaluate_models func  
        # evaluation_results = evaluate_models(config, model_paths, tokenized_info, tokenizer_paths)
         
         end_time = datetime.now()
