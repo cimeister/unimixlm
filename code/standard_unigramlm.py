@@ -3,8 +3,7 @@ from pathlib import Path
 import math
 import os
 import logging
-from collections import defaultdict
-from typing import Dict, List, Tuple, Set, Optional
+from typing import Dict, List, Tuple, Set, Optional, Any
 
 from tokenizers import Tokenizer
 from tokenizers.models import Unigram
@@ -66,7 +65,7 @@ class StandardUnigramLMTokenizer:
         return (
             get_baseline_bytes()[0]
             if self.byte_level
-            else get_baseline_characters(files)[0]
+            else set(get_baseline_characters(files)[0])
         )
 
     def _initial_vocab(self, train_files: List[str]) -> Set[str]:
@@ -113,13 +112,13 @@ class StandardUnigramLMTokenizer:
         }
 
     @staticmethod
-    def _trim_tokens(p_token: Dict[str, float], k_drop: int, pinned: Set[str]) -> Set[str]:
+    def _tokens_to_remove(token_loss: List[Tuple[str, float]], k_drop: int):
         if k_drop <= 0:
-            return set(p_token)
-        sortable = [(tk, pr) for tk, pr in p_token.items() if tk not in pinned]
-        sortable.sort(key=lambda x: x[1])
-        to_remove = {tk for tk, _ in sortable[:k_drop]}
-        return set(p_token) - to_remove
+            return set()
+        
+        token_loss.sort(key=lambda x: x[1])
+        to_remove = {tk for tk, _ in token_loss[:k_drop]}
+        return to_remove
 
     def _build_final_vocab(
         self, p_token: Dict[str, float]
@@ -233,7 +232,21 @@ class StandardUnigramLMTokenizer:
             k_drop = min(k_drop, len(all_tokens) - self.vocab_size)
             if k_drop > 0:
                 before = len(all_tokens)
-                all_tokens = self._trim_tokens(p_token, k_drop, pinned)
+                under_consideration = all_tokens - pinned
+                if per_lang:
+                    per_lang_loss = {}
+                    for lc in self.lang_codes:
+                        per_lang_loss[lc] = {
+                            tk: -lang_counts[lc][tk] * math.log(max(self.per_lang_probs[lc][tk], 1e-30)) for tk in under_consideration
+                        }  # noqa: E127
+                    loss = [(tk, sum(self.mixture_weights[lc] * per_lang_loss[lc][tk] for lc in self.lang_codes)) for tk in under_consideration]
+            
+                else:
+                    loss = [
+                        (tk, -counts[tk] * math.log(max(p_token[tk], 1e-30))) for tk in under_consideration
+                    ]
+                tokens_to_remove = self._tokens_to_remove(loss, k_drop)
+                all_tokens -= tokens_to_remove
                 pruned = before - len(all_tokens)
                 k_total -= pruned
                 logger.info("   tokens_pruned=%d | new_vocab=%d", pruned, len(all_tokens))
