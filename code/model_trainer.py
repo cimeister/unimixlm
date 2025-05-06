@@ -145,17 +145,6 @@ class CustomCausalLMModel:
             logger.error("Model/Tokenizer not created or loaded.")
             return None
 
-        # Prepare datasets
-        logger.info(f"Processing train dataset: {len(train_dataset)} samples")
-        train_dataset = train_dataset.map(fix_input_ids)
-        train_dataset = train_dataset.filter(nonempty)
-        logger.info(f"After filtering: {len(train_dataset)} samples")
-        
-        logger.info(f"Processing validation dataset: {len(val_dataset)} samples")
-        val_dataset = val_dataset.map(fix_input_ids)
-        val_dataset = val_dataset.filter(nonempty)
-        logger.info(f"After filtering: {len(val_dataset)} samples")
-
         # Default number of epochs
         total_epochs = 5
         resume_from_checkpoint = False
@@ -188,7 +177,7 @@ class CustomCausalLMModel:
                         logger.info(f"Already completed {epochs_done:.2f} epochs. {remaining_epochs:.2f} remaining.")
                         
                         # If we've already completed the requested epochs, just do validation
-                        if remaining_epochs <= 0:
+                        if round(remaining_epochs, 2) <= 0:
                             logger.info(f"Training already completed {epochs_done:.2f}/{total_epochs} epochs. Skipping to evaluation.")
                             
                             # Load the model from the latest checkpoint
@@ -221,10 +210,20 @@ class CustomCausalLMModel:
                 disable_tqdm=True
             )
         
+        # Prepare datasets
+        logger.info(f"Processing train dataset: {len(train_dataset)} samples")
+        train_dataset = train_dataset.map(fix_input_ids)
+        train_dataset = train_dataset.filter(nonempty)
+        logger.info(f"After filtering: {len(train_dataset)} samples")
+        
+        logger.info(f"Processing validation dataset: {len(val_dataset)} samples")
+        val_dataset = val_dataset.map(fix_input_ids)
+        val_dataset = val_dataset.filter(nonempty)
+        logger.info(f"After filtering: {len(val_dataset)} samples")
         # Set up data collator
         pad_id = self.tokenizer.pad_token_id
         if pad_id is None:
-            logger.warning("No pad token defined in tokenizer, using 0")
+            logger.error("No pad token defined in tokenizer, using 0")
             pad_id = 0
 
         data_collator = CustomDataCollator(pad_id)
@@ -388,6 +387,7 @@ def train_model_on_tokenized_data(tokenized_files,
     # Check if we skipped training because it was already complete
     if isinstance(train_result, dict) and train_result.get("status") == "already_trained":
         logger.info(f"Model already trained for the requested number of epochs ({train_result.get('epochs_completed', '?')}).")
+        return output_dir
     
     # 5) Evaluate model
     eval_metrics = wrapper.evaluate(test_ds, output_dir)
