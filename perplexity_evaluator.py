@@ -15,21 +15,22 @@ import math
 import pandas as pd
 import numpy as np
 import torch
-from datetime import datetime
+import hashlib
 from typing import Dict, Tuple, Any, Optional, Union, List
 from tqdm import tqdm
-from pathlib import Path
 import matplotlib.pyplot as plt
+import itertools
 from plotnine import (
     ggplot, aes, geom_bar, geom_point, geom_line, geom_errorbar,
     facet_wrap, labs, theme, scale_fill_brewer, scale_color_brewer,
     theme_minimal, position_dodge, coord_flip, scale_y_continuous,
-    geom_boxplot, geom_violin, save_as_pdf_pages, ggsave, element_text
+    geom_boxplot, geom_violin, save_as_pdf_pages, element_text, 
+    geom_abline, scale_x_log10, scale_y_log10,
+    theme_bw, stat_ecdf, geom_vline, geom_hline
 )
 
 from transformers import (
     AutoModelForCausalLM,
-    AutoTokenizer,
     PreTrainedTokenizerFast
 )
 
@@ -147,9 +148,7 @@ class ModelEvaluator:
         for k, v in collated_batch.items():
             collated_batch[k] = v.to(self.device)
         
-        token_perplexities = []
-        byte_perplexities = []
-        byte_counts = []
+        token_perplexities, byte_perplexities, byte_counts, ex_ids = [], [], [], []
         
         with torch.no_grad():
             # Forward pass with the collated batch
@@ -193,6 +192,7 @@ class ModelEvaluator:
                 
                 # Calculate byte-normalized perplexity
                 original_text = original_texts[i]
+                ex_ids.append( make_example_id(original_text) )
                 byte_count = len(original_text.encode('utf-8'))
                 byte_counts.append(byte_count)
                 
@@ -211,7 +211,7 @@ class ModelEvaluator:
                 else:
                     byte_perplexities.append(float('inf'))
         
-        return token_perplexities, byte_perplexities, byte_counts
+        return token_perplexities, byte_perplexities, byte_counts, ex_ids
     
     def evaluate_test_set(
         self, 
@@ -295,14 +295,19 @@ class ModelEvaluator:
         all_byte_perplexities = []
         total_tokens = sum(len(item["input_ids"]) for item in dataset)
         total_bytes = 0
+        per_example=[]
         
         # Process batches with progress indicator
         for i in tqdm(range(0, len(dataset), batch_size), desc=f"Evaluating {os.path.basename(test_file_path)}"):
             batch = dataset[i:i+batch_size]
-            token_perplexities, byte_perplexities, byte_counts = self.compute_perplexity_batch(batch, data_collator)
+            token_perplexities, byte_perplexities, byte_counts, ex_ids = self.compute_perplexity_batch(batch, data_collator)
             all_token_perplexities.extend(token_perplexities)
             all_byte_perplexities.extend(byte_perplexities)
             total_bytes += sum(byte_counts)
+            per_example.extend(
+                dict(id=i, token_pp=t, byte_pp=b)           # NEW
+                for i, t, b in zip(ex_ids, token_perplexities, byte_perplexities)
+            )
             
         # Calculate token-level statistics
         if all_token_perplexities:
@@ -346,7 +351,8 @@ class ModelEvaluator:
             "std_byte_perplexity": std_byte_perplexity,
             "token_count": total_tokens,
             "byte_count": total_bytes,
-            "sample_count": len(dataset)
+            "sample_count": len(dataset),
+            "per_example": per_example
         }
 
 
@@ -396,7 +402,8 @@ def evaluate_model_on_all_languages(
     all_byte_counts = []
     language_token_weights = {}
     language_byte_weights = {}
-    
+
+    per_example_by_lang = {}
     for lang_code, test_path in tokenized_test_files.items():
         logger.info(f"Evaluating {model_name} on language: {lang_code}")
         
@@ -405,7 +412,11 @@ def evaluate_model_on_all_languages(
             batch_size=batch_size,
             max_samples=max_samples_per_language
         )
-        
+        for row in lang_results["per_example"]:
+            per_example_by_lang.setdefault(lang_code, {}).setdefault(row["id"], {})[
+                model_name
+            ] = row["token_pp"]
+
         results["languages"][lang_code] = lang_results
         
         if "error" not in lang_results:
@@ -463,7 +474,9 @@ def evaluate_model_on_all_languages(
             "weighted_byte_perplexity": byte_weighted_perplexity,
             "total_bytes": total_bytes,
             
-            "language_count": len(results["languages"])
+            "language_count": len(results["languages"]),
+            "per_example_by_lang": per_example_by_lang
+
         }
     
     return results
@@ -634,7 +647,31 @@ def create_dataframes(
     
     aggregate_df = pd.DataFrame(agg_data)
     
-    return per_language_df, aggregate_df
+    return per_language_df, aggregate_df, evaluation_results
+
+
+def build_per_example_delta_df(all_results: Dict[str, Any]) -> pd.DataFrame:
+    """
+    Flatten the nested dict structure into one tidy DataFrame:
+    language | example_id | model | token_pp
+    and then pivot so you can compute deltas easily.
+    """
+    rows = []
+    for model, mres in all_results.items():
+        if not "languages" in mres:
+            continue
+        for lang, lres in mres["languages"].items():
+            for ex in lres["per_example"]:
+                rows.append(
+                    dict(language=lang,
+                         example_id=ex["id"],
+                         model=model,
+                         token_perplexity=ex["token_pp"])
+                )
+    df = pd.DataFrame(rows)
+    return df.pivot_table(index=["language", "example_id"],
+                          columns="model",
+                          values="token_perplexity")
 
 
 def generate_plots(
@@ -851,6 +888,69 @@ def generate_byte_perplexity_plots(
     
     return plot_paths
 
+def _plot_deltas_pair(df: pd.DataFrame,
+                      output_dir: str,
+                      model_a: str,
+                      model_b: str) -> None:
+    """
+    Produce three PNGs for (model_a, model_b):
+      1) per‑language scatter with log axes
+      2) per‑language ECDF (“win curve”)
+      3) violin+box plot of Δ across languages
+    """
+    delta_col = f"delta_{model_a}_vs_{model_b}"
+    if delta_col not in df.columns:
+        df[delta_col] = df[model_a] - df[model_b]
+
+    # ------- 1 & 2: per‑language plots ----------------------------------
+    sub = df.reset_index()                    # keep language column
+
+    # 1) aggregated scatter ---------------------------------------------
+    p_scatter = (
+        ggplot(sub, aes(x=model_a, y=model_b, colour="language"))
+        + geom_point(alpha=.4, size=1)
+        + geom_abline(intercept=0, slope=1, linetype="dashed", colour="grey")
+        + scale_x_log10() + scale_y_log10()
+        + labs(title=f"{model_a} vs {model_b} – per‑example perplexity",
+               x=f"{model_a} perplexity",
+               y=f"{model_b} perplexity",
+               colour="language")
+        + theme_bw()
+    )
+    p_scatter.save(os.path.join(output_dir,
+           f"scatter_all_{model_a}_vs_{model_b}.png"), dpi=300)
+
+    # 2) aggregated ECDF (“win curve”) -----------------------------------
+    p_cdf = (
+        ggplot(sub, aes(x=delta_col, colour="language"))
+        + stat_ecdf(geom="step")
+        + geom_vline(xintercept=0, linetype="dashed", colour="grey")
+        + labs(title=f"Δ perplexity ({model_a} – {model_b}) win curve",
+               x=f"Δ perplexity ({model_a} – {model_b})",
+               y="cumulative proportion",
+               colour="language")
+        + theme_bw()
+    )
+    p_cdf.save(os.path.join(output_dir,
+           f"cdf_all_{model_a}_vs_{model_b}.png"),dpi=300)
+
+    # 3) violin/box – unchanged, still grouped by language --------------
+    vdf = sub.copy()
+    vdf["delta"] = vdf[delta_col]
+    p_violin = (
+        ggplot(vdf, aes(x="language", y="delta"))
+        + geom_violin(fill="#A5C0D1", alpha=.7, width=.9)
+        + geom_boxplot(width=.1, outlier_size=.4)
+        + geom_hline(yintercept=0, linetype="dashed", colour="grey")
+        + labs(title=f"Δ perplexity ({model_a} – {model_b}) by language",
+               x="", y="Δ token‑level perplexity")
+        + theme_bw()
+        + theme(axis_text_x=element_text(rotation=45, ha="right"))
+    )
+    p_violin.save(os.path.join(output_dir,
+           f"violin_{model_a}_vs_{model_b}.png"), dpi=300, width=10, height=6)
+
+
 def find_tokenized_test_data(
     data_dir: str = 'tokenized'
 ) -> Dict[str, Dict[str, Dict[str, str]]]:
@@ -1001,6 +1101,13 @@ def read_evaluation_results(
     # If we get here, no results could be loaded
     raise FileNotFoundError(f"Could not find or read evaluation results in {results_dir}")
 
+def make_example_id(text: str) -> str:
+    """
+    Deterministically hash the raw text so the same sentence
+    gets the same id no matter which tokenizer shuffled it.
+    """
+    return hashlib.md5(text.encode("utf‑8")).hexdigest()
+
 
 def main():
     parser = argparse.ArgumentParser(description="Evaluate language models on tokenized test sets")
@@ -1025,6 +1132,17 @@ def main():
     parser.add_argument("--languages", type=str, nargs='+',
                        help="Specific languages to evaluate (default: all)")
     parser.add_argument("--use-saved-results", action="store_true")
+    parser.add_argument(
+        "--plot-deltas",
+        action="store_true",
+        help="If set, create scatter/violin/CDF plots for per‑example Δ‑perplexity.",
+    )
+    parser.add_argument(
+        "--compare-models",
+        default=None,
+        metavar="MODEL_A,MODEL_B",
+        help="Comma‑separated model names to compare (defaults to first two).",
+    )
     
     args = parser.parse_args()
     
@@ -1069,19 +1187,30 @@ def main():
         )
         
         # Create DataFrames for plotting
-        per_language_df, aggregate_df = create_dataframes(evaluation_results)
+        per_language_df, aggregate_df, _ = create_dataframes(evaluation_results)
 
     else:
 
-        per_language_df, aggregate_df = create_dataframes(
+        per_language_df, aggregate_df, evaluation_results = create_dataframes(
             args.output_dir,
             combined_file=os.path.join(args.output_dir, MODEL_EVAL_JSON_NAME)
         )
     
     # Generate plots
-    plot_paths = generate_plots(per_language_df, aggregate_df, plots_dir)
-    byte_plot_paths = generate_byte_perplexity_plots(per_language_df, aggregate_df, plots_dir)
+    generate_plots(per_language_df, aggregate_df, plots_dir)
+    generate_byte_perplexity_plots(per_language_df, aggregate_df, plots_dir)
+    if args.plot_deltas:
+        df = build_per_example_delta_df(evaluation_results)
+
+        if args.compare_models:
+            pairs = [tuple(m.strip() for m in args.compare_models.split(","))]
+        else:
+            # every unordered pair of the model columns
+            pairs = list(itertools.combinations(df.columns, 2))
     
+        for model_a, model_b in pairs:
+            _plot_deltas_pair(df.copy(), plots_dir, model_a, model_b)
+
     # Save DataFrames for reference
     per_language_df.to_csv(os.path.join(args.output_dir, "per_language_results.csv"), index=False)
     aggregate_df.to_csv(os.path.join(args.output_dir, "aggregate_results.csv"), index=False)
