@@ -8,9 +8,9 @@ from typing import Dict, Any
 # Import and setup environment variables
 from code.environment_setup import setup_environment
 setup_environment()
-from code.utils import SafeFormattingDict
-from code.corpus_downloader import process_all_corpora
-from code.standard_unigramlm import train_standard_tokenizer
+from code.utils import SafeFormattingDict, proportional_sample
+from code.corpus_downloader import download_corpus
+from code.standard_unigramlm import train_standard_tokenizer, train_lang_tokenizers, train_tokmix
 from code.language_specific_unigramlm import train_language_specific_tokenizer
 from code.corpus_tokenizer import CorpusTokenizer
 from code.model_trainer import train_models_from_config
@@ -53,6 +53,8 @@ def process_corpora(config: Dict[str, Any], args: argparse.Namespace) -> Dict[st
             raise FileNotFoundError(f"Directory not found: {processed_dir}")
             
         for lang_code in os.listdir(processed_dir):
+            if lang_code == "sampled":
+                continue
             lang_dir = os.path.join(processed_dir, lang_code)
             if os.path.isdir(lang_dir):
                 corpus_info[lang_code] = {
@@ -66,23 +68,24 @@ def process_corpora(config: Dict[str, Any], args: argparse.Namespace) -> Dict[st
         return corpus_info
         
     # Determine sampling mode
-    max_samples = args.max_samples if args.max_samples is not None else config["experiment"].get("max_samples_per_language")
-    max_total = args.max_total_samples if args.max_total_samples is not None else config["experiment"].get("max_total_samples")
-    proportional = max_total is not None or config["experiment"].get("proportional_sampling", False)
+    # max_samples = args.max_samples if args.max_samples is not None else config["experiment"].get("max_samples_per_language")
+    # max_total = args.max_total_samples if args.max_total_samples is not None else config["experiment"].get("max_total_samples")
+    # proportional = max_total is not None or config["experiment"].get("proportional_sampling", False)
     
-    if proportional:
-        logger.info(f"Using proportional sampling with max total samples: {max_total}")
-        corpus_info = process_all_corpora(
-            max_total_samples=max_total,
-            proportional_sampling=True,
-            languages=config["corpus"].get("languages")
-        )
-    else:
-        logger.info(f"Using fixed sampling with max {max_samples} samples per language")
-        corpus_info = process_all_corpora(
-            max_samples_per_language=max_samples,
-            languages=config["corpus"].get("languages")
-        )
+    corpus_info = download_corpus(config)
+    # if proportional:
+    #     logger.info(f"Using proportional sampling with max total samples: {max_total}")
+    #     corpus_info = process_all_corpora(
+    #         max_total_samples=max_total,
+    #         proportional_sampling=True,
+    #         languages=config["corpus"].get("languages")
+    #     )
+    # else:
+    #     logger.info(f"Using fixed sampling with max {max_samples} samples per language")
+    #     corpus_info = process_all_corpora(
+    #         max_samples_per_language=max_samples,
+    #         languages=config["corpus"].get("languages")
+    #     )
     
     return corpus_info
 
@@ -94,13 +97,17 @@ def train_tokenizers(config: Dict[str, Any], corpus_info: Dict[str, Any]) -> Dic
     # Dictionary to store tokenizer paths and configurations
     tokenizer_paths = {}
     tokenizers_dir = config["experiment"]["tokenizers_dir"].format(data_dir=config["experiment"]["data_dir"])
-    
+
+    sample_root = os.path.join(config["corpus"]["processed_dir"], "sampled")
+    tokenizer_training_files = proportional_sample({lg: info['splits']["train"] for lg, info in corpus_info.items()}, sample_root)
+
     # Process each tokenizer configuration
     for tokenizer_config in config["tokenizers"]:
         tokenizer_name = tokenizer_config["name"]
         tokenizer_type = tokenizer_config["type"]
         byte_level = config["experiment"].get("byte_level", False)
         em_mode = tokenizer_config.get("em_mode", "soft")
+        min_char_occurence_threshold = tokenizer_config.get("min_char_occurence_threshold")
 
         logger.info(f"Processing tokenizer: {tokenizer_name} (type: {tokenizer_type} at {'byte' if byte_level else 'char'}-level)")
         
@@ -134,7 +141,7 @@ def train_tokenizers(config: Dict[str, Any], corpus_info: Dict[str, Any]) -> Dic
                 if pretrained_base_path and os.path.exists(pretrained_base_path) and pretrained_prob_dir and os.path.exists(pretrained_prob_dir):
                     # Load language-specific paths
                     language_paths = {}
-                    for lang_code in corpus_info.keys():
+                    for lang_code in tokenizer_training_files.keys():
                         prob_path = pretrained_prob_path_format.format(lang_code=lang_code)
                         if os.path.exists(prob_path):
                             language_paths[lang_code] = prob_path
@@ -147,6 +154,7 @@ def train_tokenizers(config: Dict[str, Any], corpus_info: Dict[str, Any]) -> Dic
                     logger.info(f"Loaded pretrained language-specific tokenizer from {pretrained_base_path}")
                     continue
 
+        vocab_size = config["experiment"].get("vocab_size", 8000)
         if tokenizer_type == "standard":
             # Handle standard tokenizer
             em_mode = tokenizer_config.get("em_mode", "soft")
@@ -155,14 +163,15 @@ def train_tokenizers(config: Dict[str, Any], corpus_info: Dict[str, Any]) -> Dic
                 SafeFormattingDict(tokenizers_dir=tokenizers_dir, em_mode=em_mode))
                         
             # Train new tokenizer
-            vocab_size = config["experiment"].get("vocab_size", 8000)
+            
             path = train_standard_tokenizer(
-                corpus_info, 
+                tokenizer_training_files, 
                 vocab_size=vocab_size, 
                 em_mode=em_mode, 
                 multigram=multigram,
                 byte_level=byte_level,
-                output_path=output_file
+                output_path=output_file,
+                min_char_occurence_threshold=min_char_occurence_threshold
             )
             
             if path:
@@ -185,9 +194,8 @@ def train_tokenizers(config: Dict[str, Any], corpus_info: Dict[str, Any]) -> Dic
             ).format_map(SafeFormattingDict(tokenizers_dir=tokenizers_dir, em_mode=em_mode))
             
             # Train language-specific tokenizer
-            vocab_size = config["experiment"].get("vocab_size", 8000)
             paths = train_language_specific_tokenizer(
-                corpus_info,
+                tokenizer_training_files,
                 vocab_size=vocab_size,
                 reestimation_em_mode=em_mode,
                 byte_level=byte_level,
@@ -201,6 +209,26 @@ def train_tokenizers(config: Dict[str, Any], corpus_info: Dict[str, Any]) -> Dic
             if paths:
                 paths["type"] ="langspec"
                 tokenizer_paths[tokenizer_name] = paths
+
+        elif tokenizer_type == "tokmix":
+            output_file = tokenizer_config.get("path", f"tokmix.json").format_map(
+                SafeFormattingDict(tokenizers_dir=tokenizers_dir))
+
+            paths = train_lang_tokenizers(tokenizer_training_files, tokenizers_dir,
+                                          vocab_size=vocab_size, 
+                                          byte_level=byte_level)
+
+            toks_per_lang = int(vocab_size/(len(corpus_info)/2))
+            logger.info(f"Mixing tokenizers, considering top {toks_per_lang} tokens per lang for building vocab of size {vocab_size}")
+            tokmix_path = train_tokmix(paths,
+                                       k_lang=toks_per_lang,
+                                       k_final=vocab_size,
+                                       byte_level=byte_level,
+                                       output_path=output_file)
+
+            tokenizer_paths[tokenizer_name] = {"path": tokmix_path,
+                                               "type": "standard",
+                                               "multigram": False}
         else:
             logger.warning(f"Unsupported tokenizer type: {tokenizer_type}")
     

@@ -2,12 +2,13 @@ from __future__ import annotations
 from pathlib import Path
 import math
 import os
+import json
 import logging
-from typing import Dict, List, Tuple, Set, Optional, Any
+from typing import Dict, List, Tuple, Set, Optional
 
 from tokenizers import Tokenizer
-from tokenizers.models import Unigram
-from tokenizers.trainers import UnigramTrainer
+from tokenizers.models import Unigram, BPE
+from tokenizers.trainers import UnigramTrainer, BpeTrainer
 from tokenizers.pre_tokenizers import ByteLevel, Whitespace
 
 from code.utils import (
@@ -17,10 +18,12 @@ from code.utils import (
     _accumulate_usage_dummy,
     load_tokenizer_with_mode,
     _build_hf_tokenizer_from_probs,
+    tokmix_merge,
     SPECIAL_TOKENS,
     INITIAL_VOCAB_MULT_FACTOR,
     NUM_TRIMMING_ITERATIONS,
     MIN_TOKEN_PROB,
+    MIN_CHAR_OCCURENCE_THRESHOLD
 )
 
 logger = logging.getLogger(__name__)
@@ -42,12 +45,16 @@ class StandardUnigramLMTokenizer:
         multigram: bool = False,
         mixture_weights: Optional[Dict[str, float]] = None,
         byte_level: bool = False,
+        min_char_occurence_threshold: Optional[int] = None
     ) -> None:
         self.vocab_size = vocab_size
         self.unk_token = unk_token
         self.unk_prior = 1.0 / (32 * vocab_size)  # SentencePiece default
         self.special_tokens = special_tokens or list(SPECIAL_TOKENS.values())
         self.byte_level = byte_level
+        self.min_char_occurence_threshold = min_char_occurence_threshold
+        if not self.min_char_occurence_threshold:
+            self.min_char_occurence_threshold = MIN_CHAR_OCCURENCE_THRESHOLD
 
         self.base_tokenizer: Optional[Tokenizer] = None
         self.em_mode = em_mode
@@ -65,7 +72,7 @@ class StandardUnigramLMTokenizer:
         return (
             get_baseline_bytes()[0]
             if self.byte_level
-            else set(get_baseline_characters(files)[0])
+            else set(get_baseline_characters(files, min_occurence_threshold=self.min_char_occurence_threshold)[0])
         )
 
     def _initial_vocab(self, train_files: List[str]) -> Set[str]:
@@ -150,15 +157,15 @@ class StandardUnigramLMTokenizer:
         self,
         corpus_files: Optional[List[str]],
         per_lang: bool,
-        corpus_info: Optional[Dict[str, dict]] = None,
+        corpus_info: Optional[Dict[str, str]] = None,
     ) -> None:
         if per_lang and not corpus_info:
             raise ValueError("corpus_info required when multigram=True")
 
         # gather training files and language codes
         if per_lang:
-            self.lang_codes = [lc for lc, info in corpus_info.items() if "train" in info.get("splits", {})]
-            corpus_files = [corpus_info[lc]["splits"]["train"] for lc in self.lang_codes]
+            self.lang_codes = [lc for lc, info in corpus_info.items()]
+            corpus_files = [corpus_info[lc] for lc in self.lang_codes]
         else:
             self.lang_codes = []
 
@@ -201,7 +208,7 @@ class StandardUnigramLMTokenizer:
                 observed_tokens = set([k for lang_probs in lang_counts.values() for k in lang_probs])
                 for lc in self.lang_codes:
                     self.per_lang_probs[lc] = self._normalise(lang_counts[lc], self.unk_token, self.unk_prior)
-                p_token = {tk: sum(self.mixture_weights[lc] * self.per_lang_probs[lc].get(tk, 0.0) for lc in self.lang_codes) for tk in all_tokens}
+                p_token = {tk: sum(self.mixture_weights[lc] * self.per_lang_probs[lc][tk] for lc in self.lang_codes) for tk in all_tokens}
             else:
                 counts = {tk: 0.0 for tk in all_tokens}
                 for file in corpus_files:
@@ -276,7 +283,7 @@ class StandardUnigramLMTokenizer:
         self._run_em(corpus_files, per_lang=False)
         return self._build_tokenizer(self.global_probs, output_path)
 
-    def _train_multigram(self, corpus_info: Dict[str, dict], output_path=None):
+    def _train_multigram(self, corpus_info: Dict[str, str], output_path=None):
         self._run_em(None, per_lang=True, corpus_info=corpus_info)
         return self._build_tokenizer(self.global_probs, output_path)
 
@@ -302,6 +309,27 @@ class StandardUnigramLMTokenizer:
             logger.info(f"Saved HF-based standard tokenizer to {output_path}")
         return self.base_tokenizer
 
+    def _train_bpe(self, corpus_files: List[str], output_path=None):
+        """Plain HF BPE trainer; shares most hyper‑params with EM modes."""
+        logger.info("Using HuggingFace BPETrainer.")
+        tok = Tokenizer(BPE(unk_token=self.unk_token))
+        tok.pre_tokenizer = (
+            ByteLevel(add_prefix_space=False) if self.byte_level else Whitespace()
+        )
+
+        trainer = BpeTrainer(
+            vocab_size=self.vocab_size,
+            min_frequency=2,
+            special_tokens=self.special_tokens,
+            initial_alphabet=ByteLevel.alphabet() if self.byte_level else [],
+        )
+        tok.train(corpus_files, trainer)
+        self.base_tokenizer = tok
+        if output_path:
+            tok.save(output_path)
+            logger.info("Saved BPE tokenizer to %s", output_path)
+        return tok
+
     def train(self, corpus_files, output_path=None, load_if_exists=False, corpus_info=None):
         """
         Train a Unigram tokenizer using the specified approach.
@@ -324,7 +352,10 @@ class StandardUnigramLMTokenizer:
         token_level = "byte" if self.byte_level else "character"
         logger.info(f"Training new tokenizer with EM mode: {self.em_mode} at {token_level}-level")
         # Different training approaches
-        if self.em_mode == "hf" and not self.multigram:
+        if self.em_mode == "bpe" and not self.multigram:
+            return self._train_bpe(corpus_files, output_path)
+
+        elif self.em_mode == "hf" and not self.multigram:
             # ============= HF Approach =============
             return self._train_hf(corpus_files, output_path)
             
@@ -372,7 +403,6 @@ class StandardUnigramLMTokenizer:
             return {lc: uniform for lc in lang_codes}
         return {lc: w / s for lc, w in weights.items()}
 
-    
     def load(self, base_path):
         """
         Load a saved tokenizer
@@ -381,32 +411,20 @@ class StandardUnigramLMTokenizer:
             base_path: Path to the tokenizer file
         """
         self.base_tokenizer, self.byte_level = load_tokenizer_with_mode(base_path)
-
-   
-    def finalize_vocab_indices(self):
-        """
-        Re-map tokens in self.base_tokenizer => IDs [0..N-1] 
-        as a standard Unigram. 
-        """
-        if not self.base_tokenizer:
-            logger.warning("No base_tokenizer to finalize in StandardUnigramLMTokenizer.")
-            return
-
-        unigram_model = self.base_tokenizer.model
-        state = unigram_model.__getstate__()
-        attributes = json.loads(state.decode('utf-8'))
-        old_vocab = attributes['vocab']
-        unk_id = attributes['unk_id']
-
-        from tokenizers import Tokenizer
-        from tokenizers.models import Unigram
-
-        new_tok = Tokenizer(Unigram(tuple((x,y) for x,y in old_vocab), unk_id))
-        vocab = new_tok.get_vocab()
-        id_check = {k: vocab.get(k, -1) for k in self.special_tokens}
-        logger.info(f"Special tokens: {id_check}")
-        new_tok.pre_tokenizer = self.base_tokenizer.pre_tokenizer
-        self.base_tokenizer = new_tok
+        self.vocab_size = len(self.base_tokenizer.get_vocab())
+        with open(base_path, encoding="utf-8") as fh:
+            data = json.load(fh)
+    
+        # 3) recover unigram scores --------------------------------------
+        if data.get("model", {}).get("type") == "Unigram":
+            vocab_pairs = data["model"]["vocab"]      # list [piece, score]
+            # scores are log‑probs (SentencePiece convention)
+            tokens, log_scores = zip(*vocab_pairs)
+            probs = [math.exp(s) for s in log_scores]
+            Z = sum(probs)
+            self.global_probs = {t: p / Z for t, p in zip(tokens, probs)}
+        else:
+            logger.warning(f"No global probs for tokenizer at {base_path} found")
 
     def encode(self, text):
         """
@@ -458,14 +476,74 @@ class StandardUnigramLMTokenizer:
             return 0
         return len(self.base_tokenizer.get_vocab())
 
+def train_lang_tokenizers(corpus_info: Dict[str, Dict[str, str]],
+                          out_dir: str,
+                          vocab_size=8000, 
+                          byte_level=False,
+                          use_per_lang_if_exists=True) -> Dict[str, str]:
+    """
+    Args
+    ----
+    config       : experiment config (for hyper‑params)
+    corpus_info  : { lang : { 'train': <file>, 'val': <file>, … } }
+    out_dir      : directory where <lang>_tokenizer.json are written
+
+    Returns
+    -------
+    paths : { lang : tokenizer_path }
+    """
+    paths = {}
+    Path(out_dir).mkdir(parents=True, exist_ok=True)
+
+    # 2) shared tokenizer hyper‑parameters
+    for lg, sample_path in corpus_info.items():
+        outfile = os.path.join(out_dir, f"tokmix_{lg}_tokenizer.json")
+        if not os.path.exists(outfile) or not use_per_lang_if_exists:
+
+            logger.info("Training per‑language tokenizer for %s …", lg)
+            tok = StandardUnigramLMTokenizer(
+                vocab_size   = vocab_size,
+                em_mode      = "soft",      # full forward‑backward EM
+                byte_level   = byte_level,
+                multigram    = False
+            )
+        
+            tok.train([sample_path], output_path=outfile)
+        paths[lg] = outfile
+
+    # save manifest for downstream stages
+    return paths
+
+def train_tokmix(per_lang_paths: Dict[str, str],
+                 k_lang: int,
+                 k_final: int,
+                 byte_level: bool,
+                 output_path: str):
+    """
+    Combine language‑specific tokenizers trained earlier.
+    `per_lang_paths` maps lang → path/to/json
+    """
+    tkzs = {lg: StandardUnigramLMTokenizer()for lg in per_lang_paths}
+    for lg, path in per_lang_paths.items():
+        tkzs[lg].load(path)
+
+    merged = tokmix_merge({lg: tkz.global_probs for lg, tkz in  tkzs.items()}, 
+                          k_lang, k_final,
+                          byte_level,
+                          SPECIAL_TOKENS["unk_token"],
+                          list(SPECIAL_TOKENS.values()))
+    merged.save(output_path)
+    logger.info("Saved TokMix tokenizer to %s", output_path)
+    return output_path
 
 def train_standard_tokenizer(corpus_info, 
-    vocab_size=8000, 
-    em_mode='soft', 
-    multigram=False, 
-    byte_level=False, 
-    output_path=None
-):
+                             vocab_size=8000, 
+                             em_mode='soft', 
+                             multigram=False, 
+                             byte_level=False, 
+                             output_path=None,
+                             min_char_occurence_threshold=None
+                             ):
     """
     Train a standard UnigramLM tokenizer on all languages.
     
@@ -478,9 +556,8 @@ def train_standard_tokenizer(corpus_info,
     """
     # Collect all training files
     train_files = []
-    for lang_code, info in corpus_info.items():
-        if 'splits' in info and 'train' in info['splits']:
-            train_files.append(info['splits']['train'])
+    for lang_code, train_file in corpus_info.items():
+        train_files.append(train_file)
     
     if not train_files:
         logger.error("No training files found")
