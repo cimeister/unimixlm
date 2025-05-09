@@ -1,12 +1,11 @@
 import math
 from collections import OrderedDict, defaultdict, Counter
 import multiprocessing
-from functools import partial
-import os
 import json
+from collections import Counter
 import numpy as np
-import io 
-from typing import Dict, List, Tuple, Set, Any
+from typing import Dict, List, Tuple, Set
+from pathlib import Path
 import random
 
 from tokenizers import Tokenizer
@@ -25,6 +24,8 @@ NUM_TRIMMING_ITERATIONS = 3
 INITIAL_VOCAB_MULT_FACTOR = 5
 MIN_CHAR_OCCURENCE_THRESHOLD = 2
 MIN_TOKEN_PROB = 1e-10
+_TOTAL_SAMPLE_LINES = 2_000_000
+_RNG = random.Random(42)
 
 # build once, reuse
 _B2U = {i: c for i, c in enumerate(ByteLevel.alphabet())}
@@ -140,6 +141,41 @@ def _count_worker(file_path):
         logger.error(f"Error processing {file_path}: {e}")
         return file_path, Counter()
 
+def proportional_sample(train_files_by_lang: Dict[str, str],
+                        out_root: str) -> Dict[str, str]:
+    """
+    For each language copy ≤ n lines into <out_root>/<lang>/sample.txt,
+    where n is proportional to the byte count recorded in meta.json.
+    Returns   lang -> sampled_file_path
+    """
+    byte_tot = {lg: json.load(open(Path(path).parent/"meta.json"))["bytes_written"]
+                for lg, path in train_files_by_lang.items()}
+    total = sum(byte_tot.values())
+
+    out_path = Path(out_root)
+    out_path.mkdir(parents=True, exist_ok=True)
+    sampled_files = {}
+    for lg, path in train_files_by_lang.items():
+        k = max(1000, int(_TOTAL_SAMPLE_LINES * byte_tot[lg] / total))
+        dest_dir = out_path / lg
+        dest_dir.mkdir(parents=True, exist_ok=True)
+        dest = dest_dir / "sample.txt"
+        sampled_files[lg] = str(dest)
+
+        if dest.exists():               # reuse cache
+            continue
+
+        with open(path, encoding="utf-8", errors="ignore") as src, \
+             open(dest, "w", encoding="utf-8") as tgt:
+            lines_written = 0
+            for line in src:
+                if lines_written == k:
+                    break
+                if _RNG.random() > 0.2:   # light intra‑lang subsample
+                    continue
+                tgt.write(line)
+                lines_written += 1
+    return sampled_files
 
 def get_baseline_bytes() -> Tuple[Set[str], Dict[str,int]]:
     alphabet = ByteLevel.alphabet()
@@ -594,7 +630,6 @@ def _accumulate_usage_dummy(
 
     return counts, float(tot_subwords)
 
-
    # Flatten/truncate
 def fix_input_ids(example, max_length=1024):
     if len(example["input_ids"])>0 and isinstance(example["input_ids"][0], list):
@@ -653,4 +688,29 @@ def _build_hf_tokenizer_from_probs(
 
     return tok
 
+# ------------------------------------------------------------------
+def tokmix_merge(per_lang_tokenizers: Dict[str, Dict],
+                 k_lang: int, k_final: int,
+                 byte_level: bool, unk_token: str, special: List[str]) -> Tokenizer:
+    """
+    Combine per‑language ULM tokenizers à la TokMix.
+      k_lang   – #top tokens to take from each language model
+      k_final  – desired merged vocab size
+    """
+    pool = []
+    for lg, global_probs in per_lang_tokenizers.items():
+        # sort by score (log prob) descending, skip specials
+        top = [t for t, _ in sorted(global_probs.items(),
+                                    key=lambda x: x[1], reverse=True)
+               if t not in special][:k_lang]
+        pool.extend(top)
 
+    # majority voting favouring pieces shared across langs
+    counts = Counter(pool)
+    merged = [t for t, _ in counts.most_common()]
+    merged = special + merged[:k_final-len(special)]
+
+    # build HF tokenizer (probabilities initialised uniformly)
+    probs = [(t, math.log(1/len(merged))) for t in merged]
+    unk_id = merged.index(unk_token)
+    return _build_hf_tokenizer_from_probs(probs, unk_id, byte_level)

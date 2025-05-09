@@ -190,9 +190,8 @@ class LanguageSpecificUnigramLMTokenizer(StandardUnigramLMTokenizer):
         
         # Gather train files for all languages
         all_train_files = []
-        for lang_code, info in corpus_info.items():
-            if 'splits' in info and 'train' in info['splits']:
-                all_train_files.append(info['splits']['train'])
+        for lang_code, f in corpus_info.items():
+            all_train_files.append(f)
         
         if not all_train_files:
             logger.error("No training files found for any language in corpus_info.")
@@ -207,9 +206,8 @@ class LanguageSpecificUnigramLMTokenizer(StandardUnigramLMTokenizer):
             logger.info("Using previously loaded base tokenizer.")
 
         # 2) one tokenizer per language
-        for lang_code, info in corpus_info.items():
+        for lang_code, train_file in corpus_info.items():
             # where to store / look for the tokenizer
-            train_file = info['splits']['train']
             tk_path: Path = (
                 Path(tokenizer_path_format.format(lang_code=lang_code))
                 if tokenizer_path_format is not None
