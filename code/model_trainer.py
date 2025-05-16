@@ -273,58 +273,6 @@ class StreamingTokenizedDataset(IterableDataset):
         if self.max_samples is not None:
             return islice(shuffled_stream, self.max_samples)
         return shuffled_stream
-    
-    def old_get_size_limited_stream(self) -> Iterator[Dict[str, Any]]:
-        """Creates a size-limited stream across all language files."""
-        # Calculate per-language limits if needed
-        lang_limit = self.max_samples_per_language
-        if lang_limit is None and self.max_samples is not None:
-            # Distribute samples evenly across languages if only total limit is specified
-            lang_count = len(self.files_by_lang)
-            if lang_count > 0:  # Guard against division by zero
-                lang_limit = self.max_samples // lang_count
-                logger.info(f"Automatically limiting to {lang_limit} samples per language")
-        
-        # Create a stream for each language with individual limits
-        streams_by_lang = {}
-        for lang, file_path in self.files_by_lang.items():
-            base_stream = self._get_limited_stream_for_file(file_path, limit=lang_limit)
-            if self.shuffle:
-                # Use smaller of buffer_size or lang_limit to avoid loading too much
-                buffer_size = min(self.buffer_size, lang_limit) if lang_limit else self.buffer_size
-                # Apply buffer shuffling to each language individually
-                shuffled_stream = self._shuffle_buffer(base_stream, buffer_size)
-                streams_by_lang[lang] = shuffled_stream
-            else:
-                streams_by_lang[lang] = base_stream
-        
-        if self.balance_languages:
-            # Interleave streams with overall limit if specified
-            return self._interleave_streams_with_limit(
-                streams_by_lang, 
-                total_limit=self.max_samples
-            )
-        else:
-        # -------- proportional sampling without large preload --------
-            rng = random.Random(self.seed + self._epoch)
-
-            # One iterator per language
-            lang_iters = {lang: iter(stream) for lang, stream in streams_by_lang.items()}
-
-            yielded = 0
-            # Loop until all iterators are exhausted or we reach the global cap
-            while lang_iters and (self.max_samples is None or yielded < self.max_samples):
-                # Pick a language *uniformly among the ones that still have data*.
-                # This is naturally proportional: bigger files stay in lang_iters longer.
-                lang = rng.choice(list(lang_iters.keys()))
-                try:
-                    example = next(lang_iters[lang])
-                    yield example
-                    yielded += 1
-                except StopIteration:
-                    # That language has run out of rows
-                    lang_iters.pop(lang)
-            return
         
     def __iter__(self) -> Iterator[Dict[str, Any]]:
         """Creates an iterator for the dataset."""
@@ -342,64 +290,52 @@ class StreamingTokenizedDataset(IterableDataset):
         return self._get_size_limited_stream()
 
 
-class StreamingDataCollator:
+class PackedStreamingDataCollator:
     """
-    Collator that dynamically pads batches for streaming data.
+    Dynamically packs variable-length examples into fixed-length blocks.
+    If the last block contains < max_seq_len tokens it is padded on the right.
     """
     def __init__(self, pad_id: int, max_seq_len: int):
-        self.pad_id = pad_id
-        self.max_seq_len = max_seq_len
+        self.pad_id       = pad_id
+        self.max_seq_len  = max_seq_len
 
     def __call__(self, features: List[Dict[str, Any]]) -> Dict[str, torch.Tensor]:
-        # Additional validation
         if not features:
-            logger.warning("Empty features list in data collator")
-            return None
+            raise ValueError("No features to collate")
 
-        # Filter out any features with problematic input_ids
-        valid_features = []
+        # 1.  Flatten the token lists that came from the dataset
+        flat_tokens: List[int] = []
         for f in features:
-            try:
-                # Ensure input_ids is a list
-                input_ids = f.get('input_ids', [])
-                if not isinstance(input_ids, list):
-                    logger.warning(f"Invalid input_ids type: {type(input_ids)}")
-                    continue
-                
-                # Truncate or pad to max_seq_len
-                if len(input_ids) > self.max_seq_len:
-                    input_ids = input_ids[:self.max_seq_len]
-                
-                # Ensure labels match input_ids
-                f['input_ids'] = input_ids
-                f['labels'] = input_ids[:len(input_ids)]
-                
-                valid_features.append(f)
-            except Exception as e:
-                logger.warning(f"Error processing feature: {e}")
+            toks = f.get("input_ids", [])
+            if not isinstance(toks, list):
+                continue                        # skip corrupt rows
+            flat_tokens.extend(toks)
 
-        if not valid_features:
-            logger.error("No valid features after processing")
-            return None
+        # 2.  Slice into equal-length blocks
+        blocks: List[List[int]] = [
+            flat_tokens[i : i + self.max_seq_len]
+            for i in range(0, len(flat_tokens), self.max_seq_len)
+        ]
+        if not blocks:
+            raise ValueError("After filtering there were no valid tokens")
 
-        max_len = max(len(f["input_ids"]) for f in valid_features)
-        
-        # Initialize tensors
-        input_ids = torch.full((len(valid_features), max_len), self.pad_id, dtype=torch.long)
-        labels = torch.full((len(valid_features), max_len), -100, dtype=torch.long)  # -100 is ignored in loss
-        
-        # Fill tensors
-        for i, f in enumerate(valid_features):
-            seq_len = len(f["input_ids"])
-            input_ids[i, :seq_len] = torch.tensor(f["input_ids"], dtype=torch.long)
-            labels[i, :seq_len] = torch.tensor(f["labels"], dtype=torch.long)
-            
+        batch_sz = len(blocks)
+        input_ids      = torch.full((batch_sz, self.max_seq_len),
+                                    self.pad_id, dtype=torch.long)
+        labels         = torch.full_like(input_ids, -100)   # ignored index
+        attention_mask = torch.zeros_like(input_ids)
+
+        for row, toks in enumerate(blocks):
+            seq_len = len(toks)
+            input_ids[row, :seq_len]      = torch.tensor(toks, dtype=torch.long)
+            labels[row,  :seq_len]        = torch.tensor(toks, dtype=torch.long)
+            attention_mask[row, :seq_len] = 1
+
         return {
             "input_ids": input_ids,
-            "labels": labels,
-            "attention_mask": (input_ids != self.pad_id).long()
+            "labels": labels,                    # model does the shift internally
+            "attention_mask": attention_mask,
         }
-
 
 class CustomCausalLMModel:
     """
@@ -409,7 +345,6 @@ class CustomCausalLMModel:
         """
         Args:
             hf_tokenizer: HuggingFace tokenizer
-            model_name: Base model name (e.g. "distilgpt2", "gpt2", "gpt2-medium")
             config: Optional custom model configuration
         """
         self.tokenizer = hf_tokenizer
@@ -420,12 +355,11 @@ class CustomCausalLMModel:
     def create_model(self):
         """Create and prepare the model for training."""
         # Load the config from pretrained model
-        d_model = 1024
         cfg = GPT2Config(
             vocab_size     = len(self.tokenizer),
             n_positions    = 1024,
             n_ctx          = 1024,
-            n_embd         = d_model,
+            n_embd         = 1024,
             n_layer        = 24,
             n_head         = 16,
             resid_pdrop    = 0.1,
@@ -460,17 +394,9 @@ class CustomCausalLMModel:
         self,
         tokenized_files: Dict[str, Dict[str, str]],
         output_dir: str,
-        *,
-        max_steps: int = 300_000,
         val_samples_per_lang: int = 1_000,
         train_buffer_size: int = 5_000,
         val_buffer_size: int = 5_000,
-        batch_size: int = 4,
-        grad_accum: int = 8,
-        lr: float = 3e-4,
-        warmup_steps: int = 8_000,
-        eval_every: int = 10_000,
-        save_every: int = 10_000,
         seed: int = 42,
         resume_training: bool = True
     ):
@@ -535,52 +461,50 @@ class CustomCausalLMModel:
         # 2.  TrainingArguments
         # ------------------------------------------------------------------
         training_args = TrainingArguments(
-            output_dir=output_dir,
-            overwrite_output_dir=False,
-            max_steps=max_steps,
-            per_device_train_batch_size=batch_size,
-            per_device_eval_batch_size=batch_size,
-            gradient_accumulation_steps=grad_accum,
-            learning_rate=lr,
-            warmup_steps=warmup_steps,
-            lr_scheduler_type="cosine",
-            fp16=True,
-            gradient_checkpointing=True,
-            logging_steps=100,
-            evaluation_strategy=evaluation_strategy,
-            eval_steps=eval_every,
-            save_steps=save_every,
-            save_total_limit=2,
-            load_best_model_at_end=evaluation_strategy != "no",  
-            weight_decay=0.01,
-            disable_tqdm=False,
-            dataloader_drop_last=False,
-            seed=seed,
-            optim="adamw_8bit"
+            output_dir                  = output_dir,
+            overwrite_output_dir        = False,
+            max_steps                   = 300_000,
+            per_device_train_batch_size = 4,       # 4 × 1024 tokens → ~21 GB with fp16
+            per_device_eval_batch_size  = 4,
+            gradient_accumulation_steps = 8,       # ⇒ effective 32 seqs / step
+            learning_rate               = 3e-4,
+            lr_scheduler_type           = "cosine",
+            warmup_steps                = 8_000,
+            fp16                        = True,
+            gradient_checkpointing      = True,    # needed to stay within 24 GB on A5000
+            optim                       = "adamw_8bit",   # keeps optimizer memory low
+            weight_decay                = 0.01,
+            logging_steps               = 100,
+            save_steps                  = 10_000,
+            evaluation_strategy         = evaluation_strategy,
+            eval_steps                  = 10_000,
+            save_total_limit            = 2,
+            dataloader_drop_last        = False,
+            disable_tqdm                = False,
+            seed                        = seed,
         )
         training_args_small = TrainingArguments(
-            output_dir=output_dir,
-            overwrite_output_dir=False,
-            max_steps                  = 180_000,      # Tiny / Small tiers
-            per_device_train_batch_size= 4,
-            gradient_accumulation_steps= 4,
-            learning_rate              = 4e-4,
-            lr_scheduler_type          = "cosine",
-            warmup_steps               = 3_000,
-            fp16                       = True,
-            gradient_checkpointing     = True,
-            torch_compile              = False,         # PyTorch 2.x
-            optim                      = "adamw_8bit", # bitsandbytes 8‑bit Adam
-            logging_steps              = 1000,
-            save_steps                 = 10_000,
-            evaluation_strategy        = "steps",
-            eval_steps                 = 10_000,
-            save_total_limit=2,
-            load_best_model_at_end=evaluation_strategy != "no",  
-            weight_decay=0.01,
-            disable_tqdm=False,
-            dataloader_drop_last=False,
-            seed=seed
+            output_dir                  = output_dir,
+            overwrite_output_dir        = False,
+            max_steps                   = 180_000,
+            per_device_train_batch_size = 12,      # 12 × 512 tokens fits comfortably
+            per_device_eval_batch_size  = 12,
+            gradient_accumulation_steps = 2,       # ⇒ effective 24 seqs / step
+            learning_rate               = 4e-4,    # scale ≈ linearly with eff. batch
+            lr_scheduler_type           = "cosine",
+            warmup_steps                = 3_000,
+            fp16                        = True,
+            gradient_checkpointing      = False,   # memory is ample; skip for speed
+            optim                       = "adamw_8bit",   # fp32 AdamW also fine here
+            weight_decay                = 0.01,
+            logging_steps               = 500,
+            save_steps                  = 10_000,
+            evaluation_strategy         = evaluation_strategy,
+            eval_steps                  = 10_000,
+            save_total_limit            = 2,
+            dataloader_drop_last        = False,
+            disable_tqdm                = False,
+            seed                        = seed,
         )
 
         training_args = training_args_small if self.use_small else training_args
@@ -621,9 +545,9 @@ class CustomCausalLMModel:
         )
         pad_id = self.tokenizer.pad_token_id
         if pad_id is None:
-            logger.error("No pad token defined in tokenizer, using 0")
+            logger.error("No pad token defined in tokenizer")
 
-        data_collator = StreamingDataCollator(
+        data_collator = PackedStreamingDataCollator(
             pad_id=pad_id,
             max_seq_len=self.model.config.n_ctx
         )
@@ -701,8 +625,8 @@ class CustomCausalLMModel:
         # Setup data collator
         pad_id = self.tokenizer.pad_token_id
         if pad_id is None:
-            logger.error("No pad token defined in tokenizer, using 0")
-        data_collator = StreamingDataCollator(pad_id=pad_id,
+            logger.error("No pad token defined in tokenizer")
+        data_collator = PackedStreamingDataCollator(pad_id=pad_id,
                                               max_seq_len=self.model.config.n_ctx)
 
         # Create trainer and evaluate
@@ -744,11 +668,12 @@ class CustomCausalLMModel:
         return metrics
 
 def train_model_on_tokenized_data_streaming(tokenized_files, 
-                              tokenization_method, 
-                              base_tokenizer_path, 
-                              model_config=None, 
-                              output_dir="",
-                              resume_training=True):
+                                            tokenization_method, 
+                                            base_tokenizer_path, 
+                                            model_config=None, 
+                                            output_dir="",
+                                            model_arch="standard",
+                                            resume_training=True):
     """
     Train a language model with streaming datasets on a single A5000 GPU.
     
@@ -795,7 +720,7 @@ def train_model_on_tokenized_data_streaming(tokenized_files,
         return None
     
     set_seed(42)  # For reproducibility
-    wrapper = CustomCausalLMModel(hf_tok, config=model_config, small=True)
+    wrapper = CustomCausalLMModel(hf_tok, config=model_config, small=True if model_arch=="small" else False)
     
     # If we're resuming and have checkpoints, load the latest checkpoint model
     if checkpoints_exist and resume_training:
@@ -862,6 +787,7 @@ def train_models_from_config(config_dict):
             
         tokenizer_path = tokenizer_config.get("tokenizer_path")
         tokenized_files = tokenizer_config.get("tokenized_files", {})
+        #TODO: override model parameters with model_config
         model_config = tokenizer_config.get("model_config", {})
         
         if not tokenizer_path or not tokenized_files:
@@ -869,9 +795,8 @@ def train_models_from_config(config_dict):
             continue
             
         # Check if model already exists
-        model_size = model_config.get("base_model", "distilgpt2")
-        model_size = "distil" if "distil" in model_size else model_size.replace("gpt2", "").strip("-") or "base"
-        output_dir = os.path.join(models_output_dir, f"{name}_model_{model_size}_small")
+        model_size = model_config.get("model_arch", "standard")
+        output_dir = os.path.join(models_output_dir, f"{name}_model_{model_size}")
         
         # Get tokenizer-specific resume_training setting (use global as default)
         resume_training = model_config.get("resume_training", global_resume_training)
@@ -889,6 +814,7 @@ def train_models_from_config(config_dict):
             tokenizer_path,
             model_config,
             output_dir,
+            model_arch=model_size,
             resume_training=resume_training
         )
         
