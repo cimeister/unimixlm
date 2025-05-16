@@ -8,7 +8,12 @@ from collections import defaultdict, Counter
 from tqdm import tqdm
 from typing import Dict, List, Tuple, Any, Optional, Union
 import argparse
-from pathlib import Path
+from code.utils import encode_text, load_tokenizer_from_config
+from code.language_specific_unigramlm import LanguageSpecificUnigramLMTokenizer
+
+# Import and setup environment variables
+from code.environment_setup import setup_environment
+setup_environment()
 
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
@@ -96,54 +101,6 @@ class TokenizerAnalyzer:
         self.ttr = None
         self.vocab_utilization = None
     
-    def encode_text(self, tokenizer_name: str, tokenizer: Any, text: str, lang: str) -> Tuple[List[int], List[str], Optional[str]]:
-        """
-        Encode text using the specified tokenizer.
-        
-        Args:
-            tokenizer_name: Name of the tokenizer
-            tokenizer: Tokenizer object
-            text: Text to encode
-            lang: Language of the text
-            
-        Returns:
-            Tuple of (token_ids, tokens, best_lang)
-                - token_ids: List of token IDs
-                - tokens: List of token strings
-                - best_lang: Best language (for language-specific tokenizers) or None
-        """
-        best_lang = None
-        
-        # Handle language-specific tokenizers that have custom_viterbi_best_language method
-        if hasattr(tokenizer, 'custom_viterbi_best_language'):
-            best_lang, tokens = tokenizer.custom_viterbi_best_language(text)
-            vocab = tokenizer.get_vocab()
-            unk = tokenizer.unk_token
-            ids = [vocab.get(t, vocab.get(unk, 0)) for t in tokens]
-            return ids, tokens, best_lang
-        
-        # Standard tokenizers with encode method
-        elif hasattr(tokenizer, 'encode'):
-            ids = tokenizer.encode(text)
-            # Try to get tokens if possible
-            if hasattr(tokenizer, 'base_tokenizer') and hasattr(tokenizer.base_tokenizer, 'id_to_token'):
-                tokens = [tokenizer.base_tokenizer.id_to_token(i) for i in ids]
-            else:
-                # If we can't get tokens directly, decode each ID individually
-                tokens = [tokenizer.decode([i]) for i in ids]
-            return ids, tokens, None
-        
-        # Fallback for HuggingFace tokenizers
-        else:
-            result = tokenizer.encode(text, add_special_tokens=False)
-            if hasattr(result, 'ids'):  # For tokenizers that return an Encoding object
-                ids = result.ids
-                tokens = result.tokens
-            else:  # For tokenizers that return IDs directly
-                ids = result
-                tokens = tokenizer.convert_ids_to_tokens(ids)
-            return ids, tokens, None
-    
     def analyze(self) -> Dict[str, Any]:
         """
         Analyze all tokenizers on the parallel corpus.
@@ -178,96 +135,87 @@ class TokenizerAnalyzer:
     
     def _process_language(self, lang: str, path: str) -> None:
         """
-        Process a single language file.
-        
-        Args:
-            lang: Language code
-            path: Path to the corpus file
+        Analyse one language file and store per-tokenizer statistics.
         """
-        line_idx = 0
-        
-        # Check if we have existing tokenized output
-        out_path = os.path.join(self.tokenized_lines_output_dir, f"analysis_{lang}.jsonl")
-        existing_results = {}
+        out_path = os.path.join(self.tokenized_lines_output_dir,
+                                f"analysis_{lang}.jsonl")
+
+        # ---------------- load any existing cache -------------------------
+        existing = {}
         if os.path.isfile(out_path):
-            with open(out_path, 'r', encoding='utf-8', errors="replace") as f:
-                for line in f:
-                    data = json.loads(line)
-                    existing_results[data['text']] = data
-        
-        records = []
-        
-        with open(path, 'r', encoding='utf-8', errors="replace") as f:
-            for line in tqdm(f, desc=f"Analyzing {lang}"):
-                text = line.strip()
+            with open(out_path, "r", encoding="utf-8", errors="replace") as fin:
+                for line in fin:
+                    rec = json.loads(line)
+                    existing[rec["text"]] = rec
+
+        records, line_idx = [], 0
+
+        with open(path, "r", encoding="utf-8", errors="replace") as fin:
+            for raw in tqdm(fin, desc=f"Analyzing {lang}"):
+                text = raw.strip()
                 if not text:
                     continue
-                
-                # Check if we already have results for this line
-                existing_data = existing_results.get(text, {})
-                
                 line_idx += 1
                 if self.max_lines and line_idx > self.max_lines:
                     break
-                
-                # Count chars and whitespace words
+
+                # basic char / whitespace stats
                 self.total_chars_by_lang[lang] += len(text)
-                words = text.split()
-                self.whitespace_word_counts[lang] += len(words)
-                
-                # Process each tokenizer
-                record = {
-                    "lang": lang,
-                    "line_idx": line_idx,
-                    "text": text
-                }
-                
-                for tokenizer_name, tokenizer in self.tokenizers.items():
-                    # Check if we already have results for this tokenizer
-                    tok_ids_key = f"{tokenizer_name}_ids"
-                    tok_tokens_key = f"{tokenizer_name}_tokens"
-                    tok_best_lang_key = f"{tokenizer_name}_best_lang"
-                    
-                    if tok_ids_key in existing_data and tok_tokens_key in existing_data:
-                        ids = existing_data[tok_ids_key]
-                        tokens = existing_data[tok_tokens_key]
-                        best_lang = existing_data.get(tok_best_lang_key)
+                self.whitespace_word_counts[lang] += len(text.split())
+
+                # --------- initialise output record ----------------------
+                rec = {"lang": lang, "line_idx": line_idx, "text": text}
+                prev = existing.get(text, {})
+
+                # --------- per-tokenizer processing ----------------------
+                for name, tok in self.tokenizers.items():
+                    k_ids     = f"{name}_ids"
+                    k_tokens  = f"{name}_tokens"
+                    k_bestlg  = f"{name}_best_lang"
+
+                    if k_ids in prev and k_tokens in prev:
+                        ids    = prev[k_ids]
+                        tokens = prev[k_tokens]
+                        bestlg = prev.get(k_bestlg)
                     else:
-                        # Encode the text with this tokenizer
-                        ids, tokens, best_lang = self.encode_text(tokenizer_name, tokenizer, text, lang)
-                    
-                    # Store results in record
-                    record[tok_ids_key] = ids
-                    record[tok_tokens_key] = tokens
-                    if best_lang:
-                        record[tok_best_lang_key] = best_lang
-                    
-                    # Update counts and stats
-                    len_tokens = len(ids)
-                    self.lengths[tokenizer_name][lang].append(len_tokens)
-                    self.total_tokens_by_method_lang[tokenizer_name][lang] += len_tokens
-                    self.usage_counts[tokenizer_name].update(ids)
-                    self.usage_counts_per_lang[tokenizer_name][lang].update(ids)
-                    self.total_subwords_for_fertility[tokenizer_name][lang] += len_tokens
-                    
-                    # Update best lang counts (for language-specific tokenizers)
-                    if best_lang:
-                        if best_lang == lang:
-                            self.best_lang_counts[tokenizer_name][lang] += 1
-                
+                        # decide whether to invoke language detection
+                        use_best = isinstance(tok, LanguageSpecificUnigramLMTokenizer)
+                        enc = encode_text(
+                            tok,
+                            text,
+                            use_best_language=use_best,
+                            language=lang if not use_best else None,
+                        )
+                        ids    = enc["input_ids"]
+                        tokens = enc.get("tokens", [])
+                        bestlg = enc.get("best_lang")
+
+                        rec[k_ids]    = ids
+                        rec[k_tokens] = tokens
+                        if bestlg is not None:
+                            rec[k_bestlg] = bestlg
+
+                    # ----- update global stats --------------------------
+                    n_tok = len(ids)
+                    self.lengths[name][lang].append(n_tok)
+                    self.total_tokens_by_method_lang[name][lang] += n_tok
+                    self.usage_counts[name].update(ids)
+                    self.usage_counts_per_lang[name][lang].update(ids)
+                    self.total_subwords_for_fertility[name][lang] += n_tok
+                    if bestlg and bestlg == lang:
+                        self.best_lang_counts[name][lang] += 1
+
                 self.total_lines_lang[lang] += 1
-                
-                # Save record
-                if self.save_tokenized_lines:
-                    records.append(record)
-            
-            logger.info(f"Processed {min(line_idx, self.max_lines or float('inf'))} lines for {lang}.")
-            
-            # Write records to file
-            if self.save_tokenized_lines and records:
-                with open(out_path, 'w', encoding='utf-8') as fout:
-                    for record in records:
-                        fout.write(json.dumps(record) + "\n")
+                if self.save_tokenized_lines and rec:
+                    records.append(rec)
+
+        logger.info(f"Processed {min(line_idx, self.max_lines or float('inf'))} lines for {lang}.")
+
+        if self.save_tokenized_lines and records:
+            with open(out_path, "w", encoding="utf-8") as fout:
+                for rec in records:
+                    fout.write(json.dumps(rec) + "\n")
+
     
     def _compute_metrics(self) -> None:
         """Compute all metrics from the collected data."""
@@ -519,44 +467,6 @@ class TokenizerAnalyzer:
         logger.info("\nAnalysis complete.")
 
 
-def load_tokenizer(config):
-    """
-    Load a tokenizer based on configuration.
-    
-    Args:
-        config: Dictionary with tokenizer configuration
-        
-    Returns:
-        Loaded tokenizer
-    """
-    tokenizer_type = config.get('type')
-    
-    if tokenizer_type == 'standard':
-        from code.standard_unigramlm import StandardUnigramLMTokenizer
-        tokenizer = StandardUnigramLMTokenizer()
-        tokenizer.load(config['path'])
-        
-    elif tokenizer_type == 'langspec':
-        from code.language_specific_unigramlm import LanguageSpecificUnigramLMTokenizer
-        tokenizer = LanguageSpecificUnigramLMTokenizer()
-        tokenizer.load(config['base_path'], config.get('language_paths'))
-        
-    elif tokenizer_type == 'multigram':
-        from code.standard_unigramlm import StandardUnigramLMTokenizer
-        tokenizer = StandardUnigramLMTokenizer(multigram=True)
-        tokenizer.load(config['base_path'])
-        
-    else:
-        # Try loading as a HuggingFace tokenizer
-        try:
-            from transformers import AutoTokenizer
-            tokenizer = AutoTokenizer.from_pretrained(config['path'])
-        except:
-            raise ValueError(f"Unknown tokenizer type: {tokenizer_type}")
-    
-    return tokenizer
-
-
 def main():
     parser = argparse.ArgumentParser(description='Analyze and compare tokenizers on parallel corpora')
     parser.add_argument('--config', type=str, required=True, help='Path to configuration JSON file')
@@ -577,12 +487,9 @@ def main():
     # Load tokenizers
     tokenizers = {}
     for name, tok_config in config['tokenizers'].items():
-        try:
-            tokenizer = load_tokenizer(tok_config)
-            tokenizers[name] = tokenizer
-            logger.info(f"Loaded tokenizer '{name}'")
-        except Exception as e:
-            logger.error(f"Failed to load tokenizer '{name}': {str(e)}")
+        tokenizer = load_tokenizer_from_config(tok_config)
+        tokenizers[name] = tokenizer
+        logger.info(f"Loaded tokenizer '{name}'")
     
     # Create analyzer
     analyzer = TokenizerAnalyzer(

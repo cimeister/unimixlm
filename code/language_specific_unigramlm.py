@@ -268,7 +268,7 @@ class LanguageSpecificUnigramLMTokenizer(StandardUnigramLMTokenizer):
 
     # ------------------------------------------------ best-language selection
 
-    def custom_viterbi_best_language(self, text: str):
+    def best_language_encode(self, text: str):
         """
         Segment `text` with *each* language model and return the one that
         yields the highest log-probability.
@@ -288,6 +288,32 @@ class LanguageSpecificUnigramLMTokenizer(StandardUnigramLMTokenizer):
                 best_lang, best_tokens, best_logp = lang_code, toks, logp
 
         return best_lang, best_tokens
+
+    def best_language_encode_batch(self, texts):
+        """
+        For each input text return
+            best_lang, Encoding           # Encoding from HF tokenizers lib
+        This avoids re-encoding after we have already picked the language.
+        """
+        if not self.language_info:
+            raise ValueError("No per-language tokenizers loaded.")
+
+        # First pass: encode each text with EVERY language and keep the log-prob
+        best_langs  = [None] * len(texts)
+        best_scores = [float("-inf")] * len(texts)
+        best_encs   = [None] * len(texts)
+
+        for lang_code, info in self.language_info.items():
+            encs = info["tokenizer"].encode_batch(texts)
+            for i, enc in enumerate(encs):
+                score = sum(info["scores"].get(t, math.log(MIN_TOKEN_PROB)) for t in enc.tokens)
+                if score > best_scores[i]:
+                    best_scores[i] = score
+                    best_langs[i]  = lang_code
+                    best_encs[i]   = enc
+
+        return best_langs, best_encs
+
 
 def train_language_specific_tokenizer(corpus_info, vocab_size=8000,
                                       reestimation_em_mode = 'soft',
