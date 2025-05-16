@@ -148,21 +148,16 @@ class LanguageSpecificUnigramLMTokenizer(StandardUnigramLMTokenizer):
         # Load language-specific probability distributions
         if language_paths:
             for lang_code, lang_tok_path in language_paths.items():
-                if os.path.isfile(lang_tok_path):
-                    tok = Tokenizer.from_file(lang_tok_path)
-                    vocab_order_per_lang = _get_hf_unigram_tokenizer_vocab(tok)
-                    assert [i for i, j in vocab_order_per_lang] == base_vocab_order
-                    self.language_info[lang_code] = {
-                        "tokenizer": tok,
-                        "scores": _extract_log_scores(tok),
-                        "path": lang_tok_path,
-                    } 
-                    logger.info(f"Loaded per-lang tokenizer for {lang_code} from {lang_tok_path}")
-                else:
-                    logger.warning(f"No per-lang tokenizer file found at {lang_tok_path} for {lang_code}")
-
-    # ------------------------------------------------------------------ train
-
+                tok = Tokenizer.from_file(lang_tok_path)
+                vocab_order_per_lang = _get_hf_unigram_tokenizer_vocab(tok)
+                assert [i for i, j in vocab_order_per_lang] == base_vocab_order
+                self.language_info[lang_code] = {
+                    "tokenizer": tok,
+                    "scores": _extract_log_scores(tok),
+                    "path": lang_tok_path,
+                } 
+                logger.info(f"Loaded per-lang tokenizer for {lang_code} from {lang_tok_path}")
+                
     def train(
         self,
         corpus_info: Dict[str, str],
