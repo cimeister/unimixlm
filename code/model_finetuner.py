@@ -243,63 +243,76 @@ def setup_ner(tokenizer, lang_codes, args):
     num_labels = len(label_list)
 
     def tokenize_and_align(examples):
-        # 1) Plain string for each sentence
-        texts = [" ".join(ws) for ws in examples["tokens"]]
+        """
+        Convert WikiANN examples to model features.
+        Returns dict with input_ids, attention_mask, labels.
+        All three fields have *the same length per example*, so
+        DataCollatorForTokenClassification can stack them.
+        """
+        # 1) join word list back to plain text
+        texts = [" ".join(words) for words in examples["tokens"]]
 
-        # 2) Encode – always ask for offsets
+        # 2) encode – pad/truncate to args.max_len
         enc = encode_text(
             tokenizer,
             texts,
             add_special_tokens=True,
             truncation=True,
-            max_length=args.max_len,
-            padding="max_length" if args.max_len else None,
-            return_offsets_mapping=True,
+            max_length=args.max_len,                 # 512
+            padding="max_length",                    # always 512
             return_attention_mask=True,
+            return_offsets_mapping=True,
         )
 
-        input_ids       = enc["input_ids"]
-        attention_mask  = enc["attention_mask"]
-        offsets_batch   = enc["offset_mapping"]
+        ids_batch      = enc["input_ids"]
+        mask_batch     = enc["attention_mask"]
+        offsets_batch  = enc["offset_mapping"]
 
         labels_batch = []
-        for words, off, gold in zip(examples["tokens"], offsets_batch, examples["ner_tags"]):
-            # ---- build char-start index for each original word -------------
-            starts = []
-            pos = 0
+        for words, gold, offsets, ids in zip(
+            examples["tokens"], examples["ner_tags"], offsets_batch, ids_batch
+        ):
+            # ------- map from char offset -> word id ---------------------
+            starts, pos = [], 0
             for w in words:
                 starts.append(pos)
-                pos += len(w) + 1           # +1 for space we injected
+                pos += len(w) + 1                    # +1 for space we inserted
 
-            # ---- map each sub-token offset to a word id --------------------
-            wid_for_tok = []
-            for s, _ in off:
-                if s == 0 and _ == 0:       # special token, padding, etc.
-                    wid_for_tok.append(None)
-                else:
-                    # linear scan is fine (sentences are short)
-                    j = max(i for i, st in enumerate(starts) if st <= s)
-                    wid_for_tok.append(j)
-
-            # ---- align labels ---------------------------------------------
-            aligned = []
-            prev_w  = None
-            for wid in wid_for_tok:
-                if wid is None:
+            aligned, prev_wid = [], None
+            for start, _ in offsets:
+                if start == 0 and _ == 0:            # special or pad token
                     aligned.append(-100)
-                elif wid != prev_w:
-                    aligned.append(gold[wid])
+                    prev_wid = None
                 else:
-                    aligned.append(gold[wid] if args.label_all_subtokens else -100)
-                prev_w = wid
+                    wid = max(i for i, s in enumerate(starts) if s <= start)
+                    if wid < len(gold):  # Add this check to prevent index errors
+                        if wid != prev_wid:
+                            aligned.append(gold[wid])
+                        else:
+                            aligned.append(
+                                gold[wid] if args.label_all_subtokens else -100
+                            )
+                    else:
+                        aligned.append(-100)  # Handle case where token is beyond gold labels
+                    prev_wid = wid
+
+            # ------- ensure aligned is no longer than max_length ----------------
+            aligned = aligned[:args.max_len]
+            
+            # ------- pad labels to *this* example length ----------------
+            seq_len = len(ids)                       # should be 512
+            aligned += [-100] * (seq_len - len(aligned))
+            
+            # ------- double-check lengths match ----------------
+            assert len(aligned) == len(ids), f"Labels length {len(aligned)} != ids length {len(ids)}"
+            
             labels_batch.append(aligned)
 
         return {
-            "input_ids":       input_ids,
-            "attention_mask":  attention_mask,
+            "input_ids":       ids_batch,
+            "attention_mask":  mask_batch,
             "labels":          labels_batch,
         }
-
 
     logger.info("Preprocessing WikiANN training data...")
     train_ds = train_ds.map(tokenize_and_align, batched=True, desc="Processing train tokens")
@@ -523,7 +536,7 @@ def finetune_from_config(entry: Dict[str, Any]) -> Dict[str, str]:
         epochs       = entry["hyper"].get("epochs", 2),
         batch_size   = entry["hyper"].get("batch_size", 16),
         lr           = entry["hyper"].get("lr", 3e-5),
-        max_len      = entry["hyper"].get("max_len", 256),
+        max_len      = entry["hyper"].get("max_len", 512),
         output_dir   = entry["output_dir"],
         seed         = entry["hyper"].get("seed", 42),
         val_size     = entry["hyper"].get("val_size", 0.1),
@@ -565,6 +578,8 @@ def finetune_from_config(entry: Dict[str, Any]) -> Dict[str, str]:
             os.makedirs(output_dir, exist_ok=True)
 
             # Set up training arguments
+            metric_name = "eval_accuracy" if task in {"xnli", "marc", "pawsx"} else (
+              "eval_f1" if task == "wikiann" else "eval_loss")
             training_args = TrainingArguments(
                 output_dir=output_dir,
                 per_device_train_batch_size=args.batch_size,
@@ -581,8 +596,8 @@ def finetune_from_config(entry: Dict[str, Any]) -> Dict[str, str]:
                 fp16=torch.cuda.is_available(),
                 save_total_limit=3,
                 load_best_model_at_end=True,
-                metric_for_best_model="eval_loss" if task == "mlqa" else None,
-                greater_is_better=False if task == "mlqa" else True,
+                metric_for_best_model=metric_name,
+                greater_is_better=metric_name != "eval_loss",
                 save_strategy="steps",
                 warmup_steps=args.warmup_steps,
                 logging_dir=os.path.join(args.output_dir, f"{task}_logs"),
