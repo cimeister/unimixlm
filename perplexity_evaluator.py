@@ -34,8 +34,8 @@ from transformers import (
     PreTrainedTokenizerFast
 )
 
-from code.utils import fix_input_ids, nonempty, set_special_tokens
-from code.model_trainer import CustomDataCollator
+from code.utils import fix_input_ids, nonempty, set_special_tokens, MAX_VAL_TEST_SIZE
+from code.model_trainer import PackedStreamingDataCollator
 
 # Import and setup environment variables
 from code.environment_setup import setup_environment
@@ -288,7 +288,7 @@ class ModelEvaluator:
             }
         
         # Set up the same data collator used in training            
-        data_collator = CustomDataCollator(self.tokenizer.pad_token_id)
+        data_collator = PackedStreamingDataCollator(self.tokenizer.pad_token_id, self.model.config.n_ctx)
         
         # Process in batches
         all_token_perplexities = []
@@ -523,13 +523,16 @@ def evaluate_all_models_on_all_languages(
             continue
             
         # Evaluate model
-        model_results = evaluate_model_on_all_languages(
-            model_config=model_config,
-            tokenized_test_files=test_files,
-            max_samples_per_language=max_samples_per_language,
-            batch_size=batch_size
-        )
-        
+        try:
+            model_results = evaluate_model_on_all_languages(
+                model_config=model_config,
+                tokenized_test_files=test_files,
+                max_samples_per_language=max_samples_per_language,
+                batch_size=batch_size
+            )
+        except Exception as e:
+            logger.error(f"Unable to evaluate model {model_name}")
+            continue
         all_results[model_name] = model_results
         
         # Save individual model results
