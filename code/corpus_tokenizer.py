@@ -3,66 +3,97 @@ import logging
 import json
 import argparse
 from tqdm import tqdm
-import multiprocessing
 from multiprocessing import Pool, cpu_count
-from typing import Dict, List, Any, Optional, Tuple, Callable, Union
+from typing import Dict, Any, List, Tuple, Optional
+
 from pathlib import Path
 # New faster helpers (module‑level – put them near the top of the file)
 # ----------------------------------------------------------------------
 import ujson                # 2‑3× faster than stdlib json
 from tokenizers import AddedToken    # only used in one fast‑path check
-from code.utils import encode_text,load_tokenizer_from_config
-
-# -- multiprocessing initialisation ------------------------------------
-# We keep one global copy of the tokenizer in each worker; that avoids
-# pickling it for every task *and* gives copy‑on‑write sharing on Unix.
-_WORKER_TOKENIZER = None
-_WORKER_VOCAB = None
-_WORKER_UNK_ID = 0
-_WORKER_MODE = None      # "best" | "specific"
-_WORKER_LANG = None
-
-def _init_langspec_worker(tokenizer, mode, lang):
-    global _WORKER_TOKENIZER, _WORKER_VOCAB, _WORKER_UNK_ID
-    global _WORKER_MODE, _WORKER_LANG
-    _WORKER_TOKENIZER = tokenizer
-    _WORKER_VOCAB = tokenizer.get_vocab()
-    _WORKER_UNK_ID = _WORKER_VOCAB[tokenizer.unk_token]
-    _WORKER_MODE = mode
-    _WORKER_LANG = lang
-    # Deactivate HF’s own thread‑pool so we do not nest parallelism
-    os.environ["TOKENIZERS_PARALLELISM"] = "false"
-
-# -- per‑line worker ----------------------------------------------------
-def _process_line_line(line: str):
-    """
-    Tokenise one line and return a JSON‑serialisable dict.
-    Called inside the process pool – *must* be top‑level picklable.
-    """
-    if not line:
-        return None
-
-    if _WORKER_MODE == "best":
-        best_lang, tokens = _WORKER_TOKENIZER.custom_viterbi_best_language(line)
-    else:
-        tokens = _WORKER_TOKENIZER.custom_viterbi_tokenize(line, _WORKER_LANG)
-        best_lang = None
-
-    ids = [_WORKER_VOCAB.get(tok, _WORKER_UNK_ID) for tok in tokens]
-    rec = {
-        "text": line,
-        "tokens": tokens,
-        "token_ids": ids,
-    }
-    if best_lang:
-        rec["best_lang"] = best_lang
-    return rec
+from code.utils import encode_text, load_tokenizer_from_config
 
 logging.basicConfig(
     level=logging.INFO,
     format='%(asctime)s - %(name)s - %(levelname)s - %(message)s'
 )
 logger = logging.getLogger(__name__)
+
+# ---------- helper: disable inner Rust tokenizer thread-pools ----------
+_WORKER_TOKENIZER = None
+_WORKER_USE_BEST  = False
+
+def _init_worker(tokenizer, use_best):
+    """
+    Runs once in every forked worker.
+    We only set globals and an env-var – nothing heavy happens here.
+    """
+    os.environ["TOKENIZERS_PARALLELISM"] = "false"
+    global _WORKER_TOKENIZER, _WORKER_USE_BEST
+    _WORKER_TOKENIZER = tokenizer
+    _WORKER_USE_BEST  = use_best
+
+def _process_batch_lines(lines):
+    """
+    Local helper used by _tokenize_split. Works on one Python list of str
+    and returns (jsonl_lines, unk_count) where jsonl_lines is a str with
+    '\n' already appended after every record.
+    """
+    enc = encode_text(
+        _WORKER_TOKENIZER,
+        lines,
+        use_best_language=_WORKER_USE_BEST,
+    )
+
+    unk_tok = getattr(_WORKER_TOKENIZER, "unk_token")
+    unk_id = _WORKER_TOKENIZER.get_vocab().get(unk_tok)
+    unk_total = 0
+    json_parts = []
+
+    for txt, ids, toks in zip(lines, enc["input_ids"], enc.get("tokens", [[]]*len(lines))):
+        unk_total += ids.count(unk_id)
+        rec = {"text": txt, "token_ids": ids, "tokens": toks}
+        best = enc.get("best_lang")
+        if best is not None:
+            rec["best_lang"] = best
+        json_parts.append(ujson.dumps(rec))
+
+    return "\n".join(json_parts) + "\n", unk_total
+
+def _tokenize_split(args):
+    """
+    Worker target: tokenise *one* split file and write JSONL.
+    Returns (lang, split, out_path, n_lines, n_unk)
+    """
+    lang, split, in_path, out_path = args
+    line_cnt = 0
+    unk_cnt  = 0
+    batch    = []
+    bs       = 1024
+
+    with open(in_path, "r", encoding="utf-8", errors="replace") as fin, \
+         open(out_path, "w", encoding="utf-8") as fout:
+
+        for raw in fin:
+            txt = raw.rstrip("\n")
+            if not txt:
+                continue
+            batch.append(txt)
+
+            if len(batch) >= bs:
+                chunk, u = _process_batch_lines(batch)
+                fout.write(chunk)
+                unk_cnt  += u
+                line_cnt += len(batch)
+                batch.clear()
+
+        if batch:
+            chunk, u = _process_batch_lines(batch)
+            fout.write(chunk)
+            unk_cnt  += u
+            line_cnt += len(batch)
+
+    return lang, split, out_path, line_cnt, unk_cnt
 
 
 class CorpusTokenizer:
@@ -76,7 +107,6 @@ class CorpusTokenizer:
                  tokenizers: Dict[str, Dict[str, Any]],
                  output_dir: str = "",
                  max_lines_per_file: Optional[int] = 10000,
-                 processes: Optional[int] = None,
                  skip_if_exists: bool = True):
         """
         Initialize the CorpusTokenizer.
@@ -86,7 +116,6 @@ class CorpusTokenizer:
             tokenizers: Dictionary mapping tokenizer names to tokenizer configurations
             output_dir: Base output directory for tokenized files
             max_lines_per_file: Maximum number of lines to process per file
-            processes: Number of processes for parallel processing
             skip_if_exists: Whether to skip processing if output file exists
         """
         self.corpus_info = corpus_info
@@ -94,12 +123,6 @@ class CorpusTokenizer:
         self.output_dir = output_dir
         self.max_lines_per_file = max_lines_per_file
         self.skip_if_exists = skip_if_exists
-        
-        # Set number of processes
-        if processes is None:
-            self.processes = max(1, min(20, cpu_count() - 1))
-        else:
-            self.processes = processes
             
         # Load tokenizers
         self.tokenizers = self._load_tokenizers()
@@ -127,144 +150,58 @@ class CorpusTokenizer:
                 
             except Exception as e:
                 logger.error(f"Failed to load tokenizer '{name}' with config {config}: {str(e)}")
-        
         return loaded_tokenizers
     
-    def tokenize_all(self) -> Dict[str, Dict[str, Dict[str, str]]]:
+    def tokenize_all(self):
         """
-        Tokenize all corpora with all loaded tokenizers.
-        
-        Returns:
-            Dictionary mapping tokenizer names to language codes to split names to output file paths
+        Tokenise every split of every language with every tokenizer.
+        Uses a process pool (fork) for throughput; each worker handles
+        one <language, split> file.
         """
-        
-        for tokenizer_name, tokenizer_data in self.tokenizers.items():
-            tokenizer = tokenizer_data['tokenizer']
-            config = tokenizer_data['config']
-            
-            # Create output directory for this tokenizer
-            tokenizer_output_dir = os.path.join(self.output_dir, tokenizer_name)
-            os.makedirs(tokenizer_output_dir, exist_ok=True)
-            
-            logger.info(f"Tokenizing corpora with '{tokenizer_name}'")
-            
-            # Initialize results tracking for this tokenizer
-            self.tokenized_files[tokenizer_name] = {}
-            
-            for lang_code, info in self.corpus_info.items():
+        for tname, tdata in self.tokenizers.items():
+            tok      = tdata["tokenizer"]
+            cfg      = tdata["config"]
+            use_best = cfg.get("use_best_lang", True)
+
+            base_out = Path(self.output_dir) / tname
+            base_out.mkdir(parents=True, exist_ok=True)
+            self.tokenized_files[tname] = {}
+
+            # -------- build task list -------------------------------------
+            tasks = []
+            for lang, info in self.corpus_info.items():
                 if "splits" not in info:
                     continue
-                    
-                self.tokenized_files[tokenizer_name][lang_code] = {}
-                lang_dir = os.path.join(tokenizer_output_dir, lang_code)
-                os.makedirs(lang_dir, exist_ok=True)
-                
-                for split_name, split_file in info["splits"].items():
-                    if not os.path.isfile(split_file):
-                        logger.warning(f"File not found: {split_file}")
+                self.tokenized_files[tname][lang] = {}
+                lang_out = base_out / lang
+                lang_out.mkdir(exist_ok=True)
+                for split, in_path in info["splits"].items():
+                    if not os.path.isfile(in_path):
+                        logger.warning(f"{in_path} missing – skipped")
                         continue
-                        
-                    out_path = os.path.join(lang_dir, f"{split_name}.jsonl")
-                    if self.skip_if_exists and os.path.isfile(out_path):
-                        self.tokenized_files[tokenizer_name][lang_code][split_name] = out_path
-                        logger.info(f"Skipping existing file: {out_path}")
+                    out_path = lang_out / f"{split}.jsonl"
+                    if self.skip_if_exists and out_path.is_file():
+                        self.tokenized_files[tname][lang][split] = str(out_path)
                         continue
-                    
-                    # Determine tokenization parameters based on tokenizer type
-                    use_best_lang = config.get('use_best_lang', True)
-                    if not use_best_lang:
-                        raise NotImplementedError("Need to implement still")
-                    
-                    # Process the file in batches using a streaming approach
-                    line_count = 0
-                    unk_count = 0
-                    batch_size = 1024  # Adjust batch size as needed
-                    
-                    with open(split_file, "r", encoding="utf-8", errors="replace") as fin, \
-                         open(out_path, "w", encoding="utf-8") as fout:
-                        
-                        batch_lines = []
-                        
-                        for line in fin:
-                            line = line.rstrip("\n")
-                            if not line.strip():
-                                continue
-                                
-                            batch_lines.append(line)
-                            
-                            # Process batch when it reaches the desired size
-                            if len(batch_lines) >= batch_size:
-                                self._process_batch(
-                                    tokenizer, 
-                                    batch_lines, 
-                                    fout, 
-                                    use_best_lang=use_best_lang
-                                )
-                                
-                                line_count += len(batch_lines)
-                                if hasattr(tokenizer, 'unk_token'):
-                                    unk_token = tokenizer.unk_token
-                                    for record in batch_lines:
-                                        if 'tokens' in record:
-                                            unk_count += record['tokens'].count(unk_token)
-                                            
-                                batch_lines = []
-                        
-                        # Process any remaining lines
-                        if batch_lines:
-                            self._process_batch(
-                                tokenizer, 
-                                batch_lines, 
-                                fout, 
-                                use_best_lang=use_best_lang
-                            )
-                            line_count += len(batch_lines)
-                    
-                    logger.info(f"[{tokenizer_name}] {lang_code}-{split_name} => "
-                                f"{line_count} lines, {unk_count} UNK tokens.")
-                    
-                    if line_count:
-                        self.tokenized_files[tokenizer_name][lang_code][split_name] = out_path
-        
+                    tasks.append((lang, split, in_path, str(out_path)))
+
+            # -------- run in pool -----------------------------------------
+            if not tasks:
+                continue
+            with Pool(min(20, cpu_count()-1),
+                      initializer=_init_worker,
+                      initargs=(tok, use_best)) as pool:
+
+                for lang, split, outp, n_lines, n_unk in tqdm(
+                        pool.imap_unordered(_tokenize_split, tasks),
+                        total=len(tasks),
+                        desc=f"{tname}"):
+                    if n_lines:
+                        self.tokenized_files[tname][lang][split] = outp
+                    logger.info(f"[{tname}] {lang}-{split}: "
+                                f"{n_lines} lines, {n_unk} UNK → {outp}")
+
         return self.tokenized_files
-
-    def _process_batch(
-        self,
-        tokenizer,
-        batch_lines,
-        output_file,
-        *,
-        use_best_lang: bool = True,
-        language: str | None = None,
-    ):
-        """
-        Tokenise a batch of lines with the unified `encode_text` helper and
-        write one JSON object per line to `output_file`.
-        """
-        # --- 1) encode ----------------------------------------------------
-        enc = encode_text(
-            tokenizer,
-            batch_lines,
-            use_best_language=use_best_lang,
-            language=language,
-            # we don't need extra tensors or masks here
-        )
-
-        # enc fields are always batch-first lists
-        ids_batch   = enc["input_ids"]
-        tok_batch   = enc.get("tokens", [[] for _ in batch_lines])
-        best_lang_b = enc.get("best_lang")
-
-        # --- 2) dump to disk ---------------------------------------------
-        for i, text in enumerate(batch_lines):
-            rec = {
-                "text":      text,
-                "token_ids": ids_batch[i],
-                "tokens":    tok_batch[i],
-            }
-            if best_lang_b is not None:
-                rec["best_lang"] = best_lang_b[i]
-            output_file.write(ujson.dumps(rec) + "\n")
 
 
 def load_config(config_path):
@@ -286,7 +223,6 @@ def main():
     parser.add_argument('--config', type=str, required=True, help='Path to configuration JSON file')
     parser.add_argument('--output_dir', type=str, default="", help='Base output directory')
     parser.add_argument('--max_lines', type=int, default=10000, help='Maximum lines per file')
-    parser.add_argument('--processes', type=int, help='Number of processes for parallel processing')
     parser.add_argument('--no_skip', action='store_true', help='Do not skip existing files')
     
     args = parser.parse_args()
@@ -300,7 +236,6 @@ def main():
         tokenizers=config['tokenizers'],
         output_dir=args.output_dir,
         max_lines_per_file=args.max_lines,
-        processes=args.processes,
         skip_if_exists=not args.no_skip
     )
     
