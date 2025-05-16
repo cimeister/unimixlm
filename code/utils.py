@@ -4,13 +4,15 @@ import multiprocessing
 import json
 from collections import Counter
 import numpy as np
-from typing import Dict, List, Tuple, Set
+from typing import Dict, List, Tuple, Set, Any, Optional, Union
+
 from pathlib import Path
 import random
 
 from tokenizers import Tokenizer
 from tokenizers.models import Unigram
 from tokenizers.pre_tokenizers import Whitespace, ByteLevel
+from transformers import AutoTokenizer
 
 import logging
 logging.basicConfig(
@@ -25,6 +27,7 @@ INITIAL_VOCAB_MULT_FACTOR = 5
 MIN_CHAR_OCCURENCE_THRESHOLD = 2
 MIN_TOKEN_PROB = 1e-10
 _TOTAL_SAMPLE_LINES = 2_000_000
+MAX_VAL_TEST_SIZE = 3000
 _RNG = random.Random(42)
 
 # build once, reuse
@@ -140,6 +143,166 @@ def _count_worker(file_path):
     except Exception as e:
         logger.error(f"Error processing {file_path}: {e}")
         return file_path, Counter()
+
+
+def _as_batch(txt):
+    """Return (list version, was_single_flag)."""
+    if isinstance(txt, (str, tuple)):
+        return [txt], True
+    if isinstance(txt, list):
+        return txt, False
+    raise TypeError(type(txt))
+
+def _apply_trunc_pad(
+    ids_batch, toks_batch,
+    *,
+    truncation, max_length,
+    padding, pad_id, pad_tok,
+    return_attention_mask,
+):
+    masks = [] if return_attention_mask else None
+    out_ids, out_toks = [], []
+    for ids, toks in zip(ids_batch, toks_batch):
+        # trunc
+        if truncation and max_length:
+            ids, toks = ids[:max_length], toks[:max_length]
+        # pad
+        if padding == "max_length" and max_length:
+            pad_len = max_length - len(ids)
+            ids += [pad_id] * pad_len
+            toks += [pad_tok] * pad_len
+        out_ids.append(ids)
+        out_toks.append(toks)
+        if masks is not None:
+            masks.append([1 if i < len(ids) - (pad_len if padding == "max_length" and max_length else 0) else 0
+                          for i in range(len(ids))])
+    return out_ids, out_toks, masks
+
+def encode_text(
+    tokenizer: Any,
+    text: Union[str, List[str], Tuple[str, str], List[Tuple[str, str]]],
+    *,
+    add_special_tokens: bool = True,
+    padding: Optional[str] = None,
+    truncation: Union[bool, str] = False,
+    max_length: Optional[int] = None,
+    stride: Optional[int] = None,                     # only honoured by HF path
+    return_overflowing_tokens: bool=False,            # idem
+    return_offsets_mapping: bool=False,
+    return_attention_mask: bool=False,
+    return_special_tokens_mask: bool=False,
+    return_token_type_ids: bool=False,
+    return_tensors: Optional[str]=None,
+    return_word_ids: bool=False,
+    language: Optional[str]=None,
+    use_best_language: bool=True,
+) -> Dict[str, Any]:
+
+    batch_txt, was_single = _as_batch(text)
+
+    # ------------------------------------------------------------------#
+    # ➊  Language-specific UnigramLM path                                #
+    # ------------------------------------------------------------------#
+    from code.language_specific_unigramlm import LanguageSpecificUnigramLMTokenizer
+    if isinstance(tokenizer, LanguageSpecificUnigramLMTokenizer):
+        if use_best_language:
+            best_langs, enc_objects = tokenizer.best_language_encode_batch(batch_txt)
+            ids_batch  = [enc.ids    for enc in enc_objects]
+            toks_batch = [enc.tokens for enc in enc_objects]
+            offsets_b  = [enc.offsets for enc in enc_objects]
+        else:
+            if language is None:
+                raise ValueError("`language` must be provided when use_best_language=False")
+            enc_objects = tokenizer.language_info[language]["tokenizer"].encode_batch(batch_txt)
+            best_langs  = None
+            ids_batch   = [enc.ids    for enc in enc_objects]
+            toks_batch  = [enc.tokens for enc in enc_objects]
+            offsets_b   = [enc.offsets for enc in enc_objects]
+
+        # ----- trunc / pad (helper unchanged) ---------------------------------
+        ids_batch, toks_batch, masks = _apply_trunc_pad(
+            ids_batch, toks_batch,
+            truncation=truncation, max_length=max_length,
+            padding=padding,
+            pad_id=getattr(tokenizer, "pad_token_id", 0),
+            pad_tok="<pad>",
+            return_attention_mask=return_attention_mask,
+        )
+        if truncation and max_length:
+            offsets_b = [off[:max_length] for off in offsets_b]
+        if padding == "max_length" and max_length:
+            offsets_b = [
+                off + [(0,0)]*(max_length - len(off)) for off in offsets_b
+            ]
+
+        result = {"input_ids": ids_batch, "tokens": toks_batch}
+        if best_langs is not None:
+            result["best_lang"] = best_langs
+        if return_attention_mask:
+            result["attention_mask"] = masks
+        if return_offsets_mapping:
+            result["offset_mapping"] = offsets_b
+        # unwrap single example
+        if was_single:
+            for k, v in result.items():
+                if isinstance(v, list) and len(v) == 1:
+                    result[k] = v[0]
+        return result
+
+    # ------------------------------------------------------------------#
+    # ➋  Generic fast tokenizer path                                     #
+    # ------------------------------------------------------------------#
+    if hasattr(tokenizer, "encode_batch"):
+        encodings = tokenizer.encode_batch(batch_txt, add_special_tokens=add_special_tokens)
+
+        ids_batch   = [enc.ids    for enc in encodings]
+        toks_batch  = [enc.tokens for enc in encodings]
+        word_ids_b  = [enc.word_ids() for enc in encodings] if return_word_ids else None
+
+        ids_batch, toks_batch, masks = _apply_trunc_pad(
+            ids_batch, toks_batch,
+            truncation=truncation, max_length=max_length,
+            padding=padding, pad_id=getattr(tokenizer, "pad_token_id", 0), pad_tok="<pad>",
+            return_attention_mask=return_attention_mask,
+        )
+
+        result = {"input_ids": ids_batch, "tokens": toks_batch}
+        if masks is not None:
+            result["attention_mask"] = masks
+        if word_ids_b is not None:
+            result["word_ids"] = word_ids_b
+        if return_offsets_mapping:
+            result["offset_mapping"] = [enc.offsets for enc in encodings]
+
+    else:
+        # ------------------------------------------------------------------
+        # ➌  Fallback to high-level HF __call__ (handles stride/overflow,…)
+        # ------------------------------------------------------------------
+        hf_kwargs = dict(
+            add_special_tokens   = add_special_tokens,
+            padding              = padding,
+            truncation           = truncation,
+            max_length           = max_length,
+            stride               = stride,
+            return_overflowing_tokens = return_overflowing_tokens,
+            return_offsets_mapping    = return_offsets_mapping,
+            return_attention_mask     = return_attention_mask,
+            return_special_tokens_mask= return_special_tokens_mask,
+            return_token_type_ids     = return_token_type_ids,
+            return_tensors            = return_tensors,
+        )
+        enc = tokenizer(batch_txt, **hf_kwargs)
+        result = enc.to_dict() if hasattr(enc, "to_dict") else dict(enc)
+        if "tokens" not in result and hasattr(tokenizer, "convert_ids_to_tokens"):
+            result["tokens"] = [tokenizer.convert_ids_to_tokens(ids) for ids in result["input_ids"]]
+
+    # unwrap single example
+    if was_single:
+        for k, v in result.items():
+            if isinstance(v, list) and len(v) == 1:
+                result[k] = v[0]
+    return result
+
 
 def proportional_sample(train_files_by_lang: Dict[str, str],
                         out_root: str) -> Dict[str, str]:
@@ -671,6 +834,33 @@ def load_tokenizer_with_mode(path: str):
     if byte_level and not byte_fallback:
         logger.warning(f"{path} looks byte-level but byte_fallback==False (currently known issue for HF Unigram Tokenizers).")
     return tok, byte_level
+
+
+def load_tokenizer_from_config(config):
+    tokenizer_class = config.get('class', 'standard')
+    byte_level = config.get('byte_level', False)
+    
+    if tokenizer_class == 'standard':
+        from code.standard_unigramlm import StandardUnigramLMTokenizer
+        tokenizer = StandardUnigramLMTokenizer(
+            byte_level=byte_level,
+            multigram=False
+        )
+        tokenizer.load(config['path'])
+        
+    elif tokenizer_class == 'langspec':
+        from code.language_specific_unigramlm import LanguageSpecificUnigramLMTokenizer
+        tokenizer = LanguageSpecificUnigramLMTokenizer(byte_level=byte_level)
+        tokenizer.load(config['base_path'], config.get('language_paths'))
+        
+    else:
+        # Try loading as a HuggingFace tokenizer
+        try:
+            tokenizer = AutoTokenizer.from_pretrained(config['path'])
+        except Exception as e:
+            logger.info(f"Tried to load tokenizer via default method and could not {e}")
+            raise
+    return tokenizer
 
 
 def _build_hf_tokenizer_from_probs(

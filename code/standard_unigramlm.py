@@ -3,8 +3,11 @@ from pathlib import Path
 import math
 import os
 import json
+import torch
 import logging
 from typing import Dict, List, Tuple, Set, Optional
+from torch.nn.utils.rnn import pad_sequence
+
 
 from tokenizers import Tokenizer
 from tokenizers.models import Unigram, BPE
@@ -68,6 +71,157 @@ class StandardUnigramLMTokenizer:
         self.global_probs: Dict[str, float] = {}
 
     # ------------------------- convenience helpers -----------------------
+    def __getattr__(self, name):
+        """
+        Delegate every unknown attribute to the underlying HF `Tokenizer`
+        once it is loaded / trained.  That gives us `id_to_token`,
+        `decode_batch`, `.model`, etc. “for free”.
+        """
+        if self.base_tokenizer and hasattr(self.base_tokenizer, name):
+            return getattr(self.base_tokenizer, name)
+        raise AttributeError(name)
+
+    # -----------------------------------------------------------------
+    # Unified single / batch call interface  (→ works with `encode_text`)
+    # -----------------------------------------------------------------
+    def __call__(self, texts, *, add_special_tokens: bool = False, **kwargs):
+        """
+        Unified callable interface – behaves exactly like a HF fast tokenizer.
+        Extra kwargs that the Rust core does not understand are silently
+        dropped so user code never crashes.
+        """
+        if self.base_tokenizer is None:
+            raise ValueError("Tokenizer not yet loaded or trained.")
+
+        if isinstance(texts, list):
+            return self.encode_batch(texts, add_special_tokens=add_special_tokens)
+        return self.base_tokenizer.encode(texts, add_special_tokens=add_special_tokens)
+
+    _padding_side_default = "left"    # decoder-only models
+
+    @property
+    def padding_side(self):
+        """Return 'left' or 'right'. Default is set at class level."""
+        return getattr(self, "_padding_side", self._padding_side_default)
+
+    @padding_side.setter
+    def padding_side(self, value: str):
+        if value not in ("left", "right"):
+            raise ValueError("padding_side must be 'left' or 'right'")
+        self._padding_side = value
+
+    def save_pretrained(self, output_dir: str, **kwargs):
+        """
+        HuggingFace-style saver so the Trainer can checkpoint.
+        It writes:
+            • tokenizer.json            (the HF fast tokenizer)
+            • special_tokens_map.json   (so `AutoTokenizer` can reload)
+        For simplicity we store only the *base* tokenizer; language-specific
+        probability tables are not needed for decoding and would bloat
+        checkpoints.
+        """
+        if self.base_tokenizer is None:
+            raise ValueError("Tokenizer not initialised / trained.")
+
+        out = Path(output_dir)
+        out.mkdir(parents=True, exist_ok=True)
+
+        # 1) write the tokenizer.json
+        tok_json_path = out / "tokenizer.json"
+        tok_json_path.write_text(self.base_tokenizer.to_str(), encoding="utf-8")
+
+        # 2) write special_tokens_map.json  (HF expects it)
+        special_map = {
+            "unk_token": self.unk_token,
+            "pad_token": getattr(self, "pad_token", None),
+            "bos_token": getattr(self, "bos_token", None),
+            "eos_token": getattr(self, "eos_token", None),
+        }
+        # drop Nones
+        special_map = {k: v for k, v in special_map.items() if v is not None}
+        (out / "special_tokens_map.json").write_text(
+            json.dumps(special_map, ensure_ascii=False, indent=2),
+            encoding="utf-8",
+        )
+        return str(out)
+
+    @classmethod
+    def from_pretrained(cls, pretrained_dir: str, **kwargs):
+        """
+        Lightweight loader that mirrors save_pretrained.
+        It initialises the class and loads the *base* tokenizer; language-
+        specific add-ons are not restored here.
+        """
+        tok_file = Path(pretrained_dir) / "tokenizer.json"
+        if not tok_file.is_file():
+            raise FileNotFoundError(tok_file)
+        obj = cls(**kwargs)
+        obj.base_tokenizer = Tokenizer.from_file(str(tok_file))
+        # attempt to restore special tokens
+        sp_map = Path(pretrained_dir) / "special_tokens_map.json"
+        if sp_map.is_file():
+            specials = json.loads(sp_map.read_text(encoding="utf-8"))
+            for attr, val in specials.items():
+                setattr(obj, attr, val)
+        return obj
+    
+    def pad(
+        self,
+        encoded_inputs,
+        padding=True,
+        max_length=None,
+        pad_to_multiple_of=None,
+        return_tensors=None,
+        **kwargs,
+    ):
+        """
+        Minimal subset of PreTrainedTokenizerBase.pad expected by
+        DataCollatorWithPadding.
+        • `encoded_inputs` is a list of dicts coming from your Dataset.
+        • We pad input_ids (and, if present, attention_mask / token_type_ids)
+          to the longest length in the batch (or `max_length` if provided).
+        """
+        if not isinstance(encoded_inputs, (list, tuple)):
+            encoded_inputs = [encoded_inputs]
+
+        # ---------------- figure out target length -------------------------
+        pad_id = getattr(self.base_tokenizer, "pad_token_id", 0)
+        longest = max(len(f["input_ids"]) for f in encoded_inputs)
+        if max_length is not None:
+            longest = max_length
+        if pad_to_multiple_of:
+            longest = (longest + pad_to_multiple_of - 1) // pad_to_multiple_of * pad_to_multiple_of
+
+        # ---------------- pad each field we know about --------------------
+        batch = {}
+        for field in encoded_inputs[0].keys():
+            values = [f[field] for f in encoded_inputs]
+            if not isinstance(values[0], list):
+                # label or scalar → keep as is
+                batch[field] = torch.tensor(values) if return_tensors == "pt" else values
+                continue
+
+            if field == "input_ids":
+                padded = [v + [pad_id] * (longest - len(v)) for v in values]
+            elif field == "attention_mask":
+                padded = [v + [0] * (longest - len(v)) for v in values]
+            else:  # token_type_ids, special_tokens_mask, labels for token-cls…
+                padded = [v + [-100] * (longest - len(v)) for v in values]
+
+            batch[field] = (
+                torch.tensor(padded) if return_tensors == "pt" else padded
+            )
+
+        # If attention_mask wasn’t in the features, create it now
+        if "attention_mask" not in batch:
+            batch["attention_mask"] = (
+                torch.ones_like(batch["input_ids"]) if return_tensors == "pt"
+                else [[1]*len(f["input_ids"]) + [0]*(longest-len(f["input_ids"]))
+                      for f in encoded_inputs]
+            )
+
+        return batch
+
     def _baseline_tokens(self, files: List[str]) -> Set[str]:
         return (
             get_baseline_bytes()[0]
@@ -426,7 +580,7 @@ class StandardUnigramLMTokenizer:
         else:
             logger.warning(f"No global probs for tokenizer at {base_path} found")
 
-    def encode(self, text):
+    def encode(self, text, add_special_tokens=False):
         """
         Encode text using the tokenizer.
         
@@ -438,7 +592,18 @@ class StandardUnigramLMTokenizer:
         """
         if not self.base_tokenizer:
             raise ValueError("No base tokenizer loaded or trained.")
-        return self.base_tokenizer.encode(text).ids
+        return self.base_tokenizer.encode(text, add_special_tokens=add_special_tokens).ids
+
+    def encode_batch(self, texts, *, add_special_tokens: bool = False):
+        """
+        Vectorised encoding that returns *Encoding* objects, identical to the
+        HuggingFace `tokenizers.Tokenizer.encode_batch`.
+        """
+        if self.base_tokenizer is None:
+            raise ValueError("Tokenizer not yet loaded or trained.")
+        return self.base_tokenizer.encode_batch(
+            texts, add_special_tokens=add_special_tokens
+        )
 
     def decode(self, ids):
         """

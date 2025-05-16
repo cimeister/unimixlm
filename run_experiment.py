@@ -3,7 +3,7 @@ import logging
 import argparse
 import json
 from datetime import datetime
-from typing import Dict, Any
+from typing import Dict, Any, List
 
 # Import and setup environment variables
 from code.environment_setup import setup_environment
@@ -112,23 +112,11 @@ def train_tokenizers(config: Dict[str, Any], corpus_info: Dict[str, Any]) -> Dic
         logger.info(f"Processing tokenizer: {tokenizer_name} (type: {tokenizer_type} at {'byte' if byte_level else 'char'}-level)")
         
         # Check if we should use a pretrained tokenizer
+        
         if tokenizer_config.get("skip_if_exists", False):
             logger.info(f"Using pretrained tokenizer for {tokenizer_name}")
             
-            if tokenizer_type == "standard":
-                pretrained_path = tokenizer_config["path"].format(tokenizers_dir=tokenizers_dir, em_mode=em_mode)
-                if os.path.exists(pretrained_path):
-                    tokenizer_paths[tokenizer_name] = {
-                        "path": pretrained_path,
-                        "type": "standard",
-                        "multigram": tokenizer_config.get("multigram", False)
-                    }
-                    logger.info(f"Loaded pretrained tokenizer from {pretrained_path}")
-                    continue
-                else:
-                    logger.warning(f"Pretrained tokenizer not found at {pretrained_path}, will train a new one")
-            
-            elif tokenizer_type == "langspec":
+            if tokenizer_type == "langspec":
                 if not tokenizer_config.get("skip_base_if_exists", False):
                     logger.error("skip_base_if_exists must also be set to true to use skip_if_exists for langspec tokenizer. Skipping tokenizer...")
                     continue
@@ -149,39 +137,25 @@ def train_tokenizers(config: Dict[str, Any], corpus_info: Dict[str, Any]) -> Dic
                     tokenizer_paths[tokenizer_name] = {
                         "base_path": pretrained_base_path,
                         "language_paths": language_paths,
-                        "type": "langspec"
+                        "class": "langspec"
                     }
                     logger.info(f"Loaded pretrained language-specific tokenizer from {pretrained_base_path}")
                     continue
+            else:
+                pretrained_path = tokenizer_config["path"].format(tokenizers_dir=tokenizers_dir, em_mode=em_mode)
+                if os.path.exists(pretrained_path):
+                    tokenizer_paths[tokenizer_name] = {
+                        "path": pretrained_path,
+                        "class": "standard",
+                        "multigram": tokenizer_config.get("multigram", False)
+                    }
+                    logger.info(f"Loaded pretrained tokenizer from {pretrained_path}")
+                    continue
+                else:
+                    logger.warning(f"Pretrained tokenizer not found at {pretrained_path}, will train a new one")
 
         vocab_size = config["experiment"].get("vocab_size", 8000)
-        if tokenizer_type == "standard":
-            # Handle standard tokenizer
-            em_mode = tokenizer_config.get("em_mode", "soft")
-            multigram = tokenizer_config.get("multigram", False)
-            output_file = tokenizer_config.get("path", f"standard_unigramlm_{em_mode}.json").format_map(
-                SafeFormattingDict(tokenizers_dir=tokenizers_dir, em_mode=em_mode))
-                        
-            # Train new tokenizer
-            
-            path = train_standard_tokenizer(
-                tokenizer_training_files, 
-                vocab_size=vocab_size, 
-                em_mode=em_mode, 
-                multigram=multigram,
-                byte_level=byte_level,
-                output_path=output_file,
-                min_char_occurence_threshold=min_char_occurence_threshold
-            )
-            
-            if path:
-                tokenizer_paths[tokenizer_name] = {
-                    "path": path,
-                    "type": "standard",
-                    "multigram": multigram
-                }
-                    
-        elif tokenizer_type == "langspec":
+        if tokenizer_type == "langspec":
             # Handle language-specific tokenizer            
             em_mode = tokenizer_config.get("em_mode", "soft")
             base_tokenizer_name = tokenizer_config.get("base_tokenizer", "").format_map(
@@ -207,8 +181,9 @@ def train_tokenizers(config: Dict[str, Any], corpus_info: Dict[str, Any]) -> Dic
             )
             
             if paths:
-                paths["type"] ="langspec"
+                paths["class"] ="langspec"
                 tokenizer_paths[tokenizer_name] = paths
+
 
         elif tokenizer_type == "tokmix":
             output_file = tokenizer_config.get("path", f"tokmix.json").format_map(
@@ -227,8 +202,35 @@ def train_tokenizers(config: Dict[str, Any], corpus_info: Dict[str, Any]) -> Dic
                                        output_path=output_file)
 
             tokenizer_paths[tokenizer_name] = {"path": tokmix_path,
-                                               "type": "standard",
+                                               "class": "standard",
                                                "multigram": False}
+        
+        elif tokenizer_type in ["standard", "bpe"]:
+            # Handle standard tokenizer
+            em_mode = tokenizer_config.get("em_mode", "soft") if tokenizer_type == "standard" else "bpe"
+            multigram = tokenizer_config.get("multigram", False) if tokenizer_type == "standard" else False
+            output_file = tokenizer_config.get("path", f"standard_unigramlm_{em_mode}.json").format_map(
+                SafeFormattingDict(tokenizers_dir=tokenizers_dir, em_mode=em_mode))
+                        
+            # Train new tokenizer
+            
+            path = train_standard_tokenizer(
+                tokenizer_training_files, 
+                vocab_size=vocab_size, 
+                em_mode=em_mode, 
+                multigram=multigram,
+                byte_level=byte_level,
+                output_path=output_file,
+                min_char_occurence_threshold=min_char_occurence_threshold
+            )
+            
+            if path:
+                tokenizer_paths[tokenizer_name] = {
+                    "path": path,
+                    "class": "standard",
+                    "multigram": multigram
+                }
+
         else:
             logger.warning(f"Unsupported tokenizer type: {tokenizer_type}")
     
@@ -270,24 +272,7 @@ def tokenize_corpora(config: Dict[str, Any], corpus_info: Dict[str, Any], tokeni
         if name not in tokenizer_paths:
             logger.warning(f"No trained tokenizer found for {name}, skipping tokenization")
             continue
-            
-        tokenizer_info = tokenizer_paths[name]
-        tokenizer_type = tokenizer_info.get("type", "standard")
-        
-        if tokenizer_type == "standard":
-            tokenizer_configs[name] = {
-                "type": "standard",
-                "path": tokenizer_info["path"],
-                "multigram": tokenizer_info.get("multigram", False),
-                "use_best_lang": False
-            }
-        elif tokenizer_type == "langspec":
-            tokenizer_configs[name] = {
-                "type": "langspec",
-                "base_path": tokenizer_info["base_path"],
-                "language_paths": tokenizer_info.get("language_paths", {}),
-                "use_best_lang": True
-            }
+        tokenizer_configs[name] = tokenizer_paths[name]
     
     # Create corpus tokenizer
     max_lines = config["experiment"].get("max_samples_per_language")
@@ -362,9 +347,7 @@ def train_models(config: Dict[str, Any], tokenized_info: Dict[str, Dict[str, Dic
             logger.warning(f"Missing tokenized data or tokenizer path for {name}, skipping model training")
             continue
         
-        tokenizer_info = tokenizer_paths[name]
-        tokenizer_type = tokenizer_info.get("type", "standard")
-        
+        tokenizer_info = tokenizer_paths[name]        
         # Get model configuration for this tokenizer
         model_params = config["models"].get(name, {})
 
@@ -374,12 +357,7 @@ def train_models(config: Dict[str, Any], tokenized_info: Dict[str, Dict[str, Dic
             "model_config": model_params
         }
         
-        # Add tokenizer path based on type
-        if tokenizer_type == "standard":
-            tokenizer_entry["tokenizer_path"] = tokenizer_info["path"]
-        elif tokenizer_type == "langspec":
-            tokenizer_entry["tokenizer_path"] = tokenizer_info["base_path"]
-        
+        tokenizer_entry["tokenizer_path"] = tokenizer_info.get("path") or tokenizer_info["base_path"]
         model_config["tokenizers"].append(tokenizer_entry)
     
     # Train models
@@ -392,6 +370,7 @@ def finetune_models(
     config: Dict[str, Any],
     model_paths: Dict[str, str],
     tokenizer_paths: Dict[str, Dict[str, Any]],
+    languages: List[str]
 ) -> Dict[str, Dict[str, str]]:
     """
     Fine‑tune each language model on the tasks listed in
@@ -420,14 +399,14 @@ def finetune_models(
             logger.warning("No trained model for %s; skipping fine‑tune.", name)
             continue
 
-        pretrained_ft = config["finetune"].get(name, {}).get("pretrained", {})
-        if pretrained_ft.get("enabled", False):
-            res_path = pretrained_ft["path"].format(finetune_dir=results_dir)
-            if os.path.exists(res_path):
-                logger.info("Using pretrained fine‑tune results for %s from %s", name, res_path)
-                with open(res_path) as fh:
-                    ft_results[name] = json.load(fh)
-                continue  # next tokenizer
+        # pretrained_ft = config["finetune_tasks"].get(name, {}).get("pretrained", {})
+        # if pretrained_ft.get("enabled", False):
+        #     res_path = pretrained_ft["path"].format(finetune_dir=results_dir)
+        #     if os.path.exists(res_path):
+        #         logger.info("Using pretrained fine‑tune results for %s from %s", name, res_path)
+        #         with open(res_path) as fh:
+        #             ft_results[name] = json.load(fh)
+        #         continue  # next tokenizer
 
         # 2) build per‑model entry -----------------------------------------
         if name not in tokenizer_paths:
@@ -437,12 +416,11 @@ def finetune_models(
         ft_entry = {
             "name":          name,
             "model_path":    model_dir,
-            "tokenizer_path": tokenizer_paths[name]["path"]
-            if tokenizer_paths[name]["type"] == "standard"
-            else tokenizer_paths[name]["base_path"],
+            "tokenizer_info": tokenizer_paths[name],
             "tasks":         config["finetune_tasks"],
             "hyper":         config.get("finetune_hyper", {}),
             "output_dir":    os.path.join(results_dir, name),
+            "languages":     languages
         }
 
         # 3) launch in‑process fine‑tune -----------------------------------
@@ -589,7 +567,7 @@ def main():
         # Step 4: Train language models
         model_paths = train_models(config, tokenized_info, tokenizer_paths)
         
-        ft_results = finetune_models(config, model_paths, tokenizer_paths)
+        ft_results = finetune_models(config, model_paths, tokenizer_paths, languages=list(corpus_info.keys()))
         # Step 5: Evaluate models
         # TODO: update evaluate_models func  
        # evaluation_results = evaluate_models(config, model_paths, tokenized_info, tokenizer_paths)
