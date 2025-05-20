@@ -6,10 +6,12 @@ import argparse
 from typing import Dict, List, Optional, Any, Iterator, Iterable
 from itertools import cycle, islice
 
-
 import torch
 from tqdm import tqdm
 import numpy as np
+
+os.environ["TQDM_MINITERS"] = "100"     # redraw after ≥100 iterations
+os.environ["TQDM_MININTERVAL"] = "10"   # …or after 10 s, whichever is later
 
 from transformers import (
     AutoModelForCausalLM,
@@ -17,18 +19,61 @@ from transformers import (
     Trainer,
     TrainingArguments,
     PreTrainedTokenizerFast,
+    TrainerCallback,
     set_seed
 )
 from datasets import Dataset, concatenate_datasets
 from code.utils import fix_input_ids, nonempty, set_special_tokens
 from torch.utils.data import IterableDataset, DataLoader
 
-
 logging.basicConfig(
     level=logging.INFO,
     format='%(asctime)s - %(name)s - %(levelname)s - %(message)s'
 )
 logger = logging.getLogger(__name__)
+
+
+class HealthCheckCallback(TrainerCallback):
+    def __init__(self, log_every=500, logger=None):
+        self.log_every = log_every
+        self.logger    = logger or logging.getLogger(__name__)
+
+    def on_substep_end(self, args, state, control, model=None, **kwargs):
+        if kwargs.get("substep") != "backward":
+            return control
+        norms = [p.grad.detach().norm() for p in model.parameters() if p.grad is not None]
+        if norms:
+            param_norm = torch.norm(torch.stack(norms)).item()
+            logger.info(f"param_norm after backward: {param_norm:.2f}")
+        else:
+            logger.error("No gradients found right after backward!")
+        return control
+
+    def on_step_end(self, args, state, control, **kwargs):
+        # only log every N steps
+        if state.global_step % self.log_every != 0:
+            return control
+
+        # grab the most recent logged loss/grad
+        last = state.log_history[-1] if state.log_history else {}
+        loss      = last.get("loss", float("nan"))
+        grad_norm = last.get("grad_norm", float("nan"))
+
+        # try to compute parameter‐norm _only_ if there are any grads
+        model = kwargs.get("model", None)
+        # GPU memory
+        gpu_mem = (
+            torch.cuda.max_memory_allocated() / 1e9
+            if torch.cuda.is_available() else 0.0
+        )
+
+        self.logger.info(
+            f"step {state.global_step:,} | "
+            f"loss {loss:.3f} | "
+            f"grad_norm {grad_norm:.1f} | "
+            f"gpu {gpu_mem:.1f} GB"
+        )
+        return control
 
 
 class StreamingTokenizedDataset(IterableDataset):
@@ -130,7 +175,8 @@ class StreamingTokenizedDataset(IterableDataset):
                             continue
                         
                         if not token_ids:
-                            logger.warning(f"Empty token_ids in {file_path}")
+                            if item["text"]:
+                                logger.warning(f"Empty token_ids for non-empty text in {file_path}")
                             continue
                         
                         # Check for maximum token ID
@@ -289,53 +335,152 @@ class StreamingTokenizedDataset(IterableDataset):
         # Reset file pointers by creating a new stream each epoch
         return self._get_size_limited_stream()
 
+class StreamingDataCollator:
+    """
+    Collator that dynamically pads batches for streaming data.
+    """
+    def __init__(self, pad_id: int, max_seq_len: int):
+        self.pad_id = pad_id
+        self.max_seq_len = max_seq_len
+
+    def __call__(self, features: List[Dict[str, Any]]) -> Dict[str, torch.Tensor]:
+        # Additional validation
+        if not features:
+            logger.warning("Empty features list in data collator")
+            return None
+
+        # Filter out any features with problematic input_ids
+        valid_features = []
+        for f in features:
+            try:
+                # Ensure input_ids is a list
+                input_ids = f.get('input_ids', [])
+                if not isinstance(input_ids, list):
+                    logger.warning(f"Invalid input_ids type: {type(input_ids)}")
+                    continue
+                
+                # Truncate or pad to max_seq_len
+                if len(input_ids) > self.max_seq_len:
+                    input_ids = input_ids[:self.max_seq_len]
+                
+                # Ensure labels match input_ids
+                f['input_ids'] = input_ids
+                f['labels'] = input_ids[:len(input_ids)]
+                
+                valid_features.append(f)
+            except Exception as e:
+                logger.warning(f"Error processing feature: {e}")
+
+        if not valid_features:
+            logger.error("No valid features after processing")
+            return None
+
+        max_len = max(len(f["input_ids"]) for f in valid_features)
+        
+        # Initialize tensors
+        input_ids = torch.full((len(valid_features), max_len), self.pad_id, dtype=torch.long)
+        labels = torch.full((len(valid_features), max_len), -100, dtype=torch.long)  # -100 is ignored in loss
+        
+        # Fill tensors
+        for i, f in enumerate(valid_features):
+            seq_len = len(f["input_ids"])
+            input_ids[i, :seq_len] = torch.tensor(f["input_ids"], dtype=torch.long)
+            labels[i, :seq_len] = torch.tensor(f["labels"], dtype=torch.long)
+            
+        return {
+            "input_ids": input_ids,
+            "labels": labels,
+            "attention_mask": (input_ids != self.pad_id).long()
+        }
+
+
 
 class PackedStreamingDataCollator:
     """
-    Dynamically packs variable-length examples into fixed-length blocks.
-    If the last block contains < max_seq_len tokens it is padded on the right.
+    Packs variable‑length samples into fixed‑length blocks with an EOS
+    token separating every original sequence.  Maintains an internal
+    rolling buffer so that each call returns *exactly* the requested
+    number of blocks unless the stream is genuinely exhausted.
+
+    Parameters
+    ----------
+    pad_id : int
+        Token used for right‑padding the final incomplete block.
+    eos_id : int
+        End‑of‑sequence token to insert between samples.
+    max_seq_len : int
+        Target block length (context window of the model).
+    blocks_per_batch : int
+        How many blocks to return per `__call__`.  Usually set to the
+        same value as `training_args.per_device_train_batch_size`.
     """
-    def __init__(self, pad_id: int, max_seq_len: int):
-        self.pad_id       = pad_id
-        self.max_seq_len  = max_seq_len
+    def __init__(self,
+                 pad_id: int,
+                 eos_id: int,
+                 max_seq_len: int,
+                 blocks_per_batch: int):
+        self.pad_id   = pad_id
+        self.eos_id   = eos_id
+        self.L        = max_seq_len
+        self.K        = blocks_per_batch
+        self._reservoir: List[int] = []   # keeps tokens left over from prev call
+
+    def _yield_blocks_from_buffer(self) -> List[List[int]]:
+        blocks = []
+        while len(self._reservoir) >= self.L and len(blocks) < self.K:
+            blocks.append(self._reservoir[:self.L])
+            self._reservoir = self._reservoir[self.L:]
+        return blocks
 
     def __call__(self, features: List[Dict[str, Any]]) -> Dict[str, torch.Tensor]:
-        if not features:
-            raise ValueError("No features to collate")
-
-        # 1.  Flatten the token lists that came from the dataset
-        flat_tokens: List[int] = []
+        # ------------------------------------------------------------------ #
+        # 0.  Gather tokens into the rolling buffer, separated by <eos>
+        # ------------------------------------------------------------------ #
         for f in features:
             toks = f.get("input_ids", [])
             if not isinstance(toks, list):
-                continue                        # skip corrupt rows
-            flat_tokens.extend(toks)
+                continue
+            self._reservoir.extend(toks + [self.eos_id])   # <-- EOS here
 
-        # 2.  Slice into equal-length blocks
-        blocks: List[List[int]] = [
-            flat_tokens[i : i + self.max_seq_len]
-            for i in range(0, len(flat_tokens), self.max_seq_len)
-        ]
+        # ------------------------------------------------------------------ #
+        # 1.  Pop complete blocks
+        # ------------------------------------------------------------------ #
+        blocks = self._yield_blocks_from_buffer()
+
+        # 2.  If we still have too few, keep reading from the buffer until we
+        #     either fill K blocks or run out of tokens altogether
         if not blocks:
-            raise ValueError("After filtering there were no valid tokens")
+            # Force at least one block so Trainer doesn’t choke
+            if not self._reservoir:
+                raise ValueError("Tokenizer stream exhausted – got no tokens.")
+            # Pad the final incomplete block
+            block = self._reservoir
+            self._reservoir = []
+            block = block[:self.L] + [self.pad_id] * (self.L - len(block))
+            blocks.append(block)
 
         batch_sz = len(blocks)
-        input_ids      = torch.full((batch_sz, self.max_seq_len),
-                                    self.pad_id, dtype=torch.long)
-        labels         = torch.full_like(input_ids, -100)   # ignored index
+        input_ids      = torch.full((batch_sz, self.L), self.pad_id, dtype=torch.long)
+        labels         = torch.full_like(input_ids, -100)
         attention_mask = torch.zeros_like(input_ids)
 
         for row, toks in enumerate(blocks):
-            seq_len = len(toks)
-            input_ids[row, :seq_len]      = torch.tensor(toks, dtype=torch.long)
-            labels[row,  :seq_len]        = torch.tensor(toks, dtype=torch.long)
-            attention_mask[row, :seq_len] = 1
+            input_ids[row] = torch.tensor(toks, dtype=torch.long)
+
+            # mask = 1 for *non-pad* positions only
+            mask = (input_ids[row] != self.pad_id)
+            attention_mask[row] = mask.long()
+
+            # labels = input_ids except ignore_index (-100) on pads
+            labels[row] = input_ids[row]
+            labels[row][~mask] = -100          # <- ignore padded positions
 
         return {
             "input_ids": input_ids,
-            "labels": labels,                    # model does the shift internally
+            "labels": labels,
             "attention_mask": attention_mask,
         }
+
 
 class CustomCausalLMModel:
     """
@@ -475,13 +620,14 @@ class CustomCausalLMModel:
             optim                       = "adamw_8bit",   # keeps optimizer memory low
             weight_decay                = 0.01,
             logging_steps               = 100,
-            save_steps                  = 10_000,
+            save_steps                  = 5_000,
             evaluation_strategy         = evaluation_strategy,
-            eval_steps                  = 10_000,
+            eval_steps                  = 5_000,
             save_total_limit            = 2,
             dataloader_drop_last        = False,
             disable_tqdm                = False,
             seed                        = seed,
+            max_grad_norm              = 1.0
         )
         training_args_small = TrainingArguments(
             output_dir                  = output_dir,
@@ -490,7 +636,7 @@ class CustomCausalLMModel:
             per_device_train_batch_size = 12,      # 12 × 512 tokens fits comfortably
             per_device_eval_batch_size  = 12,
             gradient_accumulation_steps = 2,       # ⇒ effective 24 seqs / step
-            learning_rate               = 4e-4,    # scale ≈ linearly with eff. batch
+            learning_rate               = 3e-4,    # scale ≈ linearly with eff. batch
             lr_scheduler_type           = "cosine",
             warmup_steps                = 3_000,
             fp16                        = True,
@@ -498,13 +644,14 @@ class CustomCausalLMModel:
             optim                       = "adamw_8bit",   # fp32 AdamW also fine here
             weight_decay                = 0.01,
             logging_steps               = 500,
-            save_steps                  = 10_000,
+            save_steps                  = 5_000,
             evaluation_strategy         = evaluation_strategy,
-            eval_steps                  = 10_000,
+            eval_steps                  = 5_000,
             save_total_limit            = 2,
             dataloader_drop_last        = False,
             disable_tqdm                = False,
             seed                        = seed,
+            max_grad_norm              = 1.0
         )
 
         training_args = training_args_small if self.use_small else training_args
@@ -547,10 +694,17 @@ class CustomCausalLMModel:
         if pad_id is None:
             logger.error("No pad token defined in tokenizer")
 
+        # data_collator = PackedStreamingDataCollator(
+        #     pad_id=pad_id,
+        #     max_seq_len=self.model.config.n_ctx
+        # )
         data_collator = PackedStreamingDataCollator(
             pad_id=pad_id,
-            max_seq_len=self.model.config.n_ctx
+            eos_id=self.tokenizer.eos_token_id,
+            max_seq_len=self.model.config.n_ctx,           # 512 or 1 024
+            blocks_per_batch=training_args.per_device_train_batch_size
         )
+
         logger.info("Created dataset and data collators...")
 
         # ------------------------------------------------------------------
@@ -577,7 +731,8 @@ class CustomCausalLMModel:
             data_collator=data_collator,
             eval_dataset=val_dataset,  # may be None
         )
-
+        trainer.add_callback(HealthCheckCallback(log_every=500))
+        
         # ------------------------------------------------------------------
         # 6.  Train
         # ------------------------------------------------------------------
@@ -626,8 +781,13 @@ class CustomCausalLMModel:
         pad_id = self.tokenizer.pad_token_id
         if pad_id is None:
             logger.error("No pad token defined in tokenizer")
-        data_collator = PackedStreamingDataCollator(pad_id=pad_id,
-                                              max_seq_len=self.model.config.n_ctx)
+        data_collator = PackedStreamingDataCollator(
+            pad_id=self.tokenizer.pad_token_id,
+            eos_id=self.tokenizer.eos_token_id,
+            max_seq_len=self.model.config.n_ctx,           # 512 or 1 024
+            blocks_per_batch=4
+        )
+
 
         # Create trainer and evaluate
         trainer = Trainer(

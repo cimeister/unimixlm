@@ -1,4 +1,4 @@
-import os
+import os, time, itertools
 import logging
 import json
 import argparse
@@ -33,6 +33,15 @@ def _init_worker(tokenizer, use_best):
     _WORKER_TOKENIZER = tokenizer
     _WORKER_USE_BEST  = use_best
 
+# NEW helper ----------------------------------------------------------
+def _iter_batches(fin, batch_size: int):
+    """Yield successive `batch_size`-sized lists of lines from an open file"""
+    while True:
+        batch = [ln.rstrip("\n") for ln in itertools.islice(fin, batch_size) if ln]
+        if not batch:
+            break
+        yield batch
+
 def _process_batch_lines(lines):
     """
     Local helper used by _tokenize_split. Works on one Python list of str
@@ -50,15 +59,41 @@ def _process_batch_lines(lines):
     unk_total = 0
     json_parts = []
 
-    for txt, ids, toks in zip(lines, enc["input_ids"], enc.get("tokens", [[]]*len(lines))):
+    best = enc.get("best_lang")
+    for i, (txt, ids) in enumerate(zip(lines, enc["input_ids"])):
         unk_total += ids.count(unk_id)
-        rec = {"text": txt, "token_ids": ids, "tokens": toks}
-        best = enc.get("best_lang")
+        rec = {"text": txt, "token_ids": ids}
         if best is not None:
-            rec["best_lang"] = best
+            rec["best_lang"] = best[i]
         json_parts.append(ujson.dumps(rec))
 
     return "\n".join(json_parts) + "\n", unk_total
+
+def _tokenize_file(
+        lang: str, split: str,
+        in_path: str, out_path: str,
+        tokenizer, use_best: bool,
+        batch_size: int = 4096, n_workers: int | None = None):
+
+    n_workers = n_workers or min(20, cpu_count() - 1)
+    line_cnt = unk_cnt = 0
+
+    with open(in_path, "r", encoding="utf-8", errors="replace") as fin, \
+         open(out_path, "w", encoding="utf-8") as fout, \
+         Pool(n_workers,
+              initializer=_init_worker,
+              initargs=(tokenizer, use_best)) as pool:
+
+        for jsonl, unks in tqdm(
+                pool.imap_unordered(_process_batch_lines,
+                                    _iter_batches(fin, batch_size),
+                                    chunksize=1),
+                desc=f"{lang}-{split}"):
+            fout.write(jsonl)
+            line_cnt += jsonl.count("\n")      # one per record
+            unk_cnt  += unks
+
+    return line_cnt, unk_cnt
 
 def _tokenize_split(args):
     """
@@ -153,6 +188,78 @@ class CorpusTokenizer:
         return loaded_tokenizers
     
     def tokenize_all(self):
+
+        # ---------- determine total number of jobs ------------------------
+        total_jobs = 0
+        for _tname in self.tokenizers:
+            for _lang, _info in self.corpus_info.items():
+                total_jobs += len(_info.get("splits", {}))
+
+        job_idx = 0  # 1-based progress counter
+        # ==================================================================
+        for tname, tdata in self.tokenizers.items():
+            tok      = tdata["tokenizer"]
+            cfg      = tdata["config"]
+            use_best = cfg.get("use_best_lang", True)
+            bs       = cfg.get("batch_size", 4096)   # lines per mini-task
+            workers  = cfg.get("workers")            # None → cpu_count()-1
+
+            unk_tok = getattr(tok, "unk_token")
+            unk_id = tok.get_vocab().get(unk_tok)
+            logger.info(f"Unknown token: {unk_tok} with ID {unk_id}")
+
+            base_out = Path(self.output_dir) / tname
+            base_out.mkdir(parents=True, exist_ok=True)
+            self.tokenized_files[tname] = {}
+
+            # -------- iterate languages -----------------------------------
+            for lang, info in self.corpus_info.items():
+                if "splits" not in info:
+                    continue
+                self.tokenized_files[tname][lang] = {}
+                lang_out = base_out / lang
+                lang_out.mkdir(exist_ok=True)
+
+                # -------- iterate splits (train / valid / …) --------------
+                for split, in_path in info["splits"].items():
+                    job_idx += 1
+                    tag = f"[{job_idx}/{total_jobs}] [{tname}] {lang}-{split}"
+
+                    if not os.path.isfile(in_path):
+                        logger.warning(f"{tag}: input file {in_path} is missing – skipped")
+                        continue
+
+                    out_path = lang_out / f"{split}.jsonl"
+                    if self.skip_if_exists and out_path.is_file():
+                        logger.info(f"{tag}: already tokenised – skipped")
+                        self.tokenized_files[tname][lang][split] = str(out_path)
+                        continue
+
+                    logger.info(f"{tag}: starting tokenisation "
+                                f"(batch={bs}, workers={workers or 'auto'})")
+                    t0 = time.perf_counter()
+
+                    n_lines, n_unk = _tokenize_file(
+                        lang       = lang,
+                        split      = split,
+                        in_path    = in_path,
+                        out_path   = str(out_path),
+                        tokenizer  = tok,
+                        use_best   = use_best,
+                        batch_size = bs,
+                        n_workers  = workers,
+                    )
+
+                    dt = time.perf_counter() - t0
+                    if n_lines:
+                        self.tokenized_files[tname][lang][split] = str(out_path)
+
+                    logger.info(f"{tag}: done in {dt:,.1f}s – "
+                                f"{n_lines:,} lines, {n_unk:,} UNK → {out_path}")
+
+        return self.tokenized_files
+
+    def tokenize_all_old(self):
         """
         Tokenise every split of every language with every tokenizer.
         Uses a process pool (fork) for throughput; each worker handles

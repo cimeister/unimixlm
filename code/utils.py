@@ -25,7 +25,7 @@ SPECIAL_TOKENS = OrderedDict([("bos_token", "<s>"), ("eos_token", "</s>"), ("pad
 NUM_TRIMMING_ITERATIONS = 3
 INITIAL_VOCAB_MULT_FACTOR = 5
 MIN_CHAR_OCCURENCE_THRESHOLD = 2
-MIN_TOKEN_PROB = 1e-10
+MIN_TOKEN_PROB = 1e-12
 _TOTAL_SAMPLE_LINES = 2_000_000
 MAX_VAL_TEST_SIZE = 3000
 _RNG = random.Random(42)
@@ -154,29 +154,54 @@ def _as_batch(txt):
     raise TypeError(type(txt))
 
 def _apply_trunc_pad(
-    ids_batch, toks_batch,
-    *,
-    truncation, max_length,
-    padding, pad_id, pad_tok,
-    return_attention_mask,
+    ids_batch, toks_batch, offs_batch,
+    *,                      # keyword-only args below
+    truncation: bool, max_length: int | None,
+    padding: str | None, pad_id: int, pad_tok: str,
+    return_attention_mask: bool,
 ):
+    """
+    • ids_batch / toks_batch / offs_batch are lists of equal length
+      (offs_batch can be None)
+    • Returns: ids_padded, toks_padded, masks_or_None, offs_padded_or_None
+    """
+    out_ids, out_toks, out_offs = [], [], []
     masks = [] if return_attention_mask else None
-    out_ids, out_toks = [], []
-    for ids, toks in zip(ids_batch, toks_batch):
-        # trunc
+
+    for ids, toks, offs in zip(ids_batch, toks_batch,
+                               offs_batch or [None] * len(ids_batch)):
+        # ---- 1) truncation ------------------------------------------
         if truncation and max_length:
             ids, toks = ids[:max_length], toks[:max_length]
-        # pad
+            if offs is not None:
+                offs = offs[:max_length]
+
+        # ---- 2) padding --------------------------------------------
         if padding == "max_length" and max_length:
             pad_len = max_length - len(ids)
-            ids += [pad_id] * pad_len
+            ids  += [pad_id] * pad_len
             toks += [pad_tok] * pad_len
+            if offs is not None:
+                offs += [(0, 0)] * pad_len
+        else:
+            pad_len = 0  # used for attention_mask
+
+        # ---- 3) attention mask -------------------------------------
+        if masks is not None:
+            real_len = len(ids) - pad_len
+            masks.append([1] * real_len + [0] * pad_len)
+
         out_ids.append(ids)
         out_toks.append(toks)
-        if masks is not None:
-            masks.append([1 if i < len(ids) - (pad_len if padding == "max_length" and max_length else 0) else 0
-                          for i in range(len(ids))])
-    return out_ids, out_toks, masks
+        if offs is not None:
+            out_offs.append(offs)
+
+    return (
+        out_ids,
+        out_toks,
+        masks,
+        out_offs if offs_batch is not None else None,
+    )
 
 def encode_text(
     tokenizer: Any,
@@ -199,6 +224,8 @@ def encode_text(
 ) -> Dict[str, Any]:
 
     batch_txt, was_single = _as_batch(text)
+    pad_token = tokenizer.pad_token if hasattr(tokenizer, "pad_token") else SPECIAL_TOKENS["pad_token"]
+    pad_id = tokenizer.get_vocab()[pad_token]
 
     # ------------------------------------------------------------------#
     # ➊  Language-specific UnigramLM path                                #
@@ -220,20 +247,13 @@ def encode_text(
             offsets_b   = [enc.offsets for enc in enc_objects]
 
         # ----- trunc / pad (helper unchanged) ---------------------------------
-        ids_batch, toks_batch, masks = _apply_trunc_pad(
-            ids_batch, toks_batch,
+        ids_batch, toks_batch, masks, offsets_b = _apply_trunc_pad(
+            ids_batch, toks_batch, offsets_b,
             truncation=truncation, max_length=max_length,
-            padding=padding,
-            pad_id=getattr(tokenizer, "pad_token_id", 0),
-            pad_tok="<pad>",
+            padding=padding, pad_id=pad_id,
+            pad_tok=pad_token,
             return_attention_mask=return_attention_mask,
         )
-        if truncation and max_length:
-            offsets_b = [off[:max_length] for off in offsets_b]
-        if padding == "max_length" and max_length:
-            offsets_b = [
-                off + [(0,0)]*(max_length - len(off)) for off in offsets_b
-            ]
 
         result = {"input_ids": ids_batch, "tokens": toks_batch}
         if best_langs is not None:
@@ -258,11 +278,13 @@ def encode_text(
         ids_batch   = [enc.ids    for enc in encodings]
         toks_batch  = [enc.tokens for enc in encodings]
         word_ids_b  = [enc.word_ids() for enc in encodings] if return_word_ids else None
+        offsets_b  = [enc.offsets for enc in encodings] if return_offsets_mapping else None
 
-        ids_batch, toks_batch, masks = _apply_trunc_pad(
-            ids_batch, toks_batch,
+        ids_batch, toks_batch, masks, offsets_b = _apply_trunc_pad(
+            ids_batch, toks_batch, offsets_b,
             truncation=truncation, max_length=max_length,
-            padding=padding, pad_id=getattr(tokenizer, "pad_token_id", 0), pad_tok="<pad>",
+            padding=padding, pad_id=pad_id,
+            pad_tok=pad_token,
             return_attention_mask=return_attention_mask,
         )
 
@@ -272,7 +294,7 @@ def encode_text(
         if word_ids_b is not None:
             result["word_ids"] = word_ids_b
         if return_offsets_mapping:
-            result["offset_mapping"] = [enc.offsets for enc in encodings]
+            result["offset_mapping"] = offsets_b
 
     else:
         # ------------------------------------------------------------------
@@ -405,7 +427,7 @@ def _segment_word_viterbi(
     max_score_at_pos = np.full(n + 1, float("-inf"), dtype=np.float64)
     best_score[0] = max_score_at_pos[0] = 0.0
 
-    unk_logp = math.log(max(token_probs.get(unk_token, 1e-12), 1e-12))
+    unk_logp = math.log(max(token_probs.get(unk_token, MIN_TOKEN_PROB), MIN_TOKEN_PROB))
     requires_unk = np.zeros(n + 1, dtype=bool)
 
     # ------------------------------------------------------------------------
@@ -423,7 +445,7 @@ def _segment_word_viterbi(
         for end in range(start + 1, max_end + 1):
             sub = word[start:end]
             if sub in token_probs:
-                score = cur_score + math.log(max(token_probs[sub], 1e-12))
+                score = cur_score + math.log(max(token_probs[sub], MIN_TOKEN_PROB))
                 if score > best_score[end]:
                     best_score[end] = score
                     best_edge[end] = start
@@ -458,7 +480,7 @@ def _segment_word_viterbi(
         for end in range(start + 1, max_end + 1):
             sub = word[start:end]
             if sub in token_probs:
-                score = cur_score + math.log(max(token_probs[sub], 1e-12))
+                score = cur_score + math.log(max(token_probs[sub], MIN_TOKEN_PROB))
                 if score > best_score[end]:
                     best_score[end] = score
                     best_edge[end] = start
@@ -482,7 +504,7 @@ def _segment_word_viterbi(
     return tokens[::-1]
 
 
-def forward_backward_unigram(text, p_lang, unk_token="<unk>", max_sub_len=20, prob_threshold=1e-12, byte_level=False):
+def forward_backward_unigram(text, p_lang, unk_token="<unk>", max_sub_len=20, prob_threshold=MIN_TOKEN_PROB, byte_level=False):
     """
     Forward-backward algorithm for unigram language model training that matches SentencePiece's
     UNK handling approach.
@@ -878,29 +900,48 @@ def _build_hf_tokenizer_from_probs(
 
     return tok
 
-# ------------------------------------------------------------------
-def tokmix_merge(per_lang_tokenizers: Dict[str, Dict],
-                 k_lang: int, k_final: int,
-                 byte_level: bool, unk_token: str, special: List[str]) -> Tokenizer:
-    """
-    Combine per‑language ULM tokenizers à la TokMix.
-      k_lang   – #top tokens to take from each language model
-      k_final  – desired merged vocab size
-    """
-    pool = []
-    for lg, global_probs in per_lang_tokenizers.items():
-        # sort by score (log prob) descending, skip specials
-        top = [t for t, _ in sorted(global_probs.items(),
-                                    key=lambda x: x[1], reverse=True)
-               if t not in special][:k_lang]
-        pool.extend(top)
 
-    # majority voting favouring pieces shared across langs
-    counts = Counter(pool)
-    merged = [t for t, _ in counts.most_common()]
-    merged = special + merged[:k_final-len(special)]
+def tokmix_merge(
+    per_lang_tokenizers: Dict[str, Dict[str, float]],
+    k_final: int,
+    byte_level: bool,
+    unk_token: str,
+    special: List[str],
+) -> Tokenizer:
+    """
+    Merge per-language UnigramLM vocabularies à la TokMix.
+    Each `per_lang_tokenizers[lg]` is a dict {token -> prob} with
+    probabilities summing to 1 inside that language.
+    The merged vocabulary keeps the `k_final` highest averaged probs.
+    """
+    langs          = list(per_lang_tokenizers)
+    n_langs        = len(langs)
+    avg_prob: Dict[str, float] = defaultdict(float)
 
-    # build HF tokenizer (probabilities initialised uniformly)
-    probs = [(t, math.log(1/len(merged))) for t in merged]
-    unk_id = merged.index(unk_token)
-    return _build_hf_tokenizer_from_probs(probs, unk_id, byte_level)
+    # 1. accumulate probabilities
+    for lg_probs in per_lang_tokenizers.values():
+        for tok, p in lg_probs.items():
+            avg_prob[tok] += p
+    # 2. average (tokens missing in a language contribute 0)
+    for tok in avg_prob:
+        avg_prob[tok] /= n_langs
+
+    # 3. sort by averaged probability, keep top-k (specials are pinned)
+    pinned = set(special)
+    sorted_tokens = sorted(
+        (t for t in avg_prob if t not in pinned),
+        key=lambda t: avg_prob[t],
+        reverse=True,
+    )
+    kept = list(special) + sorted_tokens[: max(0, k_final - len(special))]
+
+    # 4. renormalise probs over the kept set
+    Z = sum(avg_prob[t] for t in kept if t not in pinned)
+    probs_tuples = []
+    for t in kept:
+        p = MIN_TOKEN_PROB if t not in avg_prob else (avg_prob[t] / Z)
+        probs_tuples.append((t, math.log(p)))
+
+    # 5. build HF tokenizer
+    unk_id = kept.index(unk_token)
+    return _build_hf_tokenizer_from_probs(probs_tuples, unk_id, byte_level)

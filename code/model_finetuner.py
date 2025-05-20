@@ -592,6 +592,7 @@ def finetune_from_config(entry: Dict[str, Any]) -> Dict[str, str]:
                 eval_steps=args.eval_steps,
                 save_steps = args.eval_steps,
                 gradient_accumulation_steps=args.grad_accum,
+                optim="adamw_8bit",
                 report_to="tensorboard",
                 fp16=torch.cuda.is_available(),
                 save_total_limit=3,

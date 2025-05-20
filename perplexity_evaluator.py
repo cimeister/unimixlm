@@ -31,7 +31,8 @@ from plotnine import (
 
 from transformers import (
     AutoModelForCausalLM,
-    PreTrainedTokenizerFast
+    PreTrainedTokenizerFast,
+    DataCollatorWithPadding
 )
 
 from code.utils import fix_input_ids, nonempty, set_special_tokens, MAX_VAL_TEST_SIZE
@@ -117,100 +118,83 @@ class ModelEvaluator:
         except Exception as e:
             logger.error(f"Error loading model or tokenizer: {str(e)}")
             raise
-            
+
     def compute_perplexity_batch(self, batch_data, data_collator):
         """
-        Compute perplexity for a batch using the same collator as training.
-        Also computes perplexity per byte for fair cross-tokenizer comparison.
-        
-        Args:
-            batch_data: Batch of examples from the dataset
-            data_collator: The same CustomDataCollator used in training
-            
-        Returns:
-            Tuple of (token_perplexities, byte_perplexities, byte_counts)
+        Compute token‐ and byte‐level perplexities for a batch.
+        Rebuilds labels to ignore padding, then does per‐example NLL → PPL.
         """
-        # Convert batch from Dataset format (dict of lists) to list of dicts for the collator
+        # 1. Prepare inputs for the collator
         batch_for_collator = []
         original_texts = []
         for i in range(len(batch_data['input_ids'])):
-            example = {
-                'input_ids': batch_data['input_ids'][i]
-            }
-            batch_for_collator.append(example)
-            # Store original text for byte-level normalization
+            batch_for_collator.append({'input_ids': batch_data['input_ids'][i]})
             original_texts.append(batch_data['text'][i])
-        
-        # Use the data collator to process the batch exactly as in training
-        collated_batch = data_collator(batch_for_collator)
-        
-        # Move tensors to the correct device
-        for k, v in collated_batch.items():
-            collated_batch[k] = v.to(self.device)
-        
+
+        # 2. Collate & move to device
+        collated = data_collator(batch_for_collator)
+        input_ids      = collated["input_ids"].to(self.device)        # [B, L]
+        attention_mask = collated["attention_mask"].to(self.device)   # [B, L]
+        B, L = input_ids.shape
+
+        # 3. Rebuild labels so that pads → -100
+        labels = input_ids.clone()
+        labels[attention_mask == 0] = -100
+
         token_perplexities, byte_perplexities, byte_counts, ex_ids = [], [], [], []
-        
+
         with torch.no_grad():
-            # Forward pass with the collated batch
-            outputs = self.model(**collated_batch)
-            
-            # The loss is already calculated across the batch
-            # But we need per-example loss for perplexity
-            logits = outputs.logits  # [batch_size, seq_len, vocab_size]
-            labels = collated_batch["labels"]  # [batch_size, seq_len]
-            
-            # Calculate per-example perplexity
-            for i in range(logits.size(0)):
-                # Extract single example
-                example_logits = logits[i]  # [seq_len, vocab_size]
-                example_labels = labels[i]  # [seq_len]
-                
-                # Shift logits and labels for next-token prediction
-                shift_logits = example_logits[:-1]  # Remove last prediction
-                shift_labels = example_labels[1:]   # Remove first token (we're predicting next tokens)
-                
-                # Identify non-padding positions (where label != pad_id)
-                pad_id = self.tokenizer.pad_token_id
-                non_pad_mask = (shift_labels != pad_id)
-                
-                # Only calculate loss on non-padding tokens
-                if non_pad_mask.sum() == 0:
-                    # All padding, skip this example
+            # 4. Forward pass
+            outputs = self.model(
+                input_ids=input_ids,
+                attention_mask=attention_mask,
+                labels=labels,    # this makes model compute the same loss internally
+            )
+            logits = outputs.logits  # [B, L, V]
+
+            # 5. Per‐example loop
+            for i in range(B):
+                # shift for next‐token classification
+                example_logits = logits[i, :-1, :]    # [L-1, V]
+                example_labels = labels[i, 1:]        # [L-1]
+
+                # mask out all -100 positions
+                valid = example_labels != -100
+                token_count = int(valid.sum().item())
+                if token_count == 0:
+                    # nothing to score
                     continue
-                
-                # Get the relevant logits and labels
-                filtered_logits = shift_logits[non_pad_mask]
-                filtered_labels = shift_labels[non_pad_mask]
-                
-                # Calculate cross-entropy loss
+
+                filt_logits = example_logits[valid]
+                filt_labels = example_labels[valid]
+
+                # mean NLL per token
                 loss_fct = torch.nn.CrossEntropyLoss(reduction='mean')
-                loss = loss_fct(filtered_logits, filtered_labels)
-                
-                # Convert to perplexity
-                token_perplexity = torch.exp(loss).item()
-                token_perplexities.append(token_perplexity)
-                
-                # Calculate byte-normalized perplexity
-                original_text = original_texts[i]
-                ex_ids.append( make_example_id(original_text) )
-                byte_count = len(original_text.encode('utf-8'))
+                avg_nll = loss_fct(filt_logits, filt_labels).item()
+                # clamp to avoid overflow in exp()
+                avg_nll = min(avg_nll, 1000.0)
+
+                # token‐level perplexity
+                ppl = math.exp(avg_nll)
+                token_perplexities.append(ppl)
+
+                # byte‐level
+                text = original_texts[i]
+                ex_ids.append(make_example_id(text))
+                byte_count = len(text.encode('utf-8'))
                 byte_counts.append(byte_count)
-                
-                # The number of tokens used for this example
-                token_count = non_pad_mask.sum().item()
-                
-                if byte_count > 0 and token_count > 0:
-                    # Calculate perplexity normalized by bytes
-                    # First, get the total log probability (NLL) by multiplying by token count
-                    total_nll = loss.item() * token_count
-                    # Get NLL per byte
+
+                if byte_count > 0:
+                    total_nll = avg_nll * token_count
                     nll_per_byte = total_nll / byte_count
-                    # Convert to byte-level perplexity
-                    byte_perplexity = math.exp(nll_per_byte)
-                    byte_perplexities.append(byte_perplexity)
+                    # clamp again
+                    nll_per_byte = min(nll_per_byte, 1000.0)
+                    byte_ppl = math.exp(nll_per_byte)
                 else:
-                    byte_perplexities.append(float('inf'))
-        
+                    byte_ppl = float('inf')
+
+                byte_perplexities.append(byte_ppl)
+
         return token_perplexities, byte_perplexities, byte_counts, ex_ids
     
     def evaluate_test_set(
@@ -287,8 +271,16 @@ class ModelEvaluator:
                 "sample_count": 0
             }
         
-        # Set up the same data collator used in training            
-        data_collator = PackedStreamingDataCollator(self.tokenizer.pad_token_id, self.model.config.n_ctx)
+        data_collator = DataCollatorWithPadding(
+            tokenizer=self.tokenizer,
+            pad_to_multiple_of=None,      # dynamic pad to longest in batch
+            return_tensors="pt"
+        )      
+        # data_collator = PackedStreamingDataCollator(self.tokenizer.pad_token_id, 
+        #     self.tokenizer.eos_token_id,
+        #     max_seq_len=self.model.config.n_ctx,           
+        #     blocks_per_batch=4
+        # )
         
         # Process in batches
         all_token_perplexities = []
@@ -531,7 +523,7 @@ def evaluate_all_models_on_all_languages(
                 batch_size=batch_size
             )
         except Exception as e:
-            logger.error(f"Unable to evaluate model {model_name}")
+            logger.error(f"Unable to evaluate model {model_name}. Error {e}")
             continue
         all_results[model_name] = model_results
         
