@@ -193,10 +193,7 @@ def train_tokenizers(config: Dict[str, Any], corpus_info: Dict[str, Any]) -> Dic
                                           vocab_size=vocab_size, 
                                           byte_level=byte_level)
 
-            toks_per_lang = int(vocab_size/(len(corpus_info)/2))
-            logger.info(f"Mixing tokenizers, considering top {toks_per_lang} tokens per lang for building vocab of size {vocab_size}")
             tokmix_path = train_tokmix(paths,
-                                       k_lang=toks_per_lang,
                                        k_final=vocab_size,
                                        byte_level=byte_level,
                                        output_path=output_file)

@@ -680,7 +680,6 @@ def train_lang_tokenizers(corpus_info: Dict[str, Dict[str, str]],
     return paths
 
 def train_tokmix(per_lang_paths: Dict[str, str],
-                 k_lang: int,
                  k_final: int,
                  byte_level: bool,
                  output_path: str):
@@ -692,8 +691,8 @@ def train_tokmix(per_lang_paths: Dict[str, str],
     for lg, path in per_lang_paths.items():
         tkzs[lg].load(path)
 
-    merged = tokmix_merge({lg: tkz.global_probs for lg, tkz in  tkzs.items()}, 
-                          k_lang, k_final,
+    merged = tokmix_merge({lg: tkz.global_probs for lg, tkz in tkzs.items()}, 
+                          k_final,
                           byte_level,
                           SPECIAL_TOKENS["unk_token"],
                           list(SPECIAL_TOKENS.values()))
