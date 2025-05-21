@@ -7,12 +7,6 @@ from typing import Dict, List, Optional, Any, Iterator, Iterable
 from itertools import cycle, islice
 
 import torch
-from tqdm import tqdm
-import numpy as np
-
-os.environ["TQDM_MINITERS"] = "100"     # redraw after ≥100 iterations
-os.environ["TQDM_MININTERVAL"] = "10"   # …or after 10 s, whichever is later
-
 from transformers import (
     AutoModelForCausalLM,
     GPT2Config,
@@ -20,10 +14,12 @@ from transformers import (
     TrainingArguments,
     PreTrainedTokenizerFast,
     TrainerCallback,
+    DataCollatorForLanguageModeling,
+    DataCollatorWithPadding,
     set_seed
 )
-from datasets import Dataset, concatenate_datasets
-from code.utils import fix_input_ids, nonempty, set_special_tokens
+from datasets import Dataset, interleave_datasets, load_dataset
+from code.utils import set_special_tokens
 from torch.utils.data import IterableDataset, DataLoader
 
 logging.basicConfig(
@@ -31,6 +27,64 @@ logging.basicConfig(
     format='%(asctime)s - %(name)s - %(levelname)s - %(message)s'
 )
 logger = logging.getLogger(__name__)
+
+PACK_DATASET: bool = True  # set False → disable packing & use dynamic padding  
+
+
+class SingleLangEvalCallback(TrainerCallback):
+    def __init__(self, dataset, make_loader_fn, bs, name, pad_id):
+        self.dataset   = dataset
+        self.make_loader  = make_loader_fn
+        self.bs           = bs
+        self.metric_name = name
+        self.trainer      = None          # will be filled by set_trainer
+        self._in_callback = False         # recursion guard
+        self.pad_id       = pad_id
+
+    def set_trainer(self, trainer):
+        self.trainer = trainer
+
+    def on_evaluate(self, args, state, control, metrics, **kwargs):
+        if self.dataset is None or self.trainer is None or self._in_callback:
+            return control                # nothing to do
+        self._in_callback = True
+
+        # Build a loader that uses the same collator/padding logic
+        loader: DataLoader = self.make_loader(
+            self.dataset, self.bs
+        )
+
+        # Manual loop to avoid triggering callbacks again
+        model = self.trainer.model
+        model.eval()
+        tot_loss, tot_tokens, tot_non_pad = 0.0, 0, 0
+
+        for batch in loader:
+            batch = {k: v.to(model.device) for k, v in batch.items()}
+            with torch.no_grad():
+                loss = model(**batch).loss
+            tokens_in_batch = batch["input_ids"].numel()
+            non_pad = (batch["input_ids"] != self.pad_id).sum().item()
+
+            tot_loss   += loss.item() * tokens_in_batch
+            tot_tokens += tokens_in_batch
+            tot_non_pad += non_pad
+
+        loss = tot_loss / max(1, tot_tokens)
+        log_dict = {
+            self.metric_name+"_loss"              : loss,
+            self.metric_name+"_tokens"            : tot_tokens,
+            self.metric_name+"_non_pad_tokens"    : tot_non_pad,
+        }
+        metrics.update(log_dict)
+
+        self.trainer.log(log_dict)
+        logger.info(f"[EN-only] step {state.global_step:,} | "
+                 f"loss {loss:.3f} | "
+                 f"tokens {tot_tokens:,} | non-pad {tot_non_pad:,}")
+
+        self._in_callback = False
+        return control     # must return the (possibly updated) control object
 
 
 class HealthCheckCallback(TrainerCallback):
@@ -59,8 +113,6 @@ class HealthCheckCallback(TrainerCallback):
         loss      = last.get("loss", float("nan"))
         grad_norm = last.get("grad_norm", float("nan"))
 
-        # try to compute parameter‐norm _only_ if there are any grads
-        model = kwargs.get("model", None)
         # GPU memory
         gpu_mem = (
             torch.cuda.max_memory_allocated() / 1e9
@@ -87,7 +139,6 @@ class StreamingTokenizedDataset(IterableDataset):
         split: str,
         tokenizer: PreTrainedTokenizerFast,
         buffer_size: int = 1000,
-        shuffle: bool = True,
         seed: int = 42,
         max_samples: Optional[int] = None,
         max_samples_per_language: Optional[int] = None,
@@ -101,7 +152,6 @@ class StreamingTokenizedDataset(IterableDataset):
             split: Dataset split ('train', 'val', 'test')
             tokenizer: HuggingFace tokenizer
             buffer_size: Size of shuffle buffer per language
-            shuffle: Whether to shuffle the data
             seed: Random seed
             max_samples: Maximum total samples to include (across all languages)
             max_samples_per_language: Maximum samples per language
@@ -117,7 +167,6 @@ class StreamingTokenizedDataset(IterableDataset):
         }
         self.tokenizer = tokenizer
         self.buffer_size = buffer_size
-        self.shuffle = shuffle
         self.seed = seed
         self.max_samples = max_samples
         self.max_samples_per_language = max_samples_per_language
@@ -139,17 +188,85 @@ class StreamingTokenizedDataset(IterableDataset):
             logger.info(f"Limiting to {max_samples} total samples")
         if max_samples_per_language:
             logger.info(f"Limiting to {max_samples_per_language} samples per language")
-    
+
+        self._lang_weights = {                                                  
+            lang: os.path.getsize(path)                                         
+            for lang, path in self.files_by_lang.items()                        
+        }
+        total = sum(self._lang_weights.values()) or 1                           
+        self._lang_probs = {l: s / total for l, s in self._lang_weights.items()}
+
     def __len__(self):
         """Return the estimated length of the dataset."""
         return self._length
+
+    def __iter__(self) -> Iterator[Dict[str, Any]]:
+        """Creates an iterator for the dataset."""
+        # Set the random seed for worker
+        worker_info = torch.utils.data.get_worker_info()
+        if worker_info is not None:
+            # Use different seeds for each worker
+            seed = self.seed + worker_info.id + self._epoch * 100
+            random.seed(seed)
+            
+        # Reset file pointers by creating a new stream each epoch
+        return self._get_size_limited_stream()
     
     def set_epoch(self, epoch):
         """Sets the epoch for this dataset."""
         self._epoch = epoch
     
-    # The rest of the methods remain the same
-    
+    def _get_size_limited_stream(self):
+        streams_by_lang = {}
+        for lang, file_path in self.files_by_lang.items():
+            base = self._get_limited_stream_for_file(
+                file_path,
+                limit=self.max_samples_per_language,
+            )
+            streams_by_lang[lang] = base
+
+        def _weighted_merge(stream_dict):                                       
+            rng = random.Random(self.seed + self._epoch)                        
+            iters = {l: iter(s) for l, s in stream_dict.items()}                
+            langs, weights = zip(*[(l, self._lang_probs[l]) for l in iters])    
+            langs, weights = list(langs), list(weights)                         
+            while iters:
+                lang = rng.choices(langs, weights=weights, k=1)[0]              
+                try:
+                    yield next(iters[lang])                                     
+                except StopIteration:
+                    idx = langs.index(lang)                                     
+                    langs.pop(idx), weights.pop(idx)                            
+                    iters.pop(lang)                                             
+                    if not iters:
+                        break                                                   
+        merged_stream = _weighted_merge(streams_by_lang)  
+        # streams, probs = [], []
+        # for lang, path in self.files_by_lang.items():
+        #     ds = load_dataset(
+        #         "json",
+        #         data_files=path,
+        #         split="train",
+        #         streaming=True,                           # returns an IterableDataset
+        #     )
+        #     if self.max_samples_per_language:
+        #         ds = ds.take(self.max_samples_per_language)  # per-lang cap
+        #     streams.append(ds)
+        #     probs.append(self._lang_probs[lang])
+
+        # # 2. Let HF do the weighted interleave in C++ (no Python loop)
+        # merged_stream = interleave_datasets(
+        #     streams,
+        #     probabilities=probs,
+        #     seed=self.seed + self._epoch,
+        #     stopping_strategy="first_exhausted",  # drop langs as they run out
+        # )
+
+        # TODO: Turning off shuffling for debugging; turn back on
+        # stream = self._shuffle_buffer(merged_stream, self.buffer_size)
+
+        return islice(merged_stream, self.max_samples) if self.max_samples else merged_stream
+        
     def _get_limited_stream_for_file(self, file_path: str, limit: Optional[int] = None) -> Iterator[Dict[str, Any]]:
         """Creates a limited stream for a single file."""
         count = 0
@@ -190,8 +307,7 @@ class StreamingTokenizedDataset(IterableDataset):
                         
                         # Yield processed item
                         yield {
-                            'input_ids': token_ids,
-                            'labels': token_ids
+                            'input_ids': token_ids
                         }
                         count += 1
                         
@@ -232,108 +348,26 @@ class StreamingTokenizedDataset(IterableDataset):
         # Yield the remaining items in the buffer (shuffle them first)
         rng.shuffle(buffer)
         yield from buffer
-    
-    def _interleave_streams_with_limit(
-        self, 
-        streams_by_lang: Dict[str, Iterator[Dict[str, Any]]],
-        total_limit: Optional[int] = None
-    ) -> Iterator[Dict[str, Any]]:
-        """
-        Interleaves streams from different languages with an optional total limit.
-        Uses round-robin approach to ensure balanced sampling.
-        """
-        # Exit early if no streams
-        if not streams_by_lang:
-            return
-            
-        # Track how many samples we've yielded in total
-        total_count = 0
-        
-        # Get a cyclic iterator for each language 
-        # (we need to manually track exhaustion since we can't rely on StopIteration with cycle)
-        active_langs = set(streams_by_lang.keys())
-        lang_iterators = {lang: iter(stream) for lang, stream in streams_by_lang.items()}
-        lang_cycle = cycle(list(active_langs))
-        
-        # Continue until all streams are exhausted or we hit the limit
-        while active_langs and (total_limit is None or total_count < total_limit):
-            # Try languages in a round-robin fashion
-            for _ in range(len(active_langs)):
-                try:
-                    lang = next(lang_cycle)
-                    # Skip languages that are already exhausted
-                    if lang not in active_langs:
-                        continue
-                        
-                    # Try to get next item from this language
-                    try:
-                        item = next(lang_iterators[lang])
-                        yield item
-                        total_count += 1
-                        
-                        # Check if we've hit the total limit
-                        if total_limit is not None and total_count >= total_limit:
-                            return
-                            
-                    except StopIteration:
-                        # This language is exhausted
-                        active_langs.remove(lang)
-                        logger.info(f"Language {lang} stream is exhausted")
-                        if not active_langs:
-                            return
-                            
-                except StopIteration:
-                    # This shouldn't happen with cycle()
-                    return
+  
 
-    def _get_size_limited_stream(self):
-    # 1. build one “base_stream” per language ­– **no per-lang shuffle here**
-        streams_by_lang = {}
-        for lang, file_path in self.files_by_lang.items():
-            base = self._get_limited_stream_for_file(
-                file_path,
-                limit=self.max_samples_per_language,
-            )
-            streams_by_lang[lang] = base          # keep order, don’t shuffle yet
+class CausalLMDataCollatorWithPadding(DataCollatorWithPadding):
+    def __call__(self, features):                                      
+        for f in features:                                             
+            f.pop("labels", None)
+            if len(f["input_ids"]) > self.max_length:
+                f["input_ids"] = f["input_ids"][:self.max_length]
+                if "attention_mask" in f:
+                    f["attention_mask"] = f["attention_mask"][:self.max_length]
+        batch = self.tokenizer.pad(
+            features,
+            padding="longest",
+            pad_to_multiple_of=self.pad_to_multiple_of,
+            return_tensors="pt",
+        )                                      
+        batch = super().__call__(features)                             
+        batch["labels"] = batch["input_ids"].clone()                   
+        return batch                                                   
 
-        # 2. round-robin merge so that small languages are still present
-        def _rr_merge(stream_dict):
-            iters = {l: iter(s) for l, s in stream_dict.items()}
-            active = list(iters)                  # list of lang codes
-            while active:
-                for l in active.copy():
-                    try:
-                        yield next(iters[l])
-                    except StopIteration:
-                        active.remove(l)
-
-        merged_stream = _rr_merge(streams_by_lang)
-
-        # 3. **single** streaming shuffle across all languages
-        shuffled_stream = self._shuffle_buffer(
-            merged_stream,
-            buffer_size=self.buffer_size,         # global buffer
-        )
-
-        # 4. respect the global max-samples cap (if any)
-        if self.max_samples is not None:
-            return islice(shuffled_stream, self.max_samples)
-        return shuffled_stream
-        
-    def __iter__(self) -> Iterator[Dict[str, Any]]:
-        """Creates an iterator for the dataset."""
-        # Set the random seed for worker
-        worker_info = torch.utils.data.get_worker_info()
-        if worker_info is not None:
-            # Use different seeds for each worker
-            seed = self.seed + worker_info.id + self._epoch * 100
-            random.seed(seed)
-            
-            # Split stream across workers - not implemented here
-            # As this requires careful handling to maintain language balance
-            
-        # Reset file pointers by creating a new stream each epoch
-        return self._get_size_limited_stream()
 
 class StreamingDataCollator:
     """
@@ -392,7 +426,6 @@ class StreamingDataCollator:
             "labels": labels,
             "attention_mask": (input_ids != self.pad_id).long()
         }
-
 
 
 class PackedStreamingDataCollator:
@@ -496,6 +529,7 @@ class CustomCausalLMModel:
         self.model = None
         self.custom_config = config
         self.use_small = small
+        self.training_args = None
     
     def create_model(self):
         """Create and prepare the model for training."""
@@ -574,9 +608,6 @@ class CustomCausalLMModel:
 
         torch.manual_seed(seed)
 
-        # ------------------------------------------------------------------
-        # 1.  Build a *small* validation set (optional)
-        # ------------------------------------------------------------------
         def create_map_dataset(src_iter_ds, cap: int):
             """Materialise ≤ cap examples from an iterable dataset."""
             samples = list(islice(src_iter_ds, cap))
@@ -591,7 +622,6 @@ class CustomCausalLMModel:
             split="val",
             tokenizer=self.tokenizer,
             buffer_size=val_buffer_size,
-            shuffle=False,
             max_samples_per_language=val_samples_per_lang,
         )
         val_dataset = create_map_dataset(val_stream_ds, val_samples_per_lang * len(tokenized_files))
@@ -601,6 +631,22 @@ class CustomCausalLMModel:
         else:
             logger.info(f"Validation set size: {len(val_dataset):,}")
             evaluation_strategy = "steps"
+
+        if "en" in tokenized_files:
+            en_stream_ds = StreamingTokenizedDataset(
+                tokenized_files={"en": tokenized_files["en"]},
+                split="val",
+                tokenizer=self.tokenizer,
+                buffer_size=val_buffer_size,
+                max_samples_per_language=val_samples_per_lang,
+            )
+            en_val_dataset = create_map_dataset(
+                en_stream_ds,
+                val_samples_per_lang           # same cap you used above
+            )
+        else:
+            en_val_dataset = None
+            logger.warning("No English data found – EN eval callback will be skipped.")
 
         # ------------------------------------------------------------------
         # 2.  TrainingArguments
@@ -632,7 +678,7 @@ class CustomCausalLMModel:
         training_args_small = TrainingArguments(
             output_dir                  = output_dir,
             overwrite_output_dir        = False,
-            max_steps                   = 180_000,
+            max_steps                   = 50_000,
             per_device_train_batch_size = 12,      # 12 × 512 tokens fits comfortably
             per_device_eval_batch_size  = 12,
             gradient_accumulation_steps = 2,       # ⇒ effective 24 seqs / step
@@ -654,7 +700,7 @@ class CustomCausalLMModel:
             max_grad_norm              = 1.0
         )
 
-        training_args = training_args_small if self.use_small else training_args
+        self.training_args = training_args_small if self.use_small else training_args
         # ------------------------------------------------------------------
         # 3.  Resume logic
         # ------------------------------------------------------------------
@@ -673,11 +719,11 @@ class CustomCausalLMModel:
                 with open(state_path) as f:
                     trainer_state = json.load(f)
                 done_steps = trainer_state.get("global_step", 0)
-                if done_steps >= training_args.max_steps:
-                    logger.info(f"Training already complete ({done_steps}/{training_args.max_steps} steps).")
+                if done_steps >= self.training_args.max_steps:
+                    logger.info(f"Training already complete ({done_steps}/{self.training_args.max_steps} steps).")
                     self.model = AutoModelForCausalLM.from_pretrained(latest, config=config_path)
                     return {"status": "already_trained", "steps_completed": done_steps}
-                logger.info(f"Resuming from step {done_steps:,} / {training_args.max_steps:,}.")
+                logger.info(f"Resuming from step {done_steps:,} / {self.training_args.max_steps:,}.")
                 resume_from_checkpoint = latest
 
         # ------------------------------------------------------------------
@@ -688,60 +734,67 @@ class CustomCausalLMModel:
             split="train",
             tokenizer=self.tokenizer,
             buffer_size=train_buffer_size,
-            shuffle=True,
         )
         pad_id = self.tokenizer.pad_token_id
         if pad_id is None:
             logger.error("No pad token defined in tokenizer")
+        else:
+            logger.info(f"Pad token ID {pad_id}")
 
-        # data_collator = PackedStreamingDataCollator(
-        #     pad_id=pad_id,
-        #     max_seq_len=self.model.config.n_ctx
-        # )
-        data_collator = PackedStreamingDataCollator(
-            pad_id=pad_id,
-            eos_id=self.tokenizer.eos_token_id,
-            max_seq_len=self.model.config.n_ctx,           # 512 or 1 024
-            blocks_per_batch=training_args.per_device_train_batch_size
-        )
+        def _make_loader(ds, bs, *, pack=PACK_DATASET):                               
+            """Return DataLoader with a stateless collator that matches *bs*."""      
+            if pack:
+                collator = PackedStreamingDataCollator(
+                    pad_id=pad_id,
+                    eos_id=self.tokenizer.eos_token_id,
+                    max_seq_len=self.model.config.n_ctx,
+                    blocks_per_batch=bs,
+                )
+            else:
+                collator = CausalLMDataCollatorWithPadding(                  
+                         tokenizer=self.tokenizer,                                
+                         pad_to_multiple_of=8, 
+                         max_length=self.model.config.n_ctx                                   
+                ) 
+                # collator = StreamingDataCollator(pad_id=pad_id,
+                #                                  max_seq_len=self.model.config.n_ctx) 
+            return DataLoader(ds, batch_size=bs, collate_fn=collator, num_workers=4,
+                              pin_memory=True, prefetch_factor=2, persistent_workers=True, drop_last=True )
 
-        logger.info("Created dataset and data collators...")
-
-        # ------------------------------------------------------------------
-        # 5.  Custom Trainer (uses iterable‑style dataloaders)
-        # ------------------------------------------------------------------
-
-        def make_loader(ds, bs):
-            return DataLoader(
-                ds, batch_size=bs, collate_fn=data_collator,
-                num_workers=0, pin_memory=True
-            )
-
+        # Much faster... This lets us keep one instance of the data loader around so the reservoir isn’t recreated every epoch (epoch isnt
+        # estimated correctly currently so it otherwise gets reloaded often
+        ta = self.training_args
         class _IterTrainer(Trainer):
             def get_train_dataloader(self):
-                return make_loader(train_dataset, training_args.per_device_train_batch_size)
-
+                return _make_loader(train_dataset, ta.per_device_train_batch_size)   
             def get_eval_dataloader(self, _=None):
-                return make_loader(val_dataset, training_args.per_device_eval_batch_size) \
-                    if val_dataset is not None else None
+                return _make_loader(val_dataset, ta.per_device_eval_batch_size) if val_dataset is not None else None  
+
+        data_collator = lambda x: x  # real batching is done in _make_loader
 
         trainer = _IterTrainer(
             model=self.model,
-            args=training_args,
+            args=self.training_args,
             data_collator=data_collator,
             eval_dataset=val_dataset,  # may be None
         )
+        logger.info("Created dataset and data collators.")
         trainer.add_callback(HealthCheckCallback(log_every=500))
-        
-        # ------------------------------------------------------------------
-        # 6.  Train
-        # ------------------------------------------------------------------
+        if en_val_dataset is not None:
+            logger.info("Adding callback")
+            trainer.add_callback(
+                SingleLangEvalCallback(
+                    en_val_dataset,
+                    _make_loader,
+                    ta.per_device_eval_batch_size,
+                    "eval_en",
+                    pad_id
+                )
+            )
+     
         train_out = trainer.train(resume_from_checkpoint=resume_from_checkpoint)
         logger.info("Training finished.")
 
-        # ------------------------------------------------------------------
-        # 7.  Save artefacts
-        # ------------------------------------------------------------------
         trainer.save_model(output_dir)
         self.tokenizer.save_pretrained(output_dir)
 
@@ -765,7 +818,6 @@ class CustomCausalLMModel:
             split='test',
             tokenizer=self.tokenizer,
             buffer_size=10000,
-            shuffle=False,  # No need to shuffle for evaluation
             max_samples_per_language=max_samples_per_language
         )
 
@@ -773,7 +825,7 @@ class CustomCausalLMModel:
         temp_dir = os.path.join(output_dir, "temp_eval")
         eval_args = TrainingArguments(
             output_dir=temp_dir,
-            per_device_eval_batch_size=4,
+            per_device_eval_batch_size=self.training_args.per_device_eval_batch_size,
             fp16=True  # Use mixed precision for consistency
         )
 
@@ -781,14 +833,23 @@ class CustomCausalLMModel:
         pad_id = self.tokenizer.pad_token_id
         if pad_id is None:
             logger.error("No pad token defined in tokenizer")
-        data_collator = PackedStreamingDataCollator(
-            pad_id=self.tokenizer.pad_token_id,
-            eos_id=self.tokenizer.eos_token_id,
-            max_seq_len=self.model.config.n_ctx,           # 512 or 1 024
-            blocks_per_batch=4
-        )
-
-
+        # ---------- 9. Collator choice inside evaluate_streaming ---------------------
+        if PACK_DATASET:                                                                 # NEW
+            data_collator = PackedStreamingDataCollator(
+                pad_id=pad_id,
+                eos_id=self.tokenizer.eos_token_id,
+                max_seq_len=self.model.config.n_ctx,
+                blocks_per_batch=eval_args.per_device_eval_batch_size,
+            )
+        else:
+            #Tried both padded collator versions; still poor training performance
+            data_collator = CausalLMDataCollatorWithPadding(                  
+                         tokenizer=self.tokenizer,                                
+                         pad_to_multiple_of=8, 
+                         max_length=self.model.config.n_ctx                                   
+                ) 
+            # data_collator = StreamingDataCollator(pad_id=pad_id,
+            #                                     max_seq_len=self.model.config.n_ctx) 
         # Create trainer and evaluate
         trainer = Trainer(
             model=self.model,
@@ -811,7 +872,6 @@ class CustomCausalLMModel:
                     split='test',
                     tokenizer=self.tokenizer,
                     buffer_size=5000,
-                    shuffle=False,
                     max_samples=max_samples_per_language  # Limit samples for this language
                 )
                 
@@ -877,7 +937,7 @@ def train_model_on_tokenized_data_streaming(tokenized_files,
             logger.warning(f"Missing special tokens: {missing_tokens}")
     except Exception as e:
         logger.error(f"Failed to load tokenizer: {str(e)}")
-        return None
+        raise
     
     set_seed(42)  # For reproducibility
     wrapper = CustomCausalLMModel(hf_tok, config=model_config, small=True if model_arch=="small" else False)
@@ -936,7 +996,7 @@ def train_models_from_config(config_dict):
     models_output_dir = global_settings.get("model_output_dir", "")
     # Get global resume_training setting (default to True)
     global_resume_training = global_settings.get("resume_training", True)
-    
+
     # Train models for each tokenizer
     results = {}
     for tokenizer_config in tokenizers:
@@ -975,13 +1035,13 @@ def train_models_from_config(config_dict):
             model_config,
             output_dir,
             model_arch=model_size,
-            resume_training=resume_training
+            resume_training=False #TODO: change back after debugging
         )
         
         if model_path:
             results[name] = model_path
             
-    return results
+    return results 
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser(description="Train language models on tokenized data")
