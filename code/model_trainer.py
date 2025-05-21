@@ -28,63 +28,196 @@ logging.basicConfig(
 )
 logger = logging.getLogger(__name__)
 
-PACK_DATASET: bool = True  # set False → disable packing & use dynamic padding  
+PACK_DATASET: bool = False  # set False → disable packing & use dynamic padding  
+
+class DataInspectionCallback(TrainerCallback):
+    """Debug callback to inspect data batches during training and evaluation."""
+    
+    def __init__(self, logger, inspect_frequency=1000):
+        self.logger = logger
+        self.inspect_frequency = inspect_frequency
+        self.train_batch_count = 0
+        self.eval_batch_count = 0
+        
+    def on_step_begin(self, args, state, control, **kwargs):
+        """Inspect training batches periodically."""
+        if state.global_step % self.inspect_frequency == 0:
+            self._inspect_batch("TRAIN", kwargs.get("inputs"), state.global_step)
+        return control
+        
+    def on_prediction_step(self, args, state, control, **kwargs):
+        """Inspect evaluation batches."""
+        if self.eval_batch_count % 100 == 0:  # Every 100 eval batches
+            self._inspect_batch("EVAL", kwargs.get("inputs"), self.eval_batch_count)
+        self.eval_batch_count += 1
+        return control
+        
+    def _inspect_batch(self, phase, inputs, step):
+        """Log batch statistics."""
+        if inputs is None:
+            return
+            
+        input_ids = inputs.get("input_ids")
+        labels = inputs.get("labels")
+        
+        if input_ids is not None:
+            batch_size, seq_len = input_ids.shape
+            non_pad_tokens = (input_ids != self.tokenizer.pad_token_id).sum().item()
+            unique_tokens = len(torch.unique(input_ids))
+            
+            self.logger.info(f"[{phase}] Step {step}: "
+                           f"batch_size={batch_size}, seq_len={seq_len}, "
+                           f"non_pad_tokens={non_pad_tokens}, "
+                           f"unique_tokens={unique_tokens}")
+            
+            # Check label statistics
+            if labels is not None:
+                valid_labels = (labels != -100).sum().item()
+                self.logger.info(f"[{phase}] Step {step}: valid_labels={valid_labels}")
+                
+            # Sample first sequence
+            first_seq = input_ids[0]
+            first_10_tokens = first_seq[:10].tolist()
+            self.logger.info(f"[{phase}] Step {step}: first_10_tokens={first_10_tokens}")
 
 
 class SingleLangEvalCallback(TrainerCallback):
-    def __init__(self, dataset, make_loader_fn, bs, name, pad_id):
-        self.dataset   = dataset
-        self.make_loader  = make_loader_fn
-        self.bs           = bs
-        self.metric_name = name
-        self.trainer      = None          # will be filled by set_trainer
-        self._in_callback = False         # recursion guard
-        self.pad_id       = pad_id
-
-    def set_trainer(self, trainer):
-        self.trainer = trainer
-
-    def on_evaluate(self, args, state, control, metrics, **kwargs):
-        if self.dataset is None or self.trainer is None or self._in_callback:
-            return control                # nothing to do
-        self._in_callback = True
-
-        # Build a loader that uses the same collator/padding logic
-        loader: DataLoader = self.make_loader(
-            self.dataset, self.bs
-        )
-
-        # Manual loop to avoid triggering callbacks again
-        model = self.trainer.model
-        model.eval()
-        tot_loss, tot_tokens, tot_non_pad = 0.0, 0, 0
-
-        for batch in loader:
-            batch = {k: v.to(model.device) for k, v in batch.items()}
+    """Callback to evaluate on a single language (e.g., English) during training."""
+    
+    def __init__(self, dataset, tokenizer, collator_config, metric_name="eval_en"):
+        """
+        Args:
+            dataset: The single-language evaluation dataset
+            tokenizer: The tokenizer (needed for collator creation)
+            collator_config: Dict with keys needed to create collator
+                - pad_id, eos_id, max_seq_len, batch_size, pack_dataset
+            metric_name: Prefix for the metrics (e.g., "eval_en")
+        """
+        self.dataset = dataset
+        self.tokenizer = tokenizer
+        self.collator_config = collator_config
+        self.metric_name = metric_name
+        self._recursion_guard = False
+        
+    def on_evaluate(self, args, state, control, metrics=None, **kwargs):
+        """Run additional evaluation on the single-language dataset."""
+        if self.dataset is None or self._recursion_guard:
+            return control
+            
+        # Get trainer from kwargs - this is passed by HuggingFace
+        trainer = kwargs.get("model")  # In newer versions
+        if trainer is None:
+            # Try to get from the bound method
+            import inspect
+            frame = inspect.currentframe()
+            try:
+                # Walk up the stack to find the trainer instance
+                while frame:
+                    if 'self' in frame.f_locals:
+                        obj = frame.f_locals['self']
+                        if hasattr(obj, 'model') and hasattr(obj, 'evaluate'):
+                            trainer = obj
+                            break
+                    frame = frame.f_back
+            finally:
+                del frame
+                
+        if trainer is None:
+            logger.warning(f"{self.metric_name}: Could not find trainer instance")
+            return control
+            
+        self._recursion_guard = True
+        
+        try:
+            # Create data loader with same configuration as main eval
+            if self.collator_config.get("pack_dataset", False):
+                collator = PackedStreamingDataCollator(
+                    pad_id=self.collator_config["pad_id"],
+                    eos_id=self.collator_config["eos_id"],
+                    max_seq_len=self.collator_config["max_seq_len"],
+                    blocks_per_batch=self.collator_config["batch_size"],
+                )
+            else:
+                collator = CausalLMDataCollatorWithPadding(
+                    tokenizer=self.tokenizer,
+                    pad_to_multiple_of=8,
+                    max_length=self.collator_config["max_seq_len"]
+                )
+            
+            # Create dataloader
+            dataloader = DataLoader(
+                self.dataset,
+                batch_size=self.collator_config["batch_size"],
+                collate_fn=collator,
+                num_workers=0,  # Use 0 for evaluation
+                pin_memory=True,
+                drop_last=False
+            )
+            
+            # Run evaluation
+            model = trainer.model if hasattr(trainer, 'model') else trainer
+            model.eval()
+            
+            total_loss = 0.0
+            total_tokens = 0
+            total_non_pad_tokens = 0
+            num_batches = 0
+            
             with torch.no_grad():
-                loss = model(**batch).loss
-            tokens_in_batch = batch["input_ids"].numel()
-            non_pad = (batch["input_ids"] != self.pad_id).sum().item()
-
-            tot_loss   += loss.item() * tokens_in_batch
-            tot_tokens += tokens_in_batch
-            tot_non_pad += non_pad
-
-        loss = tot_loss / max(1, tot_tokens)
-        log_dict = {
-            self.metric_name+"_loss"              : loss,
-            self.metric_name+"_tokens"            : tot_tokens,
-            self.metric_name+"_non_pad_tokens"    : tot_non_pad,
-        }
-        metrics.update(log_dict)
-
-        self.trainer.log(log_dict)
-        logger.info(f"[EN-only] step {state.global_step:,} | "
-                 f"loss {loss:.3f} | "
-                 f"tokens {tot_tokens:,} | non-pad {tot_non_pad:,}")
-
-        self._in_callback = False
-        return control     # must return the (possibly updated) control object
+                for batch in dataloader:
+                    # Move batch to device
+                    batch = {k: v.to(model.device) for k, v in batch.items()}
+                    
+                    # Forward pass
+                    outputs = model(**batch)
+                    loss = outputs.loss
+                    
+                    # Count tokens
+                    batch_size = batch["input_ids"].size(0)
+                    seq_len = batch["input_ids"].size(1)
+                    total_batch_tokens = batch_size * seq_len
+                    non_pad_tokens = (batch["input_ids"] != self.collator_config["pad_id"]).sum().item()
+                    
+                    # Accumulate metrics
+                    total_loss += loss.item() * total_batch_tokens
+                    total_tokens += total_batch_tokens
+                    total_non_pad_tokens += non_pad_tokens
+                    num_batches += 1
+            
+            # Calculate average loss
+            avg_loss = total_loss / max(1, total_tokens)
+            
+            # Create metrics dict
+            eval_metrics = {
+                f"{self.metric_name}_loss": avg_loss,
+                f"{self.metric_name}_total_tokens": total_tokens,
+                f"{self.metric_name}_non_pad_tokens": total_non_pad_tokens,
+                f"{self.metric_name}_num_batches": num_batches,
+            }
+            
+            # Update the metrics dict that will be logged
+            if metrics is not None:
+                metrics.update(eval_metrics)
+            
+            # Log the results
+            logger.info(
+                f"[{self.metric_name}] step {state.global_step} | "
+                f"loss {avg_loss:.4f} | "
+                f"batches {num_batches} | "
+                f"tokens {total_tokens:,} | "
+                f"non-pad {total_non_pad_tokens:,}"
+            )
+            
+            # Also log through trainer's logging mechanism
+            if hasattr(trainer, 'log'):
+                trainer.log(eval_metrics)
+                
+        except Exception as e:
+            logger.error(f"Error in {self.metric_name} evaluation: {str(e)}", exc_info=True)
+        finally:
+            self._recursion_guard = False
+            
+        return control
 
 
 class HealthCheckCallback(TrainerCallback):
@@ -358,14 +491,10 @@ class CausalLMDataCollatorWithPadding(DataCollatorWithPadding):
                 f["input_ids"] = f["input_ids"][:self.max_length]
                 if "attention_mask" in f:
                     f["attention_mask"] = f["attention_mask"][:self.max_length]
-        batch = self.tokenizer.pad(
-            features,
-            padding="longest",
-            pad_to_multiple_of=self.pad_to_multiple_of,
-            return_tensors="pt",
-        )                                      
+                                   
         batch = super().__call__(features)                             
-        batch["labels"] = batch["input_ids"].clone()                   
+        batch["labels"] = batch["input_ids"].clone()
+        batch["labels"][batch["input_ids"] == self.tokenizer.pad_token_id] = -100                   
         return batch                                                   
 
 
@@ -497,6 +626,7 @@ class PackedStreamingDataCollator:
         labels         = torch.full_like(input_ids, -100)
         attention_mask = torch.zeros_like(input_ids)
 
+        #TODO: allocate blocks once initially to make faster
         for row, toks in enumerate(blocks):
             input_ids[row] = torch.tensor(toks, dtype=torch.long)
 
@@ -624,7 +754,8 @@ class CustomCausalLMModel:
             buffer_size=val_buffer_size,
             max_samples_per_language=val_samples_per_lang,
         )
-        val_dataset = create_map_dataset(val_stream_ds, val_samples_per_lang * len(tokenized_files))
+
+        val_dataset = val_stream_ds#create_map_dataset(val_stream_ds, val_samples_per_lang * len(tokenized_files))
         if val_dataset is None:
             logger.info("Validation set empty – evaluation disabled.")
             evaluation_strategy = "no"
@@ -640,10 +771,7 @@ class CustomCausalLMModel:
                 buffer_size=val_buffer_size,
                 max_samples_per_language=val_samples_per_lang,
             )
-            en_val_dataset = create_map_dataset(
-                en_stream_ds,
-                val_samples_per_lang           # same cap you used above
-            )
+            en_val_dataset = en_stream_ds#create_map_dataset(en_stream_ds,val_samples_per_lang)
         else:
             en_val_dataset = None
             logger.warning("No English data found – EN eval callback will be skipped.")
@@ -741,7 +869,7 @@ class CustomCausalLMModel:
         else:
             logger.info(f"Pad token ID {pad_id}")
 
-        def _make_loader(ds, bs, *, pack=PACK_DATASET):                               
+        def _make_loader(ds, bs, *, pack=PACK_DATASET, is_train=True):                               
             """Return DataLoader with a stateless collator that matches *bs*."""      
             if pack:
                 collator = PackedStreamingDataCollator(
@@ -755,11 +883,23 @@ class CustomCausalLMModel:
                          tokenizer=self.tokenizer,                                
                          pad_to_multiple_of=8, 
                          max_length=self.model.config.n_ctx                                   
-                ) 
+                )
+            if not is_train and hasattr(ds, '__len__'):
+                # If dataset has a length, use it
+                num_workers = 0  # Single worker for eval to ensure consistency
+            else:
+                num_workers = 4 if is_train else 0
                 # collator = StreamingDataCollator(pad_id=pad_id,
                 #                                  max_seq_len=self.model.config.n_ctx) 
-            return DataLoader(ds, batch_size=bs, collate_fn=collator, num_workers=4,
-                              pin_memory=True, prefetch_factor=2, persistent_workers=True, drop_last=True )
+            return DataLoader(ds, 
+                            batch_size=bs, 
+                            collate_fn=collator, 
+                            num_workers=num_workers,
+                            pin_memory=True, 
+                            prefetch_factor=2 if num_workers > 0 else None, 
+                            persistent_workers=True if num_workers > 0 else False, 
+                            drop_last=False  
+                        )
 
         # Much faster... This lets us keep one instance of the data loader around so the reservoir isn’t recreated every epoch (epoch isnt
         # estimated correctly currently so it otherwise gets reloaded often
@@ -767,8 +907,11 @@ class CustomCausalLMModel:
         class _IterTrainer(Trainer):
             def get_train_dataloader(self):
                 return _make_loader(train_dataset, ta.per_device_train_batch_size)   
-            def get_eval_dataloader(self, _=None):
-                return _make_loader(val_dataset, ta.per_device_eval_batch_size) if val_dataset is not None else None  
+            def get_eval_dataloader(self, eval_dataset=None):
+                ds = eval_dataset if eval_dataset is not None else val_dataset
+                if ds is None:
+                    return None
+                return _make_loader(ds, ta.per_device_eval_batch_size, is_train=False)
 
         data_collator = lambda x: x  # real batching is done in _make_loader
 
@@ -780,17 +923,24 @@ class CustomCausalLMModel:
         )
         logger.info("Created dataset and data collators.")
         trainer.add_callback(HealthCheckCallback(log_every=500))
+        trainer.add_callback(DataInspectionCallback(logger, inspect_frequency=1000))
+
         if en_val_dataset is not None:
-            logger.info("Adding callback")
-            trainer.add_callback(
-                SingleLangEvalCallback(
-                    en_val_dataset,
-                    _make_loader,
-                    ta.per_device_eval_batch_size,
-                    "eval_en",
-                    pad_id
-                )
+            logger.info("Adding English evaluation callback")
+            collator_config = {
+                "pad_id": pad_id,
+                "eos_id": self.tokenizer.eos_token_id,
+                "max_seq_len": self.model.config.n_ctx,
+                "batch_size": ta.per_device_eval_batch_size,
+                "pack_dataset": PACK_DATASET,
+            }
+            en_callback = SingleLangEvalCallback(
+                dataset=en_val_dataset,
+                tokenizer=self.tokenizer,
+                collator_config=collator_config,
+                metric_name="eval_en"
             )
+            trainer.add_callback(en_callback)
      
         train_out = trainer.train(resume_from_checkpoint=resume_from_checkpoint)
         logger.info("Training finished.")
