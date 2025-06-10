@@ -7,6 +7,7 @@ import torch
 import logging
 from typing import Dict, List, Tuple, Set, Optional
 from torch.nn.utils.rnn import pad_sequence
+import numpy as np
 
 
 from tokenizers import Tokenizer
@@ -19,6 +20,8 @@ from code.utils import (
     get_baseline_bytes,
     _accumulate_usage,
     _accumulate_usage_dummy,
+    _compute_alternatives,
+    _compute_loss_with_alternatives,
     load_tokenizer_with_mode,
     _build_hf_tokenizer_from_probs,
     tokmix_merge,
@@ -185,7 +188,7 @@ class StandardUnigramLMTokenizer:
             encoded_inputs = [encoded_inputs]
 
         # ---------------- figure out target length -------------------------
-        pad_id = getattr(self.base_tokenizer, "pad_token_id", 0)
+        pad_id = getattr(self.base_tokenizer, "pad_token_id", self.get_vocab()[SPECIAL_TOKENS["pad_token"]])
         longest = max(len(f["input_ids"]) for f in encoded_inputs)
         if max_length is not None:
             longest = max_length
@@ -196,22 +199,55 @@ class StandardUnigramLMTokenizer:
         batch = {}
         for field in encoded_inputs[0].keys():
             values = [f[field] for f in encoded_inputs]
-            if not isinstance(values[0], list):
-                # label or scalar → keep as is
-                batch[field] = torch.tensor(values) if return_tensors == "pt" else values
+            if all(v is None for v in values):
                 continue
-
-            if field == "input_ids":
-                padded = [v + [pad_id] * (longest - len(v)) for v in values]
-            elif field == "attention_mask":
-                padded = [v + [0] * (longest - len(v)) for v in values]
-            else:  # token_type_ids, special_tokens_mask, labels for token-cls…
-                padded = [v + [-100] * (longest - len(v)) for v in values]
-
-            batch[field] = (
-                torch.tensor(padded) if return_tensors == "pt" else padded
-            )
-
+            # Handle already tensor values
+            if len(values) > 0 and isinstance(values[0], torch.Tensor):
+                # Stack tensors
+                batch[field] = torch.stack(values)
+                continue
+            
+            # Check if this is a sequence field that needs padding
+            if len(values) > 0 and isinstance(values[0], (list, np.ndarray)):
+                # This is a sequence field (input_ids, attention_mask, etc.)
+                if field == "input_ids":
+                    padded = [v[:longest] + [pad_id] * (longest - len(v[:longest])) for v in values]
+                elif field == "attention_mask":
+                    padded = [v[:longest] + [0] * (longest - len(v[:longest])) for v in values]
+                elif field == "token_type_ids":
+                    # For token_type_ids, pad with the last value (usually 1 for second segment)
+                    padded = []
+                    for v in values:
+                        v_truncated = v[:longest]
+                        last_value = v_truncated[-1] if v_truncated else 0
+                        padded.append(v_truncated + [last_value] * (longest - len(v_truncated)))
+                elif field == "labels":
+                    # For labels, pad with -100 (ignored in loss)
+                    padded = [v[:longest] + [-100] * (longest - len(v[:longest])) for v in values]
+                else:
+                    # For other sequence fields, pad with 0
+                    logger.info(f"Unknown field type {field}; padding with 0s")
+                    padded = [v[:longest] + [0] * (longest - len(v[:longest])) for v in values]
+                
+                batch[field] = torch.tensor(padded, dtype=torch.long) if return_tensors == "pt" else padded
+            
+            else:
+                # This is a scalar field (label, language tag, etc.)
+                # Only convert to tensor if it's numeric
+                if len(values) > 0:
+                    first_val = values[0]
+                    
+                    # Check if values are numeric
+                    if isinstance(first_val, (int, float)):
+                        try:
+                            batch[field] = torch.tensor(values) if return_tensors == "pt" else values
+                        except:
+                            # If conversion fails, keep as list
+                            batch[field] = values
+                    else:
+                        # Non-numeric field (like language tags), keep as is
+                        batch[field] = values
+    
         # If attention_mask wasn’t in the features, create it now
         if "attention_mask" not in batch:
             batch["attention_mask"] = (
@@ -312,6 +348,7 @@ class StandardUnigramLMTokenizer:
         corpus_files: Optional[List[str]],
         per_lang: bool,
         corpus_info: Optional[Dict[str, str]] = None,
+        loss_approximation: bool = True
     ) -> None:
         if per_lang and not corpus_info:
             raise ValueError("corpus_info required when multigram=True")
@@ -344,17 +381,20 @@ class StandardUnigramLMTokenizer:
         # pruning schedule ---------------------------------------------------
         k_total = len(all_tokens) - self.vocab_size
         k_step = [math.floor(k_total / NUM_TRIMMING_ITERATIONS)] * NUM_TRIMMING_ITERATIONS + [0] * (self.num_iterations - NUM_TRIMMING_ITERATIONS)
+        
         for it in range(self.num_iterations):
-            logger.info("EM %d/%d – starting | vocab=%d | to trim=%d", it + 1, self.num_iterations, len(all_tokens), k_total)
-
-            # ===================== E & M – identical maths ==================
-            
+            logger.info("EM %d/%d – starting | vocab=%d | to trim=%d", it + 1, self.num_iterations, len(all_tokens), k_total)            
             if per_lang:
                 lang_counts = {lc: {tk: 0.0 for tk in all_tokens} for lc in self.lang_codes}
                 unk_count = 0
                 total_counts = 0
                 for lc, file in zip(self.lang_codes, corpus_files):
-                    c_dict, _ = _accumulate_usage(file, self.per_lang_probs[lc], self.unk_token, mode=self.em_mode, byte_level=self.byte_level)
+                    c_dict, _ = _accumulate_usage(file, 
+                        self.per_lang_probs[lc], 
+                        self.unk_token, 
+                        mode=self.em_mode, 
+                        byte_level=self.byte_level
+                    )
                     for tk, v in c_dict.items():
                         lang_counts[lc][tk] += v
                     unk_count += lang_counts[lc][self.unk_token]
@@ -387,25 +427,54 @@ class StandardUnigramLMTokenizer:
                     d  = 0.5 * sum(abs(self.per_lang_probs[lc].get(tk, 0) - prev_lang_probs[lc].get(tk, 0)) for tk in all_tokens)
                     logger.info("      [%s] UNK=%.8g | Δ‑dist=%.3e", lc, up, d)
 
-            #import ipdb; ipdb.set_trace()
             # -------------------- pruning ----------------------------------
             k_drop = k_step[it]
             k_drop = min(k_drop, len(all_tokens) - self.vocab_size)
             if k_drop > 0:
+                if not loss_approximation:
+                    logger.info("Pre-computing token alternatives using parallel processing...")
+                    if per_lang:
+                        # For multilingual, compute alternatives for each language
+                        lang_alternatives = {}
+                        for lc, file in zip(self.lang_codes, corpus_files):
+                            lang_alternatives[lc] = _compute_alternatives(
+                                [file], self.per_lang_probs[lc], self.unk_token, 
+                                byte_level=self.byte_level
+                            )
+                    else:
+                        alternatives = _compute_alternatives(
+                            corpus_files, p_token, self.unk_token, 
+                            byte_level=self.byte_level
+                    )
+
                 before = len(all_tokens)
                 under_consideration = all_tokens - pinned
                 if per_lang:
-                    per_lang_loss = {}
-                    for lc in self.lang_codes:
-                        per_lang_loss[lc] = {
-                            tk: -lang_counts[lc][tk] * math.log(max(self.per_lang_probs[lc][tk], 1e-30)) for tk in under_consideration
-                        }  # noqa: E127
-                    loss = [(tk, sum(self.mixture_weights[lc] * per_lang_loss[lc][tk] for lc in self.lang_codes)) for tk in under_consideration]
-            
+                # For multilingual case
+                    loss = []
+                    for tk in under_consideration:
+                        total_loss = 0.0
+                        for lc in self.lang_codes:
+                            if loss_approximation:
+                                lang_loss = -lang_counts[lc][tk] * math.log(max(self.per_lang_probs[lc][tk], 1e-30))
+                            else:
+                                lang_loss = _compute_loss_with_alternatives(
+                                    tk, lang_counts[lc], lang_alternatives[lc], self.per_lang_probs[lc], self.unk_token
+                                )
+                            total_loss += self.mixture_weights[lc] * lang_loss
+                        
+                        loss.append((tk, total_loss))
                 else:
-                    loss = [
-                        (tk, -counts[tk] * math.log(max(p_token[tk], 1e-30))) for tk in under_consideration
-                    ]
+                    loss = []
+                    for tk in under_consideration:
+                        if loss_approximation:
+                            tk_loss = -counts[tk] * math.log(max(p_token[tk], 1e-30))
+                        else:
+                            tk_loss = _compute_loss_with_precomputed_alternatives(
+                                tk, counts, alternatives, p_token, self.unk_token
+                            )
+                        loss.append((tk, tk_loss))
+                
                 tokens_to_remove = self._tokens_to_remove(loss, k_drop)
                 all_tokens -= tokens_to_remove
                 pruned = before - len(all_tokens)
