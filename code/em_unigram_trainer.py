@@ -4,7 +4,7 @@ import math
 import numpy as np
 from collections import Counter, defaultdict
 
-from code.utils import _accumulate_usage, segment_text_viterbi, MIN_TOKEN_PROB
+from code.utils import _accumulate_usage, MIN_TOKEN_PROB
 
 logger = logging.getLogger(__name__)
 
@@ -52,7 +52,7 @@ class EMUnigramTrainer:
 
         self.token_probs = None  # final distribution
 
-    def train(self, corpus_file, batch_size=1000, num_processes=None):
+    def train(self, corpus_file, num_processes=None):
         """
         Run the EM algorithm over `corpus_file` using the same approach as
         StandardUnigramLMTokenizer.
@@ -89,7 +89,6 @@ class EMUnigramTrainer:
                 corpus_file, 
                 p_token,
                 self.unk_token, 
-                batch_size=batch_size,
                 num_processes=num_processes,
                 mode=self.em_mode,
                 byte_level=self.byte_level

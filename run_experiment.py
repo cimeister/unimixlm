@@ -66,27 +66,8 @@ def process_corpora(config: Dict[str, Any], args: argparse.Namespace) -> Dict[st
                 }
         
         return corpus_info
-        
-    # Determine sampling mode
-    # max_samples = args.max_samples if args.max_samples is not None else config["experiment"].get("max_samples_per_language")
-    # max_total = args.max_total_samples if args.max_total_samples is not None else config["experiment"].get("max_total_samples")
-    # proportional = max_total is not None or config["experiment"].get("proportional_sampling", False)
-    
+            
     corpus_info = download_corpus(config)
-    # if proportional:
-    #     logger.info(f"Using proportional sampling with max total samples: {max_total}")
-    #     corpus_info = process_all_corpora(
-    #         max_total_samples=max_total,
-    #         proportional_sampling=True,
-    #         languages=config["corpus"].get("languages")
-    #     )
-    # else:
-    #     logger.info(f"Using fixed sampling with max {max_samples} samples per language")
-    #     corpus_info = process_all_corpora(
-    #         max_samples_per_language=max_samples,
-    #         languages=config["corpus"].get("languages")
-    #     )
-    
     return corpus_info
 
 
@@ -410,13 +391,15 @@ def finetune_models(
             logger.warning("Tokenizer path missing for %s; skipping.", name)
             continue
 
+        pretrained_model_dir_base = os.path.basename(model_dir)
+
         ft_entry = {
             "name":          name,
             "model_path":    model_dir,
             "tokenizer_info": tokenizer_paths[name],
             "tasks":         config["finetune_tasks"],
             "hyper":         config.get("finetune_hyper", {}),
-            "output_dir":    os.path.join(results_dir, name),
+            "output_dir":    os.path.join(results_dir, pretrained_model_dir_base),
             "languages":     languages
         }
 
@@ -424,10 +407,6 @@ def finetune_models(
         from code.model_finetuner import finetune_from_config  # import here to avoid heavy deps at startup
         metrics = finetune_from_config(ft_entry)   # returns {task: json_path}
         ft_results[name] = metrics
-
-        # optional: save a pointer for later runs
-        cache_path = os.path.join(results_dir, f"{name}_metrics_ptr.json")
-        json.dump(metrics, open(cache_path, "w"))
 
     return ft_results
 
