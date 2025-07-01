@@ -86,9 +86,9 @@ def train_tokenizers(config: Dict[str, Any], corpus_info: Dict[str, Any]) -> Dic
     for tokenizer_config in config["tokenizers"]:
         tokenizer_name = tokenizer_config["name"]
         tokenizer_type = tokenizer_config["type"]
+        approx_loss = tokenizer_config.get("approx_loss", False)
         byte_level = config["experiment"].get("byte_level", False)
         em_mode = tokenizer_config.get("em_mode", "soft")
-        min_char_occurence_threshold = tokenizer_config.get("min_char_occurence_threshold")
 
         logger.info(f"Processing tokenizer: {tokenizer_name} (type: {tokenizer_type} at {'byte' if byte_level else 'char'}-level)")
         
@@ -172,7 +172,8 @@ def train_tokenizers(config: Dict[str, Any], corpus_info: Dict[str, Any]) -> Dic
 
             paths = train_lang_tokenizers(tokenizer_training_files, tokenizers_dir,
                                           vocab_size=vocab_size, 
-                                          byte_level=byte_level)
+                                          byte_level=byte_level,
+                                          approx_loss=approx_loss)
 
             tokmix_path = train_tokmix(paths,
                                        k_final=vocab_size,
@@ -199,7 +200,7 @@ def train_tokenizers(config: Dict[str, Any], corpus_info: Dict[str, Any]) -> Dic
                 multigram=multigram,
                 byte_level=byte_level,
                 output_path=output_file,
-                min_char_occurence_threshold=min_char_occurence_threshold
+                approx_loss=approx_loss
             )
             
             if path:

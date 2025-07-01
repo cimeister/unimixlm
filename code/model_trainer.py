@@ -1,4 +1,5 @@
 import os
+import math
 import logging
 import json
 import random
@@ -14,12 +15,12 @@ from transformers import (
     TrainingArguments,
     PreTrainedTokenizerFast,
     TrainerCallback,
-    DataCollatorForLanguageModeling,
     DataCollatorWithPadding,
     set_seed
 )
 from datasets import Dataset, interleave_datasets, load_dataset
 from code.utils import set_special_tokens
+from code.constants import SPECIAL_TOKENS
 from torch.utils.data import IterableDataset, DataLoader
 
 logging.basicConfig(
@@ -28,8 +29,159 @@ logging.basicConfig(
 )
 logger = logging.getLogger(__name__)
 
-PACK_DATASET: bool = False  # set False → disable packing & use dynamic padding  
+PACK_DATASET: bool = True  # set False → disable packing & use dynamic padding  
 
+def get_vocab_aware_config(vocab_size: int, pad_id: int):
+    """
+    Adjust model configuration and training parameters based on vocabulary size.
+    
+    Args:
+        vocab_size: Size of the vocabulary
+        base_config: Base configuration to modify
+    
+    Returns:
+        Tuple of (model_config, training_args_adjustments)
+    """
+    
+    # Determine scaling factors based on vocab size
+    if vocab_size <= 32000:
+        # Small vocabulary (normal settings)
+        lr_scale = 1.0
+        grad_clip_scale = 1.0
+        warmup_scale = 1.0
+        embedding_scale = 1.0
+    elif vocab_size <= 65000:
+        # Medium vocabulary 
+        lr_scale = 0.7
+        grad_clip_scale = 0.5
+        warmup_scale = 1.5
+        embedding_scale = 0.8
+    else:
+        # Large vocabulary (>65k) - much more conservative
+        lr_scale = 0.5
+        grad_clip_scale = 0.3
+        warmup_scale = 2.0
+        embedding_scale = 0.6
+    
+    logger.info(f"Vocab size {vocab_size:,}: applying scales - LR: {lr_scale}, GradClip: {grad_clip_scale}")
+    
+    # Model config adjustments
+    model_config = GPT2Config(
+        vocab_size=vocab_size,
+        n_positions=512,
+        n_ctx=512,
+        n_embd=768,
+        n_layer=12,
+        n_head=12,
+        resid_pdrop=0.1,
+        embd_pdrop=0.1,
+        attn_pdrop=0.1,
+        use_cache=False,
+        pad_token_id=pad_id,
+        # Add embedding scaling for large vocabs
+        initializer_range=0.02 * embedding_scale,  # Reduce init range for large embeddings
+    )
+    
+    # Training argument adjustments
+    training_adjustments = {
+        'learning_rate': 3e-4 * lr_scale,
+        'max_grad_norm': 1.0 * grad_clip_scale,
+        'warmup_steps': int(3_000 * warmup_scale),
+        'per_device_train_batch_size': 12 if vocab_size <= 65000 else 8,  # Reduce batch size for large vocab
+        'gradient_accumulation_steps': 2 if vocab_size <= 65000 else 3,   # Adjust accumulation
+        'weight_decay': 0.01 if vocab_size <= 65000 else 0.005,           # Reduce weight decay
+        'adam_epsilon': 1e-8 if vocab_size <= 65000 else 1e-6,            # Larger epsilon for stability
+        'lr_scheduler_type': 'cosine' if vocab_size <= 65000 else 'linear', # Linear more stable
+        'optim': 'adamw_8bit' if vocab_size <= 65000 else 'adamw_torch'
+    }
+    
+    return model_config, training_adjustments
+###################################################
+#              Callbacks   
+##################################################
+class NaNCheckCallback(TrainerCallback):
+    def on_step_end(self, args, state, control, **kwargs):
+        logs = kwargs.get("logs", {})
+        if math.isnan(logs.get("loss", 0)) or math.isinf(logs.get("loss", 0)):
+            logger.error(f"NaN/Inf loss detected at step {state.global_step}")
+            control.should_training_stop = True
+        return control
+
+class GradientDebugCallback(TrainerCallback):
+    def on_step_end(self, args, state, control, **kwargs):
+        if state.global_step % 500 == 0:
+            model = kwargs.get("model")
+            # Check if gradients exist and their norms
+            total_norm = 0.0
+            for p in model.parameters():
+                if p.grad is not None:
+                    param_norm = p.grad.data.norm(2)
+                    total_norm += param_norm.item() ** 2
+            total_norm = total_norm ** (1. / 2)
+            logger.info(f"Raw grad norm: {total_norm:.2f}")
+        return control
+
+class DataLoaderDebugCallback(TrainerCallback):
+    """Callback that logs data loading events to help debug epoch transitions."""
+    
+    def __init__(self, logger):
+        self.logger = logger
+        self.epoch_count = 0
+        self.train_batch_count = 0
+        self.eval_batch_count = 0
+        self.dataset_fingerprints = {}
+        
+    def on_epoch_begin(self, args, state, control, **kwargs):
+        """Log when an epoch begins."""
+        self.epoch_count += 1
+        self.logger.info(f"[DataLoaderDebug] Epoch {self.epoch_count} begins at step {state.global_step}")
+        try:
+            # Try to verify if dataset iterator was reset
+            if hasattr(kwargs.get("train_dataloader", {}).dataset, '_epoch'):
+                dataset_epoch = kwargs["train_dataloader"].dataset._epoch
+                self.logger.info(f"[DataLoaderDebug] Dataset internal epoch is {dataset_epoch}")
+        except Exception as e:
+            self.logger.info(f"[DataLoaderDebug] Couldn't check dataset epoch: {e}")
+        return control
+    
+    def on_step_begin(self, args, state, control, **kwargs):
+        """Log progress to verify batches are being iterated."""
+        if state.global_step % 500 == 0:
+            self.train_batch_count += 500  # Approximate
+            self.logger.info(f"[DataLoaderDebug] Processed ~{self.train_batch_count} training batches so far")
+            if hasattr(kwargs.get("train_dataloader", {}).dataset, '_epoch'):
+                dataset_epoch = kwargs["train_dataloader"].dataset._epoch
+                self.logger.info(f"[DataLoaderDebug] Dataset internal epoch is {dataset_epoch}")
+        return control
+    
+    def on_evaluate(self, args, state, control, **kwargs):
+        """Log when evaluation happens."""
+        self.logger.info(f"[DataLoaderDebug] Evaluation at step {state.global_step}")
+        try:
+            # Check if eval loader is created fresh
+            eval_loader = kwargs.get("eval_dataloader")
+            if eval_loader:
+                loader_id = id(eval_loader)
+                prev_id = getattr(self, 'last_eval_loader_id', None)
+                self.last_eval_loader_id = loader_id
+                self.logger.info(f"[DataLoaderDebug] Eval loader {'is new' if loader_id != prev_id else 'reused'}")
+        except Exception:
+            pass
+        return control
+    
+    def on_prediction_step(self, args, state, control, **kwargs):
+        """Log during evaluation to monitor batch processing."""
+        self.eval_batch_count += 1
+        return control
+    
+    def on_train_end(self, args, state, control, **kwargs):
+        """Log summary at end of training."""
+        self.logger.info(f"[DataLoaderDebug] Training ended after {self.epoch_count} epochs, "
+                       f"~{self.train_batch_count} train batches, "
+                       f"{self.eval_batch_count} total eval batches")
+        return control
+
+# Add to trainer:
 class DataInspectionCallback(TrainerCallback):
     """Debug callback to inspect data batches during training and evaluation."""
     
@@ -261,6 +413,9 @@ class HealthCheckCallback(TrainerCallback):
         return control
 
 
+###################################################
+#              Custom Dataset classes   
+##################################################
 class StreamingTokenizedDataset(IterableDataset):
     """
     Streaming dataset that reads pre-tokenized data from multiple JSONL files.
@@ -276,6 +431,7 @@ class StreamingTokenizedDataset(IterableDataset):
         max_samples: Optional[int] = None,
         max_samples_per_language: Optional[int] = None,
         length_estimate: int = 100000,  # Default estimate for dataset length
+        use_size_based_weighting: bool = True, 
     ):
         """
         Initialize the streaming dataset.
@@ -303,14 +459,38 @@ class StreamingTokenizedDataset(IterableDataset):
         self.seed = seed
         self.max_samples = max_samples
         self.max_samples_per_language = max_samples_per_language
-        
+        self.split = split
+
         # Estimate the length of the dataset
         if max_samples:
             self._length = max_samples
         elif max_samples_per_language and self.files_by_lang:
             self._length = max_samples_per_language * len(self.files_by_lang)
         else:
-            self._length = length_estimate  # Default estimate
+            line_counts = {}
+            for lang, path in self.files_by_lang.items():
+                try:
+                    with open(path, 'r', encoding='utf-8', errors='replace') as f:
+                        # Count up to 1000 lines to estimate average line size
+                        lines = list(islice(f, 100))
+                        if lines:
+                            # Estimate total lines based on file size and average line size
+                            avg_line_size = sum(len(line) for line in lines) / len(lines)
+                            total_size = os.path.getsize(path)
+                            estimated_lines = int(total_size / max(1, avg_line_size))
+                            line_counts[lang] = estimated_lines
+                except Exception as e:
+                    logger.warning(f"Error estimating line count for {path}: {e}")
+                    line_counts[lang] = length_estimate // len(self.files_by_lang)
+            if line_counts:
+                # Use sum of estimated line counts with appropriate caps
+                if max_samples_per_language:
+                    self._length = sum(min(count, max_samples_per_language) for count in line_counts.values())
+                else:
+                    self._length = sum(line_counts.values())
+            else:
+                # Fallback to default estimate
+                self._length = length_estimate
         
         logger.info(
             f"Created {split} dataset with {len(self.files_by_lang)} languages – "
@@ -322,10 +502,21 @@ class StreamingTokenizedDataset(IterableDataset):
         if max_samples_per_language:
             logger.info(f"Limiting to {max_samples_per_language} samples per language")
 
-        self._lang_weights = {                                                  
-            lang: os.path.getsize(path)                                         
-            for lang, path in self.files_by_lang.items()                        
-        }
+        if use_size_based_weighting and split == "train":
+            # Size-based weighting for training
+            self._lang_weights = {                                                  
+                lang: os.path.getsize(path)                                         
+                for lang, path in self.files_by_lang.items()                        
+            }
+            logger.info(f"Using size-based weighting for {split} dataset")
+        else:
+            # Uniform weighting for validation/test
+            self._lang_weights = {
+                lang: 1.0 
+                for lang in self.files_by_lang
+            }
+            logger.info(f"Using uniform weighting for {split} dataset")
+            
         total = sum(self._lang_weights.values()) or 1                           
         self._lang_probs = {l: s / total for l, s in self._lang_weights.items()}
 
@@ -341,7 +532,8 @@ class StreamingTokenizedDataset(IterableDataset):
             # Use different seeds for each worker
             seed = self.seed + worker_info.id + self._epoch * 100
             random.seed(seed)
-            
+        
+        logger.info(f"New stream to {self.split} dataset created (will start at beginning of file)")
         # Reset file pointers by creating a new stream each epoch
         return self._get_size_limited_stream()
     
@@ -374,29 +566,9 @@ class StreamingTokenizedDataset(IterableDataset):
                     if not iters:
                         break                                                   
         merged_stream = _weighted_merge(streams_by_lang)  
-        # streams, probs = [], []
-        # for lang, path in self.files_by_lang.items():
-        #     ds = load_dataset(
-        #         "json",
-        #         data_files=path,
-        #         split="train",
-        #         streaming=True,                           # returns an IterableDataset
-        #     )
-        #     if self.max_samples_per_language:
-        #         ds = ds.take(self.max_samples_per_language)  # per-lang cap
-        #     streams.append(ds)
-        #     probs.append(self._lang_probs[lang])
-
-        # # 2. Let HF do the weighted interleave in C++ (no Python loop)
-        # merged_stream = interleave_datasets(
-        #     streams,
-        #     probabilities=probs,
-        #     seed=self.seed + self._epoch,
-        #     stopping_strategy="first_exhausted",  # drop langs as they run out
-        # )
-
+        
         # TODO: Turning off shuffling for debugging; turn back on
-        # stream = self._shuffle_buffer(merged_stream, self.buffer_size)
+        stream = self._shuffle_buffer(merged_stream, self.buffer_size)
 
         return islice(merged_stream, self.max_samples) if self.max_samples else merged_stream
         
@@ -404,38 +576,18 @@ class StreamingTokenizedDataset(IterableDataset):
         """Creates a limited stream for a single file."""
         count = 0
         try:
-            with open(file_path, 'r', encoding='utf-8', errors="replace") as f:
+            with open(file_path, 'rb') as f:
                 for line in f:
                     if limit is not None and count >= limit:
                         break
                         
                     try:
-                        item = json.loads(line.strip())
+                        item = json.loads(line.decode('utf-8', errors='replace').strip())
                         
                         # Add extensive validation
-                        if 'token_ids' not in item:
-                            logger.warning(f"Skipping item without token_ids in {file_path}")
-                            continue
-                        
-                        token_ids = item['token_ids']
-                        
-                        # Check for token_ids validity
-                        if not isinstance(token_ids, list):
-                            logger.warning(f"Invalid token_ids type in {file_path}: {type(token_ids)}")
-                            continue
-                        
-                        if not token_ids:
-                            if item["text"]:
-                                logger.warning(f"Empty token_ids for non-empty text in {file_path}")
-                            continue
-                        
-                        # Check for maximum token ID
-                        max_token_id = max(token_ids)
-                        if max_token_id >= len(self.tokenizer):
-                            logger.warning(
-                                f"Token ID {max_token_id} exceeds tokenizer vocab size "
-                                f"({len(self.tokenizer)}) in {file_path}"
-                            )
+                        # Minimal validation - only check essentials
+                        token_ids = item.get('token_ids')
+                        if not token_ids or not isinstance(token_ids, list):
                             continue
                         
                         # Yield processed item
@@ -483,6 +635,9 @@ class StreamingTokenizedDataset(IterableDataset):
         yield from buffer
   
 
+###################################################
+#              Data Collators   
+##################################################
 class CausalLMDataCollatorWithPadding(DataCollatorWithPadding):
     def __call__(self, features):                                      
         for f in features:                                             
@@ -645,6 +800,9 @@ class PackedStreamingDataCollator:
         }
 
 
+###################################################
+#              Model Class with training logic   
+##################################################
 class CustomCausalLMModel:
     """
     A GPT2-like model with a user-specified base plus a custom HF tokenizer.
@@ -660,46 +818,67 @@ class CustomCausalLMModel:
         self.custom_config = config
         self.use_small = small
         self.training_args = None
-    
+
+    def _init_large_vocab_weights(self):
+        """Custom weight initialization for large vocabulary models."""
+        vocab_size = len(self.tokenizer)
+        
+        if vocab_size > 65000:
+            # Use smaller initialization for embeddings
+            embedding_std = 0.01  # Smaller than default 0.02
+            
+            with torch.no_grad():
+                # Re-initialize embedding layers with smaller variance
+                if hasattr(self.model, 'transformer'):
+                    # GPT-2 style model
+                    if hasattr(self.model.transformer, 'wte'):
+                        self.model.transformer.wte.weight.normal_(mean=0.0, std=embedding_std)
+                    if hasattr(self.model.transformer, 'wpe'):
+                        self.model.transformer.wpe.weight.normal_(mean=0.0, std=embedding_std)
+                
+                # Re-initialize output layer (lm_head) if it exists
+                if hasattr(self.model, 'lm_head'):
+                    self.model.lm_head.weight.normal_(mean=0.0, std=embedding_std)
+            
+            logger.info(f"Applied custom initialization for large vocab ({vocab_size:,}) with std={embedding_std}")
+
     def create_model(self):
-        """Create and prepare the model for training."""
-        # Load the config from pretrained model
-        cfg = GPT2Config(
-            vocab_size     = len(self.tokenizer),
-            n_positions    = 1024,
-            n_ctx          = 1024,
-            n_embd         = 1024,
-            n_layer        = 24,
-            n_head         = 16,
-            resid_pdrop    = 0.1,
-            embd_pdrop     = 0.1,
-            attn_pdrop     = 0.1,
-            pad_token_id   = self.tokenizer.pad_token_id,
-            use_cache      = False,      # needed for grad‑checkpointing
-        )
-        cfg_small = GPT2Config(
-            vocab_size   = len(self.tokenizer),
-            n_positions  = 512,
-            n_ctx        = 512,
-            n_embd       = 768,      # 512 / 768 / 896 / …
-            n_layer      = 12,       # 8 / 12 / 16 / 20
-            n_head       = 12,       # keep n_embd % n_head == 0
-            resid_pdrop  = 0.1,
-            embd_pdrop   = 0.1,
-            attn_pdrop   = 0.1,
-            pad_token_id = self.tokenizer.pad_token_id,
-            use_cache    = False,
-        )
+        """Create model with vocabulary-aware configuration."""
+        vocab_size = len(self.tokenizer)
+        pad_id = self.tokenizer.pad_token_id
+        
+        if self.use_small:
+            model_config, self.suggested_training_adjustments = get_vocab_aware_config(vocab_size, pad_id)
 
-        self.model = AutoModelForCausalLM.from_config(cfg_small if self.use_small else cfg)
-        # optional overrides from JSON
-        self.model.resize_token_embeddings(len(self.tokenizer))
+        else:
+            model_config = GPT2Config(
+                            vocab_size     = vocab_size,
+                            n_positions    = 1024,
+                            n_ctx          = 1024,
+                            n_embd         = 1024,
+                            n_layer        = 24,
+                            n_head         = 16,
+                            resid_pdrop    = 0.1,
+                            embd_pdrop     = 0.1,
+                            attn_pdrop     = 0.1,
+                            pad_token_id   = pad_id,
+                            use_cache      = False,      # needed for grad‑checkpointing
+                        )
+            self.suggested_training_adjustments = {}
+        self.model = AutoModelForCausalLM.from_config(model_config)
+        
+        # Apply custom weight initialization for large vocabularies
+        if vocab_size > 65000:
+            self._init_large_vocab_weights()
+            
+        
+        self.model.resize_token_embeddings(vocab_size)
         total_params = sum(p.numel() for p in self.model.parameters())
-        logger.info(f"Model has {total_params} parameters.")
-
+        logger.info(f"Model has {total_params:,} parameters with vocab size {vocab_size:,}")
+        
         return self.model
 
-    def train_with_streaming(
+    def train_with_streaming( 
         self,
         tokenized_files: Dict[str, Dict[str, str]],
         output_dir: str,
@@ -707,7 +886,212 @@ class CustomCausalLMModel:
         train_buffer_size: int = 5_000,
         val_buffer_size: int = 5_000,
         seed: int = 42,
-        resume_training: bool = True
+        resume_training: bool = True, 
+        suggested_training_adjustments: Optional[Dict] = None,
+        dry_run: bool = False
+    ):
+        """
+        Stream‑train the causal‑LM on a single GPU.
+        
+        ... (existing docstring) ...
+        """
+        if self.model is None or self.tokenizer is None:
+            logger.error("Model / tokenizer not initialised")
+            return None
+
+        logger.info("TRAIN WITH PADDING" if not PACK_DATASET else "TRAIN WITH PACKING")
+
+        torch.manual_seed(seed)
+
+        # For dry run, we need to simulate the training process
+        if dry_run:
+            logger.info("DRY RUN MODE: Simulating training to count dataset usage")
+            
+            # Get training configuration
+            training_args = TrainingArguments(
+                output_dir                  = output_dir,
+                overwrite_output_dir        = False,
+                max_steps                   = 300_000 if not self.use_small else 180_000,
+                per_device_train_batch_size = 4 if not self.use_small else 12,
+                per_device_eval_batch_size  = 4 if not self.use_small else 12,
+                gradient_accumulation_steps = 8 if not self.use_small else 2,
+                seed                        = seed,
+            )
+            
+            # Apply suggested adjustments if any
+            args_dict = training_args.to_dict()
+            if suggested_training_adjustments:
+                args_dict.update(suggested_training_adjustments)
+            training_args = TrainingArguments(**args_dict)
+            
+            # Calculate total batches and samples needed
+            total_training_steps = training_args.max_steps
+            total_batches_needed = total_training_steps * training_args.gradient_accumulation_steps
+            samples_per_batch = training_args.per_device_train_batch_size
+            total_samples_needed = total_batches_needed * samples_per_batch
+            
+            logger.info(f"Training configuration:")
+            logger.info(f"  - max_steps (optimizer updates): {total_training_steps:,}")
+            logger.info(f"  - per_device_train_batch_size: {samples_per_batch}")
+            logger.info(f"  - gradient_accumulation_steps: {training_args.gradient_accumulation_steps}")
+            logger.info(f"  - total_batches_needed: {total_batches_needed:,}")
+            logger.info(f"  - total_samples_needed: {total_samples_needed:,}")
+            
+            # Track line counts per file
+            lines_per_file = {lang: 0 for lang in tokenized_files}
+            file_line_counters = {lang: {} for lang in tokenized_files}
+            
+            # Create a modified dataset that tracks file usage
+            class CountingStreamingTokenizedDataset(StreamingTokenizedDataset):
+                def __init__(self, *args, **kwargs):
+                    super().__init__(*args, **kwargs)
+                    self.file_counters = {lang: 0 for lang in self.files_by_lang}
+                    
+                def _get_limited_stream_for_file(self, file_path: str, limit: Optional[int] = None) -> Iterator[Dict[str, Any]]:
+                    # Find which language this file belongs to
+                    lang = None
+                    for l, path in self.files_by_lang.items():
+                        if path == file_path:
+                            lang = l
+                            break
+                            
+                    count = 0
+                    try:
+                        with open(file_path, 'rb') as f:
+                            for line in f:
+                                if limit is not None and count >= limit:
+                                    break
+                                    
+                                try:
+                                    item = json.loads(line.decode('utf-8', errors='replace').strip())
+                                    token_ids = item.get('token_ids')
+                                    if not token_ids or not isinstance(token_ids, list):
+                                        continue
+                                    
+                                    # Track this line
+                                    if lang:
+                                        self.file_counters[lang] += 1
+                                        
+                                    yield {'input_ids': token_ids}
+                                    count += 1
+                                    
+                                except json.JSONDecodeError:
+                                    continue
+                                except Exception:
+                                    continue
+                                    
+                    except Exception as e:
+                        logger.error(f"Error processing file {file_path}: {str(e)}")
+            
+            # Create counting dataset
+            train_dataset = CountingStreamingTokenizedDataset(
+                tokenized_files=tokenized_files,
+                split="train",
+                tokenizer=self.tokenizer,
+                buffer_size=train_buffer_size,
+            )
+            
+            # Create data loader
+            pad_id = self.tokenizer.pad_token_id
+            if PACK_DATASET:
+                collator = PackedStreamingDataCollator(
+                    pad_id=pad_id,
+                    eos_id=self.tokenizer.eos_token_id,
+                    max_seq_len=self.model.config.n_ctx,
+                    blocks_per_batch=training_args.per_device_train_batch_size,
+                )
+            else:
+                collator = CausalLMDataCollatorWithPadding(
+                    tokenizer=self.tokenizer,
+                    pad_to_multiple_of=8,
+                    max_length=self.model.config.n_ctx
+                )
+                
+            dataloader = DataLoader(
+                train_dataset,
+                batch_size=training_args.per_device_train_batch_size,
+                collate_fn=collator,
+                num_workers=0,  # Use 0 for accurate counting
+                drop_last=False
+            )
+            
+            # Simulate training by iterating through the dataset
+            logger.info("Simulating data consumption...")
+            batches_processed = 0
+            steps_simulated = 0
+            
+            try:
+                for batch_idx, batch in enumerate(dataloader):
+                    batches_processed += 1
+                    
+                    # Check if we've completed a training step
+                    if batches_processed % training_args.gradient_accumulation_steps == 0:
+                        steps_simulated += 1
+                    
+                    # Check if we've reached the target number of training steps
+                    if steps_simulated >= total_training_steps:
+                        break
+                        
+                    # Log progress every 10000 batches
+                    if batches_processed % 10000 == 0:
+                        logger.info(f"Processed {batches_processed:,} batches ({steps_simulated:,} training steps)")
+                        # Log current file counters
+                        for lang, count in train_dataset.file_counters.items():
+                            logger.info(f"  {lang}: {count:,} lines")
+                            
+            except Exception as e:
+                logger.error(f"Error during dry run simulation: {e}")
+                
+            # Calculate actual samples processed
+            samples_processed = batches_processed * samples_per_batch
+            
+            # Final counts
+            logger.info("\nDRY RUN RESULTS:")
+            logger.info(f"Total training steps simulated: {steps_simulated:,}")
+            logger.info(f"Total batches processed: {batches_processed:,}")
+            logger.info(f"Total samples processed: {samples_processed:,}")
+            logger.info("\nLines per language file that would be read:")
+            
+            total_lines = 0
+            for lang, count in train_dataset.file_counters.items():
+                logger.info(f"  {lang}: {count:,} lines")
+                lines_per_file[lang] = count
+                total_lines += count
+                
+            logger.info(f"\nTotal lines across all files: {total_lines:,}")
+            
+            if PACK_DATASET:
+                logger.info("\nNote: With packing enabled, multiple sequences are combined into fixed-length blocks.")
+                logger.info(f"Each block is {self.model.config.n_ctx} tokens long.")
+                
+            # Return dry run results
+            return {
+                "status": "dry_run_complete",
+                "training_steps_simulated": steps_simulated,
+                "batches_processed": batches_processed,
+                "samples_processed": samples_processed,
+                "lines_per_file": lines_per_file,
+                "total_lines": total_lines,
+                "training_config": {
+                    "max_steps": training_args.max_steps,
+                    "per_device_train_batch_size": training_args.per_device_train_batch_size,
+                    "gradient_accumulation_steps": training_args.gradient_accumulation_steps,
+                    "total_batches_needed": total_batches_needed,
+                    "packing_enabled": PACK_DATASET
+                }
+            }
+    
+
+    def train_with_streaming_real( 
+        self,
+        tokenized_files: Dict[str, Dict[str, str]],
+        output_dir: str,
+        val_samples_per_lang: int = 1_000,
+        train_buffer_size: int = 5_000,
+        val_buffer_size: int = 5_000,
+        seed: int = 42,
+        resume_training: bool = True, 
+        suggested_training_adjustments: Optional[Dict] = None
     ):
         """
         Stream‑train the causal‑LM on a single GPU.
@@ -735,6 +1119,8 @@ class CustomCausalLMModel:
         if self.model is None or self.tokenizer is None:
             logger.error("Model / tokenizer not initialised")
             return None
+
+        logger.info("TRAIN WITH PADDING" if not PACK_DATASET else "TRAIN WITH PACKING")
 
         torch.manual_seed(seed)
 
@@ -783,34 +1169,34 @@ class CustomCausalLMModel:
             output_dir                  = output_dir,
             overwrite_output_dir        = False,
             max_steps                   = 300_000,
-            per_device_train_batch_size = 4,       # 4 × 1024 tokens → ~21 GB with fp16
+            per_device_train_batch_size = 4,    # Reduce from 4
             per_device_eval_batch_size  = 4,
-            gradient_accumulation_steps = 8,       # ⇒ effective 32 seqs / step
-            learning_rate               = 3e-4,
-            lr_scheduler_type           = "cosine",
-            warmup_steps                = 8_000,
+            gradient_accumulation_steps = 8,   # Increase to maintain effective batch size
+            learning_rate = 1e-4,               # Lower LR
+            warmup_steps = 8_000,              # More warmup
+            optim = "adamw_8bit",              
+            lr_scheduler_type = "linear",        
             fp16                        = True,
-            gradient_checkpointing      = True,    # needed to stay within 24 GB on A5000
-            optim                       = "adamw_8bit",   # keeps optimizer memory low
+            gradient_checkpointing      = False,    
             weight_decay                = 0.01,
-            logging_steps               = 100,
+            logging_steps               = 2000,
             save_steps                  = 5_000,
             evaluation_strategy         = evaluation_strategy,
             eval_steps                  = 5_000,
             save_total_limit            = 2,
             dataloader_drop_last        = False,
-            disable_tqdm                = False,
+            disable_tqdm                = True,
             seed                        = seed,
-            max_grad_norm              = 1.0
+            max_grad_norm              = 0.5
         )
         training_args_small = TrainingArguments(
             output_dir                  = output_dir,
             overwrite_output_dir        = False,
-            max_steps                   = 50_000,
+            max_steps                   = 180_000,
             per_device_train_batch_size = 12,      # 12 × 512 tokens fits comfortably
             per_device_eval_batch_size  = 12,
             gradient_accumulation_steps = 2,       # ⇒ effective 24 seqs / step
-            learning_rate               = 3e-4,    # scale ≈ linearly with eff. batch
+            learning_rate               = 3e-4,
             lr_scheduler_type           = "cosine",
             warmup_steps                = 3_000,
             fp16                        = True,
@@ -823,12 +1209,17 @@ class CustomCausalLMModel:
             eval_steps                  = 5_000,
             save_total_limit            = 2,
             dataloader_drop_last        = False,
-            disable_tqdm                = False,
+            disable_tqdm                = True,
             seed                        = seed,
             max_grad_norm              = 1.0
         )
 
-        self.training_args = training_args_small if self.use_small else training_args
+        args_dict = training_args_small.to_dict() if self.use_small else training_args.to_dict()
+        if suggested_training_adjustments:
+            args_dict.update(suggested_training_adjustments)
+
+        self.training_args  = TrainingArguments(**args_dict)
+        logger.info(f"Training with batch size of {self.training_args.per_device_train_batch_size}")
         # ------------------------------------------------------------------
         # 3.  Resume logic
         # ------------------------------------------------------------------
@@ -884,25 +1275,27 @@ class CustomCausalLMModel:
                          pad_to_multiple_of=8, 
                          max_length=self.model.config.n_ctx                                   
                 )
-            if not is_train and hasattr(ds, '__len__'):
-                # If dataset has a length, use it
-                num_workers = 0  # Single worker for eval to ensure consistency
+                #collator = StreamingDataCollator(pad_id=pad_id,
+                #                                  max_seq_len=self.model.config.n_ctx)
+            if is_train:
+                num_workers = 8  # Increase workers for training
+                prefetch_factor = 4  # Increase prefetch
+                persistent_workers = True
             else:
-                num_workers = 4 if is_train else 0
-                # collator = StreamingDataCollator(pad_id=pad_id,
-                #                                  max_seq_len=self.model.config.n_ctx) 
+                num_workers = 2  # Fewer workers for eval
+                prefetch_factor = 2
+                persistent_workers = False
             return DataLoader(ds, 
-                            batch_size=bs, 
-                            collate_fn=collator, 
-                            num_workers=num_workers,
-                            pin_memory=True, 
-                            prefetch_factor=2 if num_workers > 0 else None, 
-                            persistent_workers=True if num_workers > 0 else False, 
-                            drop_last=False  
-                        )
+                              batch_size=bs, 
+                              collate_fn=collator, 
+                              num_workers=num_workers,
+                              pin_memory=True, 
+                              prefetch_factor=prefetch_factor, 
+                              persistent_workers=persistent_workers, 
+                              drop_last=False)
 
         # Much faster... This lets us keep one instance of the data loader around so the reservoir isn’t recreated every epoch (epoch isnt
-        # estimated correctly currently so it otherwise gets reloaded often
+        # estimated correctly currently so it otherwise gets reloaded often)
         ta = self.training_args
         class _IterTrainer(Trainer):
             def get_train_dataloader(self):
@@ -924,6 +1317,9 @@ class CustomCausalLMModel:
         logger.info("Created dataset and data collators.")
         trainer.add_callback(HealthCheckCallback(log_every=500))
         trainer.add_callback(DataInspectionCallback(logger, inspect_frequency=1000))
+        trainer.add_callback(DataLoaderDebugCallback(logger))
+        trainer.add_callback(GradientDebugCallback())
+        trainer.add_callback(NaNCheckCallback())
 
         if en_val_dataset is not None:
             logger.info("Adding English evaluation callback")
@@ -1037,7 +1433,117 @@ class CustomCausalLMModel:
         
         return metrics
 
+
+###################################################
+#              Helper functions   
+##################################################
+
 def train_model_on_tokenized_data_streaming(tokenized_files, 
+                                            tokenization_method, 
+                                            base_tokenizer_path, 
+                                            model_config=None, 
+                                            output_dir="",
+                                            model_arch="standard",
+                                            resume_training=True,
+                                            dry_run=True):  # NEW PARAMETER
+    """
+    Train a language model with streaming datasets on a single A5000 GPU.
+    
+    Args:
+        ... (existing args) ...
+        dry_run: If True, simulate training to count dataset usage without training
+    
+    Returns:
+        Path to the saved model, dry run results dict, or None if training failed
+    """
+    logger.info(f"{'DRY RUN: Simulating' if dry_run else 'Training'} language model on '{tokenization_method}' tokenized data (streaming)...")
+    
+    # Check if output directory already contains a checkpoint
+    checkpoints_exist = False
+    if os.path.exists(output_dir):
+        checkpoints = [d for d in os.listdir(output_dir) if d.startswith("checkpoint-")]
+        checkpoints_exist = len(checkpoints) > 0
+        
+        if checkpoints_exist and resume_training and not dry_run:
+            logger.info(f"Found existing checkpoints in {output_dir}. Will attempt to resume training.")
+        elif checkpoints_exist and not resume_training and not dry_run:
+            logger.info(f"Found existing checkpoints in {output_dir}, but resume_training=False. Starting fresh.")
+
+    # Create HuggingFace tokenizer from the tokenizer JSON
+    try:
+        hf_tok = PreTrainedTokenizerFast(tokenizer_file=base_tokenizer_path)
+        set_special_tokens(hf_tok)
+        
+        # Sanity check for special tokens
+        vocab = hf_tok.get_vocab()
+        sanity_check = {k: vocab.get(k, "MISSING") for k in SPECIAL_TOKENS.values()}
+        logger.info("Created tokenizer for model. Special tokens: " + str(sanity_check) + f" Vocab size of approximately {len(vocab)}")
+        
+        missing_tokens = [k for k, v in sanity_check.items() if v == "MISSING"]
+        if missing_tokens:
+            logger.warning(f"Missing special tokens: {missing_tokens}")
+    except Exception as e:
+        logger.error(f"Failed to load tokenizer: {str(e)}")
+        raise
+    
+    set_seed(42)  # For reproducibility
+    wrapper = CustomCausalLMModel(hf_tok, config=model_config, small=True if model_arch=="small" else False)
+    
+    # If we're resuming and have checkpoints, load the latest checkpoint model
+    if checkpoints_exist and resume_training and not dry_run:
+        checkpoints = [d for d in os.listdir(output_dir) if d.startswith("checkpoint-")]
+        checkpoints = sorted(checkpoints, key=lambda x: int(x.split("-")[1]))
+        latest_checkpoint = os.path.join(output_dir, checkpoints[-1])
+        
+        try:
+            logger.info(f"Attempting to load model from checkpoint: {latest_checkpoint}")
+            wrapper.model = AutoModelForCausalLM.from_pretrained(latest_checkpoint)
+            suggested_training_adjustments = {}
+            logger.info(f"Successfully loaded model from checkpoint")
+        except Exception as e:
+            logger.warning(f"Failed to load model from checkpoint: {str(e)}. Creating new model.")
+            wrapper.create_model()
+            suggested_training_adjustments = wrapper.suggested_training_adjustments
+    else:
+        wrapper.create_model()
+        resume_training = False
+        suggested_training_adjustments = wrapper.suggested_training_adjustments
+
+    # Train model using streaming datasets (or do dry run)
+    train_result = wrapper.train_with_streaming(
+        tokenized_files, 
+        output_dir, 
+        val_samples_per_lang=1000, 
+        resume_training=resume_training, 
+        suggested_training_adjustments=suggested_training_adjustments,
+        dry_run=dry_run  # NEW
+    )
+    
+    if train_result is None:
+        logger.error("Training/dry run failed.")
+        return None
+    
+    # If dry run, return the results
+    if dry_run:
+        return train_result
+    
+    # Check if we skipped training because it was already complete
+    if isinstance(train_result, dict) and train_result.get("status") == "already_trained":
+        logger.info(f"Model already trained for the requested number of epochs ({train_result.get('epochs_completed', '?')}).")
+        return output_dir
+    
+    # Evaluate model using streaming test set
+    eval_metrics = wrapper.evaluate_streaming(tokenized_files, output_dir, max_samples_per_language=1000)
+    if eval_metrics:
+        eval_path = os.path.join(output_dir, "eval_results.json")
+        with open(eval_path, 'w') as f:
+            json.dump(eval_metrics, f, indent=2)
+        logger.info(f"Eval results: {eval_metrics}")
+
+    return output_dir
+
+
+def train_model_on_tokenized_data_streaming_real(tokenized_files, 
                                             tokenization_method, 
                                             base_tokenizer_path, 
                                             model_config=None, 
@@ -1077,7 +1583,6 @@ def train_model_on_tokenized_data_streaming(tokenized_files,
         set_special_tokens(hf_tok)
         
         # Sanity check for special tokens
-        from code.utils import SPECIAL_TOKENS
         vocab = hf_tok.get_vocab()
         sanity_check = {k: vocab.get(k, "MISSING") for k in SPECIAL_TOKENS.values()}
         logger.info("Created tokenizer for model. Special tokens: " + str(sanity_check) + f" Vocab size of approximately {len(vocab)}")
@@ -1101,16 +1606,22 @@ def train_model_on_tokenized_data_streaming(tokenized_files,
         try:
             logger.info(f"Attempting to load model from checkpoint: {latest_checkpoint}")
             wrapper.model = AutoModelForCausalLM.from_pretrained(latest_checkpoint)
+            suggested_training_adjustments = {}
             logger.info(f"Successfully loaded model from checkpoint")
         except Exception as e:
             logger.warning(f"Failed to load model from checkpoint: {str(e)}. Creating new model.")
             wrapper.create_model()
+            suggested_training_adjustments = wrapper.suggested_training_adjustments
     else:
         wrapper.create_model()
-        resume_training=False
+        resume_training = False
+        suggested_training_adjustments = wrapper.suggested_training_adjustments
 
     # Train model using streaming datasets
-    train_result = wrapper.train_with_streaming(tokenized_files, output_dir, val_samples_per_lang=1000, resume_training=resume_training)
+    train_result = wrapper.train_with_streaming(tokenized_files, output_dir, 
+        val_samples_per_lang=1000, 
+        resume_training=resume_training, 
+        suggested_training_adjustments=suggested_training_adjustments)
     if train_result is None:
         logger.error("Training failed.")
         return None
@@ -1130,8 +1641,84 @@ def train_model_on_tokenized_data_streaming(tokenized_files,
 
     return output_dir
 
+def train_models_from_config(config_dict, dry_run=True):  # NEW PARAMETER
+    """
+    Train models based on a configuration dictionary.
+    
+    Args:
+        config_dict: Configuration dictionary with tokenizers and settings
+        dry_run: If True, simulate training to count dataset usage without training
+    
+    Returns:
+        Dictionary mapping tokenizer names to model paths or dry run results
+    """
+    global_settings = config_dict.get("global_settings", {})
+    tokenizers = config_dict.get("tokenizers", [])
+    
+    if not tokenizers:
+        logger.error("No tokenizers defined in configuration")
+        return {}
+    
+    models_output_dir = global_settings.get("model_output_dir", "")
+    # Get global resume_training setting (default to True)
+    global_resume_training = global_settings.get("resume_training", True)
 
-def train_models_from_config(config_dict):
+    # Train models for each tokenizer
+    results = {}
+    for tokenizer_config in tokenizers:
+        name = tokenizer_config.get("name")
+        if not name:
+            logger.warning("Skipping tokenizer with no name")
+            continue
+            
+        tokenizer_path = tokenizer_config.get("tokenizer_path")
+        tokenized_files = tokenizer_config.get("tokenized_files", {})
+        #TODO: override model parameters with model_config
+        model_config = tokenizer_config.get("model_config", {})
+        
+        if not tokenizer_path or not tokenized_files:
+            logger.warning(f"Skipping {name}: missing tokenizer_path or tokenized_files")
+            continue
+            
+        # Check if model already exists
+        model_size = model_config.get("model_arch", "standard")
+        output_dir = os.path.join(models_output_dir, f"{name}_model_{model_size}")
+        
+        # Get tokenizer-specific resume_training setting (use global as default)
+        resume_training = model_config.get("resume_training", global_resume_training)
+        
+        # Skip if the model exists and we're using pretrained and not resuming (unless dry run)
+        if not dry_run and os.path.exists(output_dir) and model_config.get("pretrained", {}).get("enabled", False) and not resume_training:
+            logger.info(f"Model for {name} already exists, skipping (skip_existing=True)")
+            results[name] = output_dir
+            continue
+            
+        logger.info(f"{'Dry run for' if dry_run else 'Training model for'} tokenizer: {name} (resume_training={resume_training})")
+        result = train_model_on_tokenized_data_streaming(
+            tokenized_files, 
+            name,
+            tokenizer_path,
+            model_config,
+            output_dir,
+            model_arch=model_size,
+            resume_training=resume_training,
+            dry_run=dry_run  # NEW
+        )
+        
+        if result:
+            results[name] = result
+            
+            # If dry run, save results to file
+            if dry_run and isinstance(result, dict):
+                dry_run_output_path = os.path.join(models_output_dir, f"{name}_dry_run_results.json")
+                os.makedirs(models_output_dir, exist_ok=True)
+                with open(dry_run_output_path, 'w') as f:
+                    json.dump(result, f, indent=2)
+                logger.info(f"Dry run results saved to: {dry_run_output_path}")
+            
+    return results
+
+def train_models_from_config_real(config_dict):
     """
     Train models based on a configuration dictionary.
     
@@ -1185,7 +1772,7 @@ def train_models_from_config(config_dict):
             model_config,
             output_dir,
             model_arch=model_size,
-            resume_training=False #TODO: change back after debugging
+            resume_training=resume_training
         )
         
         if model_path:

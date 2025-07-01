@@ -18,11 +18,151 @@ from transformers import (
     Trainer,
     PreTrainedTokenizerFast,
     DataCollatorForTokenClassification,
-    EarlyStoppingCallback
+    EarlyStoppingCallback,
+    TrainerCallback,
+    IntervalStrategy,
+    GPT2ForSequenceClassification,
+    AutoConfig,
 )
 
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
+
+
+def initialize_gpt_for_classification(model_path, num_labels, tokenizer):
+    """
+    Properly initialize GPT model for classification tasks.
+    """
+    
+    # Load config first
+    config = AutoConfig.from_pretrained(model_path)
+    
+    # CRITICAL: Set all necessary config parameters
+    config.num_labels = num_labels
+    config.pad_token_id = tokenizer.pad_token_id
+    
+    # Load model with updated config - DON'T pass num_labels separately!
+    model = GPT2ForSequenceClassification.from_pretrained(
+        model_path,
+        config=config,  # Config already has num_labels
+        ignore_mismatched_sizes=True
+    )
+    
+    # Initialize classification head properly if it's new
+    if hasattr(model, 'score') and model.score.weight.requires_grad:
+        # The classification head was randomly initialized
+        # Use a smaller std for initialization
+        torch.nn.init.normal_(model.score.weight, std=0.02)
+        if model.score.bias is not None:
+            torch.nn.init.zeros_(model.score.bias)
+        logger.info("Initialized classification head with smaller std")
+    
+    return model
+
+
+def diagnose_training_issues(model, tokenizer, train_dataset, args):
+    """Diagnose why training might not be working."""
+    
+    print("\n=== DIAGNOSTIC CHECKS ===")
+    
+    # 1. Check model architecture
+    print(f"Model type: {model.config.model_type}")
+    print(f"Num labels: {model.config.num_labels}")
+    print(f"Pad token ID in model config: {model.config.pad_token_id}")
+    
+    # 2. Check tokenizer
+    print(f"\nTokenizer padding side: {tokenizer.padding_side}")
+    print(f"Pad token: '{tokenizer.pad_token}' (ID: {tokenizer.pad_token_id})")
+    print(f"EOS token: '{tokenizer.eos_token}' (ID: {tokenizer.eos_token_id})")
+    
+    # 3. Check a batch of data
+    print("\n=== SAMPLE BATCH ===")
+    batch_size = 4
+    batch = [train_dataset[i] for i in range(min(batch_size, len(train_dataset)))]
+    
+    # Check sequence format
+    for i, example in enumerate(batch):
+        input_ids = example['input_ids']
+        
+        # Handle both tensor and list inputs
+        if torch.is_tensor(input_ids):
+            input_ids_list = input_ids.tolist()
+        else:
+            input_ids_list = input_ids
+        
+        # Find first non-pad token
+        first_non_pad = next((j for j, tid in enumerate(input_ids_list) if tid != tokenizer.pad_token_id), 0)
+        # Find last non-pad token
+        last_non_pad = len(input_ids_list) - 1 - next((j for j, tid in enumerate(reversed(input_ids_list)) if tid != tokenizer.pad_token_id), 0)
+        
+        print(f"\nExample {i}:")
+        print(f"  Decoded: {tokenizer.decode(input_ids_list)}")
+        print(f"  First 10 tokens: {input_ids_list[first_non_pad:first_non_pad+10]}")
+        print(f"  Last 10 tokens: {input_ids_list[max(last_non_pad-9, 0):last_non_pad+1]}")
+        print(f"  Label: {example.get('label', 'N/A')}")
+        print(f"  Ends with EOS? {input_ids_list[last_non_pad] == tokenizer.eos_token_id}")
+    
+    # 4. Test forward pass
+    print("\n=== FORWARD PASS TEST ===")
+    try:
+        model.eval()
+        with torch.no_grad():
+            # Handle tensor/list conversion properly
+            if torch.is_tensor(batch[0]['input_ids']):
+                input_ids = torch.stack([ex['input_ids'] for ex in batch])
+                attention_mask = torch.stack([ex['attention_mask'] for ex in batch])
+            else:
+                input_ids = torch.tensor([ex['input_ids'] for ex in batch])
+                attention_mask = torch.tensor([ex['attention_mask'] for ex in batch])
+            
+            labels = torch.tensor([ex['label'] for ex in batch])
+            
+            # Move to model device
+            device = next(model.parameters()).device
+            input_ids = input_ids.to(device)
+            attention_mask = attention_mask.to(device)
+            labels = labels.to(device)
+            
+            outputs = model(
+                input_ids=input_ids,
+                attention_mask=attention_mask,
+                labels=labels
+            )
+            
+            print(f"Loss: {outputs.loss.item():.4f}")
+            print(f"Logits shape: {outputs.logits.shape}")
+            print(f"Predictions: {outputs.logits.argmax(-1).tolist()}")
+            print(f"True labels: {labels.tolist()}")
+            
+    except Exception as e:
+        print(f"ERROR in forward pass: {e}")
+        import traceback
+        traceback.print_exc()
+    
+    print("\n=== END DIAGNOSTICS ===\n")
+
+
+class MetricLoggerCallback(TrainerCallback):
+    """Callback to ensure metrics are properly logged during training."""
+    
+    def on_evaluate(self, args, state, control, metrics=None, **kwargs):
+        if metrics:
+            logger.info(f"Evaluation metrics at step {state.global_step}:")
+            for key, value in metrics.items():
+                if isinstance(value, (int, float)):
+                    logger.info(f"  {key}: {value:.6f}")
+                else:
+                    logger.info(f"  {key}: {value}")
+        return control
+    
+    def on_log(self, args, state, control, logs=None, **kwargs):
+        if logs:
+            # Log training metrics
+            if state.global_step % args.logging_steps == 0:
+                logger.info(f"Training metrics at step {state.global_step}:")
+                for key, value in logs.items():
+                    if isinstance(value, (int, float)):
+                        logger.info(f"  {key}: {value:.6f}")
 
 # ---------------------------------------------------------------------------
 # task registry --------------------------------------------------------------
@@ -69,29 +209,23 @@ def adjust_padding_side(model, tok):
     }
     tok.padding_side = "left" if decoder_only else "right"
 
-# ---------- 1) XNLI ---------------------------------------------------------
+
 @register("xnli")
 def setup_xnli(tokenizer, lang_codes, args):
-    # 1) Which configs (languages) exist?
+    """Setup XNLI task with proper encode_text usage - FIXED VERSION."""
+    # Load datasets (your existing code)
     all_configs = get_dataset_config_names("xnli")
     ok = _filter_langs(lang_codes, all_configs, "XNLI")
 
-    # 2) Load & tag each language
     subsets = []
     for lg in ok:
         try:
-            # Load validation set if available, otherwise use train and split
-            if "validation" in load_dataset("xnli", lg):
-                train_ds = load_dataset("xnli", lg, split="train")
-                val_ds = load_dataset("xnli", lg, split="validation")
-                logger.info(f"Loaded XNLI {lg} - train: {len(train_ds)}, val: {len(val_ds)}")
-            else:
-                ds_lg = load_dataset("xnli", lg, split="train")
-                split = create_train_val_split(ds_lg, val_size=args.val_size, seed=args.seed)
-                train_ds, val_ds = split["train"], split["test"]
-                logger.info(f"Split XNLI {lg} - train: {len(train_ds)}, val: {len(val_ds)}")
+            train_ds = load_dataset("xnli", lg, split="train")
+            val_ds = load_dataset("xnli", lg, split="validation")
+            test_ds = load_dataset("xnli", lg, split="test")
             
-            # Tag datasets with language
+            logger.info(f"Loaded XNLI {lg} - train: {len(train_ds)}, val: {len(val_ds)}, test: {len(test_ds)}")
+            
             train_ds = train_ds.map(lambda ex: {"language": lg})
             val_ds = val_ds.map(lambda ex: {"language": lg})
             
@@ -103,115 +237,139 @@ def setup_xnli(tokenizer, lang_codes, args):
     if not subsets:
         raise ValueError("No valid XNLI datasets could be loaded")
 
-    # 3) Merge them into separate train/val Datasets
     train_ds = concatenate_datasets([ds[0] for ds in subsets])
     val_ds = concatenate_datasets([ds[1] for ds in subsets])
-
+    
     logger.info(f"Combined XNLI dataset - train: {len(train_ds)}, val: {len(val_ds)}")
 
-    # Preprocessing function using encode_text
-    def preprocess_function(examples):
-        # Use encode_text for sequence pairs directly
-        encodings = encode_text(
-            tokenizer, 
-            list(zip(examples["premise"], examples["hypothesis"])),  # List of (premise, hypothesis) pairs
-            padding='max_length' if args.max_len else False,
-            truncation=True, 
-            max_length=args.max_len,
-            return_attention_mask=True,
-            return_token_type_ids=True  # Important for sequence classification
+    # FIXED: Efficient batch encoding with manual EOS insertion
+    def preprocess_function(examples):    
+        # When batched=True, examples will always be a batch (list of items)
+        premises = examples["premise"]
+        hypotheses = examples["hypothesis"]
+        
+        # Batch encode premises and hypotheses separately 
+        premise_encoded = encode_text(
+            tokenizer,
+            premises,
+            padding=False,
+            truncation=False,
+            add_special_tokens=False,
+            return_attention_mask=False
         )
         
-        return encodings
+        hypothesis_encoded = encode_text(
+            tokenizer,
+            hypotheses,
+            padding=False,
+            truncation=False,
+            add_special_tokens=False,
+            return_attention_mask=False
+        )
+        
+        # Get the token IDs
+        premise_ids_batch = premise_encoded["input_ids"]
+        hypothesis_ids_batch = hypothesis_encoded["input_ids"]
+        
+        # Efficiently construct sequences
+        input_ids_list = []
+        max_premise_len = args.max_len // 2 - 2  # Reserve space for EOS tokens and some buffer
+        max_hypothesis_len = args.max_len - max_premise_len - 3  # BOS + 2 EOS
+        
+        for premise_ids, hypothesis_ids in zip(premise_ids_batch, hypothesis_ids_batch):
+            # Truncate if needed
+            if len(premise_ids) > max_premise_len:
+                premise_ids = premise_ids[:max_premise_len]
+            if len(hypothesis_ids) > max_hypothesis_len:
+                hypothesis_ids = hypothesis_ids[:max_hypothesis_len]
+            
+            # Construct sequence: premise <EOS> hypothesis <EOS>
+            sequence = []
+            sequence.extend(premise_ids)
+            sequence.append(tokenizer.eos_token_id)
+            sequence.extend(hypothesis_ids)
+            sequence.append(tokenizer.eos_token_id)
+            
+            input_ids_list.append(sequence)
+        
+        # FIXED: Convert to the format expected by tokenizer.pad()
+        # pad() expects a list of dictionaries, not a single dictionary with lists
+        encoded_inputs_list = [
+            {"input_ids": sequence} for sequence in input_ids_list
+        ]
+        
+        # Use tokenizer's built-in padding
+        padded = tokenizer.pad(
+            encoded_inputs_list,
+            padding=True,
+            max_length=args.max_len,
+            return_tensors=None  # Keep as lists
+        )
+        
+        return padded
     
+    # Preprocess datasets
     logger.info("Preprocessing XNLI training data...")
     train_ds = train_ds.map(
         preprocess_function,
-        batched=True, 
-        desc="Tokenizing train data"
+        batched=True,
+        desc="Tokenizing train data",
+        load_from_cache_file=not args.overwrite_cache
     )
     
     logger.info("Preprocessing XNLI validation data...")
     val_ds = val_ds.map(
         preprocess_function,
         batched=True,
-        desc="Tokenizing validation data"
+        desc="Tokenizing validation data",
+        load_from_cache_file=not args.overwrite_cache
     )
-
-    metric = evaluate.load("accuracy")
-    def compute(eval_pred):
+    
+    # Metrics
+    accuracy_metric = evaluate.load("accuracy")
+    f1_metric = evaluate.load("f1")
+    
+    def compute_metrics(eval_pred):
         logits, labels = eval_pred
-        preds = logits.argmax(-1)
-        return metric.compute(predictions=preds, references=labels)
-
-    model = AutoModelForSequenceClassification.from_pretrained(
-        args.model_path, num_labels=3
-    )
-    adjust_padding_side(model, tokenizer)
-    return train_ds, val_ds, model, compute
-
-# ---------- 2) MARC ---------------------------------------------------------
-@register("marc")
-def setup_marc(tokenizer, lang_codes, args):
-    okay = _filter_langs(lang_codes, list(datasets.get_dataset_config_names("amazon_reviews_multi")), "MARC")
-    
-    train_subsets, val_subsets = [], []
-    for lg in okay:
-        try:
-            ds = datasets.load_dataset("amazon_reviews_multi", lg)
-            train_ds = ds["train"]
-            # Use validation set if available, otherwise split train
-            if "validation" in ds:
-                val_ds = ds["validation"]
-            else:
-                split = create_train_val_split(train_ds, val_size=args.val_size, seed=args.seed)
-                train_ds, val_ds = split["train"], split["test"]
-            
-            logger.info(f"MARC {lg} - train: {len(train_ds)}, val: {len(val_ds)}")
-            train_subsets.append(train_ds)
-            val_subsets.append(val_ds)
-        except Exception as e:
-            logger.error(f"Error loading MARC dataset for {lg}: {str(e)}")
-            continue
-    
-    if not train_subsets or not val_subsets:
-        raise ValueError("No valid MARC datasets could be loaded")
+        predictions = np.argmax(logits, axis=-1)
         
-    train_ds = datasets.concatenate_datasets(train_subsets)
-    val_ds = datasets.concatenate_datasets(val_subsets)
-    
-    logger.info(f"Combined MARC dataset - train: {len(train_ds)}, val: {len(val_ds)}")
+        accuracy = accuracy_metric.compute(predictions=predictions, references=labels)
+        f1 = f1_metric.compute(predictions=predictions, references=labels, average="macro")
+        
+        return {
+            "accuracy": accuracy["accuracy"],
+            "f1": f1["f1"]
+        }
 
-    num_labels = 5
-    def preprocess(examples):
-        return tokenizer(examples["review_body"], truncation=True, max_length=args.max_len)
-    
-    logger.info("Preprocessing MARC training data...")
-    train_ds = train_ds.map(preprocess, batched=True, desc="Tokenizing train data")
-    
-    logger.info("Preprocessing MARC validation data...")
-    val_ds = val_ds.map(preprocess, batched=True, desc="Tokenizing validation data")
-    
-    metric = evaluate.load("f1", average="macro")
-    def compute(pred):
-        logits, labels = pred
-        preds = logits.argmax(-1)
-        return metric.compute(predictions=preds, references=labels)
-    model = AutoModelForSequenceClassification.from_pretrained(
-        args.model_path, num_labels=num_labels
+    # Initialize model properly for GPT
+    model = initialize_gpt_for_classification(
+        args.model_path,
+        num_labels=3,  # XNLI has 3 classes
+        tokenizer=tokenizer
     )
+    
+    # Ensure padding side is correct
     adjust_padding_side(model, tokenizer)
-    return train_ds, val_ds, model, compute
+    logger.info(f"Tokenizer padding side: {tokenizer.padding_side}")
+    logger.info(f"Model pad_token_id: {model.config.pad_token_id}")
+    
+    # Run diagnostics
+    diagnose_training_issues(model, tokenizer, train_ds, args)
+    exit(0)
+    
+    return train_ds, val_ds, model, compute_metrics
+
 
 # ---------- 3) WikiANN NER --------------------------------------------------
 @register("wikiann")
 def setup_ner(tokenizer, lang_codes, args):
+    """Setup WikiANN NER task with proper encode_text usage."""    
     try:
         cfgs = list(datasets.get_dataset_config_names("wikiann"))
     except Exception:
         cfgs = []
     if not cfgs or cfgs == ["default"]:
-        cfgs = lang_codes                      # fall back to user request
+        cfgs = lang_codes
     okay = _filter_langs(lang_codes, cfgs, "WikiANN")
     
     train_subsets, val_subsets = [], []
@@ -242,88 +400,119 @@ def setup_ner(tokenizer, lang_codes, args):
     label_list = train_ds.features["ner_tags"].feature.names
     num_labels = len(label_list)
 
-    def tokenize_and_align(examples):
+    def tokenize_and_align_labels(examples):
         """
-        Convert WikiANN examples to model features.
-        Returns dict with input_ids, attention_mask, labels.
-        All three fields have *the same length per example*, so
-        DataCollatorForTokenClassification can stack them.
+        Tokenization with label alignment using encode_text.
         """
-        # 1) join word list back to plain text
-        texts = [" ".join(words) for words in examples["tokens"]]
-
-        # 2) encode – pad/truncate to args.max_len
-        enc = encode_text(
+        # For NER, we need to handle word-level tokenization
+        # Join words with spaces for tokenization
+        if isinstance(examples["tokens"][0], list):
+            texts = [" ".join(words) for words in examples["tokens"]]
+        else:
+            texts = " ".join(examples["tokens"])
+        
+        # Tokenize
+        tokenized_inputs = encode_text(
             tokenizer,
             texts,
-            add_special_tokens=True,
             truncation=True,
-            max_length=args.max_len,                 # 512
-            padding="max_length",                    # always 512
-            return_attention_mask=True,
+            max_length=args.max_len,
+            padding="max_length",
             return_offsets_mapping=True,
+            return_attention_mask=True,
+            add_special_tokens=True
         )
-
-        ids_batch      = enc["input_ids"]
-        mask_batch     = enc["attention_mask"]
-        offsets_batch  = enc["offset_mapping"]
-
-        labels_batch = []
-        for words, gold, offsets, ids in zip(
-            examples["tokens"], examples["ner_tags"], offsets_batch, ids_batch
-        ):
-            # ------- map from char offset -> word id ---------------------
-            starts, pos = [], 0
-            for w in words:
-                starts.append(pos)
-                pos += len(w) + 1                    # +1 for space we inserted
-
-            aligned, prev_wid = [], None
-            for start, _ in offsets:
-                if start == 0 and _ == 0:            # special or pad token
-                    aligned.append(-100)
-                    prev_wid = None
+            
+        # Handle batch vs single
+        if isinstance(texts, str):
+            # Single example - wrap in lists
+            tokenized_inputs = {k: [v] if not isinstance(v, list) else v 
+                               for k, v in tokenized_inputs.items()}
+            examples_tokens = [examples["tokens"]]
+            examples_tags = [examples["ner_tags"]]
+        else:
+            examples_tokens = examples["tokens"]
+            examples_tags = examples["ner_tags"]
+        
+        labels = []
+        for idx, (tokens, tags) in enumerate(zip(examples_tokens, examples_tags)):
+            # Get offset mapping for this example
+            offset_mapping = tokenized_inputs["offset_mapping"][idx]
+            
+            # Create char to word mapping
+            char_to_word = {}
+            char_idx = 0
+            for word_idx, word in enumerate(tokens):
+                for _ in word:
+                    char_to_word[char_idx] = word_idx
+                    char_idx += 1
+                char_to_word[char_idx] = word_idx  # Space
+                char_idx += 1
+            
+            # Align labels
+            label_ids = []
+            previous_word_idx = None
+            
+            for start_char, end_char in offset_mapping:
+                # Special tokens have (0, 0) offset
+                if start_char == 0 and end_char == 0:
+                    label_ids.append(-100)
+                    previous_word_idx = None
                 else:
-                    wid = max(i for i, s in enumerate(starts) if s <= start)
-                    if wid < len(gold):  # Add this check to prevent index errors
-                        if wid != prev_wid:
-                            aligned.append(gold[wid])
-                        else:
-                            aligned.append(
-                                gold[wid] if args.label_all_subtokens else -100
-                            )
+                    # Find corresponding word
+                    word_idx = char_to_word.get(start_char)
+                    
+                    if word_idx is None:
+                        label_ids.append(-100)
+                    elif word_idx >= len(tags):
+                        label_ids.append(-100)
+                    elif word_idx != previous_word_idx:
+                        # First token of a word
+                        label_ids.append(tags[word_idx])
+                        previous_word_idx = word_idx
                     else:
-                        aligned.append(-100)  # Handle case where token is beyond gold labels
-                    prev_wid = wid
-
-            # ------- ensure aligned is no longer than max_length ----------------
-            aligned = aligned[:args.max_len]
+                        # Subsequent tokens of a word
+                        if args.label_all_subtokens:
+                            label_ids.append(tags[word_idx])
+                        else:
+                            label_ids.append(-100)
             
-            # ------- pad labels to *this* example length ----------------
-            seq_len = len(ids)                       # should be 512
-            aligned += [-100] * (seq_len - len(aligned))
-            
-            # ------- double-check lengths match ----------------
-            assert len(aligned) == len(ids), f"Labels length {len(aligned)} != ids length {len(ids)}"
-            
-            labels_batch.append(aligned)
-
-        return {
-            "input_ids":       ids_batch,
-            "attention_mask":  mask_batch,
-            "labels":          labels_batch,
-        }
+            labels.append(label_ids)
+        
+        tokenized_inputs["labels"] = labels
+        
+        # Remove offset_mapping as it's not needed for training
+        tokenized_inputs.pop("offset_mapping", None)
+        
+        return tokenized_inputs
 
     logger.info("Preprocessing WikiANN training data...")
-    train_ds = train_ds.map(tokenize_and_align, batched=True, desc="Processing train tokens")
+    train_ds = train_ds.map(
+        tokenize_and_align_labels, 
+        batched=True, 
+        desc="Processing train tokens",
+        load_from_cache_file=not args.overwrite_cache
+    )
+    
+    # Set format for PyTorch
+    train_ds.set_format(type='torch', columns=['input_ids', 'attention_mask', 'labels'])
     
     logger.info("Preprocessing WikiANN validation data...")
-    val_ds = val_ds.map(tokenize_and_align, batched=True, desc="Processing validation tokens")
+    val_ds = val_ds.map(
+        tokenize_and_align_labels, 
+        batched=True, 
+        desc="Processing validation tokens",
+        load_from_cache_file=not args.overwrite_cache
+    )
+    
+    # Set format for PyTorch
+    val_ds.set_format(type='torch', columns=['input_ids', 'attention_mask', 'labels'])
     
     seqeval = evaluate.load("seqeval")
-    def compute(p):
+    
+    def compute_metrics(p):
         predictions, labels = p
-        predictions = predictions.argmax(-1)
+        predictions = np.argmax(predictions, axis=2)
         
         # Remove ignored index (special tokens)
         true_predictions = [
@@ -336,184 +525,114 @@ def setup_ner(tokenizer, lang_codes, args):
         ]
         
         results = seqeval.compute(predictions=true_predictions, references=true_labels)
-        return {"f1": results["overall_f1"]}
+        return {
+            "precision": results["overall_precision"],
+            "recall": results["overall_recall"],
+            "f1": results["overall_f1"],
+            "accuracy": results["overall_accuracy"],
+        }
     
     model = AutoModelForTokenClassification.from_pretrained(
-        args.model_path, num_labels=num_labels
-    )
-    adjust_padding_side(model, tokenizer)
-    return train_ds, val_ds, model, compute
-
-# ---------- 4) MLQA (extractive QA) ----------------------------------------
-@register("mlqa")
-def setup_mlqa(tokenizer, lang_codes, args):
-    okay = _filter_langs(lang_codes, list(datasets.get_dataset_config_names("mlqa")), "MLQA")
-    
-    train_subsets, val_subsets = [], []
-    for lg in okay:
-        try:
-            ds = datasets.load_dataset("mlqa", lg)
-            train_ds = ds["train"]
-            if "validation" in ds:
-                val_ds = ds["validation"]
-            else:
-                split = create_train_val_split(train_ds, val_size=args.val_size, seed=args.seed)
-                train_ds, val_ds = split["train"], split["test"]
-            
-            logger.info(f"MLQA {lg} - train: {len(train_ds)}, val: {len(val_ds)}")
-            train_subsets.append(train_ds)
-            val_subsets.append(val_ds)
-        except Exception as e:
-            logger.error(f"Error loading MLQA dataset for {lg}: {str(e)}")
-            continue
-    
-    if not train_subsets or not val_subsets:
-        raise ValueError("No valid MLQA datasets could be loaded")
-        
-    train_ds = datasets.concatenate_datasets(train_subsets)
-    val_ds = datasets.concatenate_datasets(val_subsets)
-    
-    logger.info(f"Combined MLQA dataset - train: {len(train_ds)}, val: {len(val_ds)}")
-
-    def preprocess_qa(examples):
-        questions = [q.strip() for q in examples["question"]]
-        inputs = tokenizer(
-            questions,
-            examples["context"],
-            max_length=args.max_len,
-            truncation="only_second",
-            stride=args.qa_stride,
-            return_overflowing_tokens=True,
-            return_offsets_mapping=True,
-            padding="max_length",
+        args.model_path, 
+        num_labels=num_labels,
+        ignore_mismatched_sizes=True,
+        pad_token_id=tokenizer.pad_token_id,  # Explicitly set
+        bos_token_id=tokenizer.bos_token_id,
+        eos_token_id=tokenizer.eos_token_id,
         )
-        
-        # Since one example might give us several features if it has a long context
-        sample_mapping = inputs.pop("overflow_to_sample_mapping")
-        offset_mapping = inputs.pop("offset_mapping")
-        
-        # Let's label those examples
-        inputs["start_positions"] = []
-        inputs["end_positions"] = []
-        
-        for i, offsets in enumerate(offset_mapping):
-            # Determine which example this feature came from
-            sample_idx = sample_mapping[i]
-            
-            # Get the answers for this example
-            answer = examples["answers"][sample_idx]
-            start_char = answer["answer_start"][0] if len(answer["answer_start"]) > 0 else 0
-            end_char = start_char + len(answer["text"][0]) if len(answer["text"]) > 0 else 0
-            
-            # Find tokens corresponding to answer
-            token_start_index = 0
-            while token_start_index < len(offsets) and offsets[token_start_index][0] <= start_char:
-                token_start_index += 1
-            token_start_index -= 1  # We went one too far
-            
-            token_end_index = token_start_index
-            while token_end_index < len(offsets) and offsets[token_end_index][1] <= end_char:
-                token_end_index += 1
-            
-            # If answer not fully within context, label it as start of context
-            if offsets[token_start_index][0] > start_char or offsets[token_end_index-1][1] < end_char:
-                inputs["start_positions"].append(0)
-                inputs["end_positions"].append(0)
-            else:
-                inputs["start_positions"].append(token_start_index)
-                inputs["end_positions"].append(token_end_index - 1)
-        
-        return inputs
-
-    logger.info("Preprocessing MLQA training data...")
-    train_ds = train_ds.map(
-        preprocess_qa, 
-        batched=True, 
-        remove_columns=train_ds.column_names,
-        desc="Processing train QA pairs"
-    )
-    
-    logger.info("Preprocessing MLQA validation data...")
-    val_ds = val_ds.map(
-        preprocess_qa, 
-        batched=True, 
-        remove_columns=val_ds.column_names,
-        desc="Processing validation QA pairs"
-    )
-    
-    # Properly calculate QA metrics
-    metric = evaluate.load("squad")
-    
-    def compute_metrics(eval_pred):
-        predictions, labels = eval_pred
-        start_logits, end_logits = predictions
-        start_positions, end_positions = labels
-        
-        # Convert logits to predictions
-        start_indices = start_logits.argmax(-1)
-        end_indices = end_logits.argmax(-1)
-        
-        # For proper evaluation, we would need to process the validation set to extract the answers
-        # This is a simplified metric calculation
-        accuracy = np.mean(
-            (start_indices == start_positions) & (end_indices == end_positions)
-        )
-        
-        return {"accuracy": accuracy}
-        
-    model = AutoModelForQuestionAnswering.from_pretrained(args.model_path)
     adjust_padding_side(model, tokenizer)
     return train_ds, val_ds, model, compute_metrics
 
-# ---------- 5) PAWS‑X -------------------------------------------------------
-@register("pawsx")
-def setup_pawsx(tokenizer, lang_codes, args):
-    okay = _filter_langs(lang_codes, list(datasets.get_dataset_config_names("paws-x")), "PAWS-X")
-    
-    train_subsets, val_subsets = [], []
-    for lg in okay:
-        try:
-            ds = datasets.load_dataset("paws-x", lg)
-            train_ds = ds["train"]
-            if "validation" in ds:
-                val_ds = ds["validation"]
-            else:
-                split = create_train_val_split(train_ds, val_size=args.val_size, seed=args.seed)
-                train_ds, val_ds = split["train"], split["test"]
-            
-            logger.info(f"PAWS-X {lg} - train: {len(train_ds)}, val: {len(val_ds)}")
-            train_subsets.append(train_ds)
-            val_subsets.append(val_ds)
-        except Exception as e:
-            logger.error(f"Error loading PAWS-X dataset for {lg}: {str(e)}")
-            continue
-    
-    if not train_subsets or not val_subsets:
-        raise ValueError("No valid PAWS-X datasets could be loaded")
-        
-    train_ds = datasets.concatenate_datasets(train_subsets)
-    val_ds = datasets.concatenate_datasets(val_subsets)
-    
-    logger.info(f"Combined PAWS-X dataset - train: {len(train_ds)}, val: {len(val_ds)}")
-    
-    num_labels = 2
-    def preprocess(examples):
-        return tokenizer(examples["sentence1"], examples["sentence2"], truncation=True, max_length=args.max_len)
-    
-    logger.info("Preprocessing PAWS-X training data...")
-    train_ds = train_ds.map(preprocess, batched=True, desc="Tokenizing train data")
-    
-    logger.info("Preprocessing PAWS-X validation data...")
-    val_ds = val_ds.map(preprocess, batched=True, desc="Tokenizing validation data")
-    
-    metric = evaluate.load("accuracy")
-    def compute(p):
-        logits, labels = p
-        return metric.compute(predictions=logits.argmax(-1), references=labels)
-    model = AutoModelForSequenceClassification.from_pretrained(args.model_path, num_labels=num_labels)
-    adjust_padding_side(model, tokenizer)
-    return train_ds, val_ds, model, compute
+# ---------------------------------------------------------------------------
+# Enhanced training configuration
+# ---------------------------------------------------------------------------
+def get_training_args(task, args, output_dir):
+    """Get task-specific training arguments with proper logging - FIXED VERSION."""
 
+    # Task-specific configurations
+    task_configs = {
+        "xnli": {
+            "metric_for_best_model": "eval_f1",
+            "greater_is_better": True,
+            "eval_steps": 1000,
+            "save_steps": 1000,
+            "logging_steps": 100,
+            "warmup_steps": 500,  # FIXED: Use explicit warmup_steps instead of ratio
+            "learning_rate": 2e-5,  # FIXED: More conservative learning rate
+            "epochs": 1  
+        },
+        "wikiann": {
+            "metric_for_best_model": "eval_f1",
+            "greater_is_better": True,
+            "eval_steps": 1000,
+            "save_steps": 1000,
+            "logging_steps": 100,
+            "warmup_steps": 500,
+            "learning_rate": 2e-5,
+            "epochs": args.epochs
+        },
+        "marc": {
+            "metric_for_best_model": "eval_f1",
+            "greater_is_better": True,
+            "eval_steps": 2000,
+            "save_steps": 2000,
+            "logging_steps": 200,
+            "warmup_steps": 500,
+            "learning_rate": 2e-5,
+            "epochs": args.epochs
+        }
+    }
+    
+    config = task_configs.get(task, {
+        "metric_for_best_model": "eval_loss",
+        "greater_is_better": False,
+        "eval_steps": args.eval_steps,
+        "save_steps": args.eval_steps,
+        "logging_steps": args.logging_steps,
+        "warmup_steps": 500,
+        "learning_rate": args.lr,
+        "epochs": args.epochs
+    })
+    
+    # Use task-specific learning rate if available
+    learning_rate = config.get("learning_rate", args.lr)
+    
+    # FIXED: Use warmup_steps consistently instead of mixing with warmup_ratio
+    warmup_steps = config.get("warmup_steps", 500)
+    
+    return TrainingArguments(
+        output_dir=output_dir,
+        per_device_train_batch_size=args.batch_size,
+        per_device_eval_batch_size=args.batch_size * 2,
+        num_train_epochs=config["epochs"],
+        learning_rate=learning_rate,
+        weight_decay=0.01,
+        logging_steps=config["logging_steps"],
+        evaluation_strategy=IntervalStrategy.STEPS,
+        eval_steps=config["eval_steps"],
+        save_steps=config["save_steps"],
+        gradient_accumulation_steps=args.grad_accum,
+        optim="adamw_torch",
+        report_to=["tensorboard"],
+        fp16=torch.cuda.is_available(),
+        save_total_limit=3,
+        load_best_model_at_end=True,
+        metric_for_best_model=config["metric_for_best_model"],
+        greater_is_better=config["greater_is_better"],
+        save_strategy=IntervalStrategy.STEPS,
+        warmup_steps=warmup_steps,  
+        logging_dir=os.path.join(output_dir, "logs"),
+        logging_first_step=True,
+        push_to_hub=False,
+        remove_unused_columns=True,
+        dataloader_drop_last=False,
+        dataloader_num_workers=4 if torch.cuda.is_available() else 0,
+        seed=args.seed,
+        disable_tqdm=True,
+        adam_epsilon=1e-8,
+        max_grad_norm=1.0,
+        lr_scheduler_type="linear",  # FIXED: Explicit scheduler type
+    )
 # ---------------------------------------------------------------------------
 # programmatic entry‑point (used by run_experiment.py)
 # ---------------------------------------------------------------------------
@@ -533,9 +652,9 @@ def finetune_from_config(entry: Dict[str, Any]) -> Dict[str, str]:
     args = SimpleNamespace(
         model_path   = entry["model_path"],
         task         = entry["tasks"],
-        epochs       = entry["hyper"].get("epochs", 2),
+        epochs       = entry["hyper"].get("epochs", 3),  # Increased default
         batch_size   = entry["hyper"].get("batch_size", 16),
-        lr           = entry["hyper"].get("lr", 3e-5),
+        lr           = entry["hyper"].get("lr", 2e-5),  # Slightly lower default
         max_len      = entry["hyper"].get("max_len", 512),
         output_dir   = entry["output_dir"],
         seed         = entry["hyper"].get("seed", 42),
@@ -544,9 +663,10 @@ def finetune_from_config(entry: Dict[str, Any]) -> Dict[str, str]:
         qa_stride    = entry["hyper"].get("qa_stride", 128),
         grad_accum   = entry["hyper"].get("gradient_accumulation_steps", 4),
         warmup_steps = entry["hyper"].get("warmup_steps", 0),
-        early_stopping_patience = entry["hyper"].get("early_stopping_patience", 3),
-        eval_steps   = entry["hyper"].get("eval_steps", 2000),
-        logging_steps = entry["hyper"].get("logging_steps", 2000),
+        early_stopping_patience = entry["hyper"].get("early_stopping_patience", 6),  # Increased
+        eval_steps   = entry["hyper"].get("eval_steps", 500),  # More frequent
+        logging_steps = entry["hyper"].get("logging_steps", 100),  # More frequent
+        overwrite_cache = entry["hyper"].get("overwrite_cache", False),
     )
     
     # Set random seed for reproducibility
@@ -557,6 +677,7 @@ def finetune_from_config(entry: Dict[str, Any]) -> Dict[str, str]:
     tokenizer_info = entry["tokenizer_info"]
     
     tok = load_tokenizer_from_config(tokenizer_info)
+    set_special_tokens(tok)
     lang_codes = entry["languages"]
 
     metrics_map = {}
@@ -566,46 +687,34 @@ def finetune_from_config(entry: Dict[str, Any]) -> Dict[str, str]:
         try:
             # Get train/val datasets and model
             train_ds, val_ds, model, compute_metrics = TASKS[task](tok, lang_codes, args)
+            train_ds = train_ds.shuffle(seed=args.seed)
 
             # Choose appropriate data collator
             if task == "wikiann":
-                collator = DataCollatorForTokenClassification(tok)
+                collator = DataCollatorForTokenClassification(
+                    tok, 
+                    pad_to_multiple_of=8,
+                    padding=True
+                )
             else:
-                collator = DataCollatorWithPadding(tok, pad_to_multiple_of=8)
+                collator = DataCollatorWithPadding(
+                    tok, 
+                    pad_to_multiple_of=8,
+                    padding=True
+                )
 
             # Set up output directory
             output_dir = os.path.join(args.output_dir, task)
             os.makedirs(output_dir, exist_ok=True)
 
-            # Set up training arguments
-            metric_name = "eval_accuracy" if task in {"xnli", "marc", "pawsx"} else (
-              "eval_f1" if task == "wikiann" else "eval_loss")
-            training_args = TrainingArguments(
-                output_dir=output_dir,
-                per_device_train_batch_size=args.batch_size,
-                per_device_eval_batch_size=args.batch_size * 2,
-                num_train_epochs=args.epochs,
-                learning_rate=args.lr,
-                weight_decay=0.01,
-                logging_steps=args.logging_steps,
-                evaluation_strategy="steps",
-                eval_steps=args.eval_steps,
-                save_steps = args.eval_steps,
-                gradient_accumulation_steps=args.grad_accum,
-                optim="adamw_8bit",
-                report_to="tensorboard",
-                fp16=torch.cuda.is_available(),
-                save_total_limit=3,
-                load_best_model_at_end=True,
-                metric_for_best_model=metric_name,
-                greater_is_better=metric_name != "eval_loss",
-                save_strategy="steps",
-                warmup_steps=args.warmup_steps,
-                logging_dir=os.path.join(args.output_dir, f"{task}_logs"),
-            )
+            # Get task-specific training arguments
+            training_args = get_training_args(task, args, output_dir)
 
-            # Set up trainer with early stopping
-            callbacks = [EarlyStoppingCallback(early_stopping_patience=args.early_stopping_patience)]
+            # Set up trainer with callbacks
+            callbacks = [
+                EarlyStoppingCallback(early_stopping_patience=args.early_stopping_patience),
+                MetricLoggerCallback()  # Add custom metric logger
+            ]
             
             trainer = Trainer(
                 model=model,
@@ -620,8 +729,7 @@ def finetune_from_config(entry: Dict[str, Any]) -> Dict[str, str]:
 
             # Find latest checkpoint if any
             resume_from_checkpoint = None
-            #TODO: remove False here
-            if False and os.path.isdir(output_dir):
+            if os.path.isdir(output_dir):
                 checkpoints = sorted(
                     [ckpt for ckpt in os.listdir(output_dir) if ckpt.startswith("checkpoint-")],
                     key=lambda x: int(x.split("-")[1]),
@@ -641,6 +749,8 @@ def finetune_from_config(entry: Dict[str, Any]) -> Dict[str, str]:
                             logger.info(f"Resuming from {epoch}/{args.epochs} epochs.")
                             resume_from_checkpoint = latest
                             training_completed = False
+                    else:
+                        training_completed = False
                 else:
                     training_completed = False
             else:
@@ -649,19 +759,36 @@ def finetune_from_config(entry: Dict[str, Any]) -> Dict[str, str]:
             # Train the model if not already done
             if not training_completed:
                 logger.info(f"Starting training for task: {task}")
-                trainer.train(resume_from_checkpoint=resume_from_checkpoint)
+                
+                # Log initial evaluation
+                logger.info("Running initial evaluation...")
+                initial_metrics = trainer.evaluate()
+                logger.info(f"Initial metrics: {initial_metrics}")
+                
+                # Train
+                train_result = trainer.train(resume_from_checkpoint=resume_from_checkpoint)
                 logger.info(f"Training completed for task: {task}")
+                
+                # Save training history
+                history_path = os.path.join(output_dir, "training_history.json")
+                with open(history_path, "w") as f:
+                    json.dump(trainer.state.log_history, f, indent=2)
             else:
                 logger.info(f"Skipping training for task: {task} (already completed)")
 
-            # Evaluate and save metrics
-            logger.info(f"Evaluating model for task: {task}")
+            # Final evaluation
+            logger.info(f"Running final evaluation for task: {task}")
             metrics = trainer.evaluate()
-            metrics_path = os.path.join(args.output_dir, f"{task}_metrics.json")
             
+            # Save final model
+            trainer.save_model(os.path.join(output_dir, "final_model"))
+            tok.save_pretrained(os.path.join(output_dir, "final_model"))
+            
+            # Save metrics
+            metrics_path = os.path.join(output_dir, f"{task}_metrics.json")
             with open(metrics_path, "w") as f:
                 json.dump(metrics, f, indent=2)
-            logger.info(f"Metrics saved to {metrics_path}: {metrics}")
+            logger.info(f"Final metrics saved to {metrics_path}: {metrics}")
             
             metrics_map[task] = metrics_path
             
@@ -672,3 +799,4 @@ def finetune_from_config(entry: Dict[str, Any]) -> Dict[str, str]:
 
     logger.info("All tasks completed")
     return metrics_map
+
