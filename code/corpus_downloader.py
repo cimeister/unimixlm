@@ -6,7 +6,7 @@ from typing import Dict, List, Optional
 
 from datasets import load_dataset
 import argparse
-from code.utils import MAX_VAL_TEST_SIZE
+from code.constants import MAX_VAL_TEST_SIZE
 
 FLORES_LANGMAP = {
     "en":"eng_Latn","zh":"zho_Hans","es":"spa_Latn","ar":"arb_Arab","ru":"rus_Cyrl",

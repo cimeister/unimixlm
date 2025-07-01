@@ -24,7 +24,6 @@ import os
 from pathlib import Path
 from typing import Dict, List, Tuple
 
-import numpy as np
 from tokenizers import Tokenizer
 from tokenizers.models import Unigram
 from tokenizers.pre_tokenizers import Whitespace, ByteLevel
@@ -32,7 +31,7 @@ from tokenizers.pre_tokenizers import Whitespace, ByteLevel
 from code.em_unigram_trainer import EMUnigramTrainer
 from code.standard_unigramlm import StandardUnigramLMTokenizer
 from code.utils import _build_hf_tokenizer_from_probs
-from code.utils import SPECIAL_TOKENS, MIN_TOKEN_PROB
+from code.constants import SPECIAL_TOKENS, MIN_TOKEN_LOG_PROB, MIN_TOKEN_PROB
 
 logger = logging.getLogger(__name__)
 
@@ -277,7 +276,7 @@ class LanguageSpecificUnigramLMTokenizer(StandardUnigramLMTokenizer):
         for lang_code, info in self.language_info.items():
             enc = info["tokenizer"].encode(text)
             toks = enc.tokens
-            logp = sum(info["scores"].get(t, math.log(MIN_TOKEN_PROB)) for t in toks)
+            logp = sum(info["scores"].get(t, MIN_TOKEN_LOG_PROB) for t in toks)
 
             if logp > best_logp:
                 best_lang, best_tokens, best_logp = lang_code, toks, logp
@@ -301,7 +300,7 @@ class LanguageSpecificUnigramLMTokenizer(StandardUnigramLMTokenizer):
         for lang_code, info in self.language_info.items():
             encs = info["tokenizer"].encode_batch(texts)
             for i, enc in enumerate(encs):
-                score = sum(info["scores"].get(t, math.log(MIN_TOKEN_PROB)) for t in enc.tokens)
+                score = sum(info["scores"].get(t, MIN_TOKEN_LOG_PROB) for t in enc.tokens)
                 if score > best_scores[i]:
                     best_scores[i] = score
                     best_langs[i]  = lang_code

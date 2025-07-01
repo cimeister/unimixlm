@@ -1,13 +1,12 @@
 import math
-from collections import OrderedDict, defaultdict, Counter
+from collections import defaultdict, Counter
 import multiprocessing
 import json
-from collections import Counter
-import numpy as np
 from typing import Dict, List, Tuple, Set, Any, Optional, Union
 
 from pathlib import Path
-import random
+import hashlib
+import code.constants as constants
 
 from tokenizers import Tokenizer
 from tokenizers.models import Unigram
@@ -21,16 +20,6 @@ logging.basicConfig(
 )
 logger = logging.getLogger(__name__)
 
-#TODO: move to own file
-SPECIAL_TOKENS = OrderedDict([("bos_token", "<s>"), ("eos_token", "</s>"), ("pad_token","<pad>"), ("unk_token","<unk>")])
-NUM_TRIMMING_ITERATIONS = 3
-INITIAL_VOCAB_MULT_FACTOR = 3
-MIN_CHAR_OCCURENCE_THRESHOLD = 2
-MIN_TOKEN_PROB = 1e-12
-_TOTAL_SAMPLE_LINES = 2_000_000
-MAX_VAL_TEST_SIZE = 3000
-_RNG = random.Random(42)
-
 # build once, reuse
 _B2U = {i: c for i, c in enumerate(ByteLevel.alphabet())}
 BY_PRETOK = ByteLevel(add_prefix_space=False)
@@ -43,7 +32,16 @@ def _apply_bytelevel_mapping_hf(text: str) -> str:
     normalized = BY_PRETOK.pre_tokenize_str(text)
     return ''.join(piece[0] for piece in normalized)
 
-def get_baseline_characters(training_data_files, character_coverage=0.9995, min_occurence_threshold=MIN_CHAR_OCCURENCE_THRESHOLD):
+def mk_id(raw: str) -> str:
+    # 8-byte / 16-char hex digest, utf-8, replace errors
+    digest = hashlib.blake2s(
+        raw.encode("utf-8", "replace"),
+        digest_size=8                      # 64-bit
+    ).hexdigest()
+    return digest
+
+
+def get_baseline_characters(training_data_files, character_coverage=0.9995, min_occurence_threshold=constants.MIN_CHAR_OCCURENCE_THRESHOLD):
     """
     Get baseline characters from training data files, matching SentencePiece's approach.
     
@@ -208,12 +206,11 @@ def encode_text(
     tokenizer: Any,
     text: Union[str, List[str], Tuple[str, str], List[Tuple[str, str]]],
     *,
-    add_special_tokens: bool = True,
+    add_special_tokens: bool = False,
     padding: Optional[str] = None,
     truncation: Union[bool, str] = False,
     max_length: Optional[int] = None,
     stride: Optional[int] = None,                     # only honoured by HF path
-    return_overflowing_tokens: bool=False,            # idem
     return_offsets_mapping: bool=False,
     return_attention_mask: bool=False,
     return_special_tokens_mask: bool=False,
@@ -225,7 +222,7 @@ def encode_text(
 ) -> Dict[str, Any]:
 
     batch_txt, was_single = _as_batch(text)
-    pad_token = tokenizer.pad_token if hasattr(tokenizer, "pad_token") else SPECIAL_TOKENS["pad_token"]
+    pad_token = tokenizer.pad_token if hasattr(tokenizer, "pad_token") else constants.SPECIAL_TOKENS["pad_token"]
     pad_id = tokenizer.get_vocab()[pad_token]
 
     # ------------------------------------------------------------------#
@@ -307,7 +304,6 @@ def encode_text(
             truncation           = truncation,
             max_length           = max_length,
             stride               = stride,
-            return_overflowing_tokens = return_overflowing_tokens,
             return_offsets_mapping    = return_offsets_mapping,
             return_attention_mask     = return_attention_mask,
             return_special_tokens_mask= return_special_tokens_mask,
@@ -343,7 +339,7 @@ def proportional_sample(train_files_by_lang: Dict[str, str],
     sampled_files = {}
     for lg, path in train_files_by_lang.items():
         # ensure at least 1000 lines
-        k = max(1000, int(_TOTAL_SAMPLE_LINES * byte_tot[lg] / total))
+        k = max(1000, int(constants._TOTAL_SAMPLE_LINES * byte_tot[lg] / total))
         dest_dir = out_path / lg
         dest_dir.mkdir(parents=True, exist_ok=True)
         dest = dest_dir / "sample.txt"
@@ -358,7 +354,7 @@ def proportional_sample(train_files_by_lang: Dict[str, str],
             for line in src:
                 if lines_written == k:
                     break
-                if _RNG.random() > 0.2:   # light intra‑lang subsample
+                if constants._RNG.random() > 0.2:   # light intra‑lang subsample
                     continue
                 tgt.write(line)
                 lines_written += 1
@@ -369,673 +365,68 @@ def get_baseline_bytes() -> Tuple[Set[str], Dict[str,int]]:
     return set(alphabet), {c:1 for c in alphabet}
 
 
-def segment_text_viterbi(text, token_probs, unk_token="<unk>", max_sub_len=15, beam_width=5.0, byte_level=False):
+def _sample_lines_from_file(file_path: str, sample_proportion: float, seed: int) -> List[str]:
     """
-    Segment `text` into tokens using a whitespace split + Viterbi subword approach,
-    under the distribution given by `token_probs` (a dict mapping token->prob).
-    Returns a list of tokens.
-
-    Args:
-        text: A string (possibly containing multiple words).
-        token_probs: dict(token -> float probability).
-        unk_token: which token to use when no match can be found.
-        max_sub_len: maximum subword length to consider in Viterbi.
-        beam_width: pruning parameter, paths with score < best_score - beam_width are pruned
-
-    Returns:
-        A list of tokens (subwords).
+    Efficiently sample lines from a file using reservoir sampling.
     """
-    # The final list of subword tokens across all whitespace-delimited words
-    if byte_level:
-        # Apply byte-level mapping first
-        text = _apply_bytelevel_mapping_hf(text)
-        # For byte-level, treat the entire text as one sequence (no whitespace splitting)
-        return _segment_word_viterbi(text, token_probs, unk_token, max_sub_len, beam_width)
+    import random
+    random.seed(seed)
     
-    all_tokens = []
-    words = text.strip().split()  # 1) Whitespace split
-    if not words:
-        return all_tokens
-
-    # Here we process the whole batch of words together
-    for word in words:
-        # 2) For each word, run Viterbi
-        sub_tokens = _segment_word_viterbi(word, token_probs, unk_token, max_sub_len, beam_width)
-        all_tokens.extend(sub_tokens)
-
-    return all_tokens
-
-
-def _segment_word_viterbi(
-    word: str,
-    token_probs: dict,
-    unk_token: str = "<unk>",
-    max_sub_len: int = 20,
-    beam_width: float = 5.0,
-):
-    """
-    Efficient Viterbi-style sub-word segmentation (SentencePiece UnigramLM).
-
-    * First pass  – explore paths that use only **known** tokens.
-    * Second pass – insert required <unk> tokens **and immediately keep
-                    exploring from the position that follows each <unk>**,
-                    so later characters/bytes are no longer forced to become <unk>.
-    The algorithm still runs in O(n · max_sub_len) time with beam pruning.
-    """
-    n = len(word)
-    if n == 0:
-        return []
-
-    # --- tables -------------------------------------------------------------
-    best_score = np.full(n + 1, float("-inf"), dtype=np.float64)
-    best_edge = np.full(n + 1, -1, dtype=np.int32)
-    max_score_at_pos = np.full(n + 1, float("-inf"), dtype=np.float64)
-    best_score[0] = max_score_at_pos[0] = 0.0
-
-    unk_logp = math.log(max(token_probs.get(unk_token, MIN_TOKEN_PROB), MIN_TOKEN_PROB))
-    requires_unk = np.zeros(n + 1, dtype=bool)
-
-    # ------------------------------------------------------------------------
-    # Pass 1 – only known tokens
-    # ------------------------------------------------------------------------
-    for start in range(n):
-        cur_score = best_score[start]
-        if cur_score == float("-inf"):
-            continue
-        if cur_score < max_score_at_pos[start] - beam_width:
-            continue
-
-        max_end = min(n, start + max_sub_len)
-        found = False
-        for end in range(start + 1, max_end + 1):
-            sub = word[start:end]
-            if sub in token_probs:
-                score = cur_score + math.log(max(token_probs[sub], MIN_TOKEN_PROB))
-                if score > best_score[end]:
-                    best_score[end] = score
-                    best_edge[end] = start
-                    max_score_at_pos[end] = max(max_score_at_pos[end], score)
-                found = True
-
-        if not found and best_edge[start + 1] == -1:
-            requires_unk[start + 1] = True
-
-    # ------------------------------------------------------------------------
-    # Pass 2 – insert <unk> where required *and* keep exploring forward
-    # ------------------------------------------------------------------------
-    for start in range(n):                       # <— no early-exit break
-        cur_score = best_score[start]
-        if cur_score == float("-inf"):
-            continue
-
-        # 2a. insert exactly one-char <unk> if we still need it here
-        end = start + 1
-        if end <= n and requires_unk[end]:
-            score = cur_score + unk_logp
-            if score > best_score[end]:
-                best_score[end] = score
-                best_edge[end] = start
-                max_score_at_pos[end] = max(max_score_at_pos[end], score)
-            requires_unk[end] = False    # handled – don’t revisit
-
-        # 2b. now try *normal* tokens that begin right after start
-        if cur_score < max_score_at_pos[start] - beam_width:
-            continue                      # (reuse beam pruning)
-        max_end = min(n, start + max_sub_len)
-        for end in range(start + 1, max_end + 1):
-            sub = word[start:end]
-            if sub in token_probs:
-                score = cur_score + math.log(max(token_probs[sub], MIN_TOKEN_PROB))
-                if score > best_score[end]:
-                    best_score[end] = score
-                    best_edge[end] = start
-                    max_score_at_pos[end] = max(max_score_at_pos[end], score)
-
-    # ------------------------------------------------------------------------
-    # Back-trace
-    # ------------------------------------------------------------------------
-    tokens = []
-    pos = n
-    while pos > 0:
-        prev = int(best_edge[pos])
-        if prev == -1:
-            tokens.append(unk_token)
-            pos -= 1
-        else:
-            sub = word[prev:pos]
-            tokens.append(sub if sub in token_probs else unk_token)
-            pos = prev
-
-    return tokens[::-1]
-
-
-def forward_backward_unigram(text, p_lang, unk_token="<unk>", max_sub_len=20, prob_threshold=MIN_TOKEN_PROB, byte_level=False):
-    """
-    Forward-backward algorithm for unigram language model training that matches SentencePiece's
-    UNK handling approach.
-    
-    Returns a dict { subword -> fractional_count }.
-    """
-    # Get probability for unknown token
-    p_unk = p_lang.get(unk_token, prob_threshold)
-    
-    # Split on whitespace first, like in Viterbi
-    if byte_level:
-        text = _apply_bytelevel_mapping_hf(text)
-
-    # --- 2. Use the *whole* line; leading spaces matter --------------
-    words = [text.rstrip("\n")]
-    
-    # Initialize global counts
-    total_counts = {}
-    
-    for word in words:
-        n = len(word)
-        if n == 0:
-            continue
-            
-        # Initialize alpha and beta arrays
-        alpha = [0.0] * (n+1)
-        alpha_without_unk = [0.0] * (n+1)  # Tracks probability mass WITHOUT using UNK
-        beta = [0.0] * (n+1)
-        alpha[0] = 1.0
-        alpha_without_unk[0] = 1.0
-        
-        # Track positions that need UNK (cannot be reached with regular tokens)
-        requires_unk = [False] * (n+1)
-        
-        # Track furthest reachable position for early termination
-        furthest_reachable = 0
-        
-        # Helper function for token probabilities with memoization
-        token_prob_cache = {}
-        def token_prob(token):
-            if token not in token_prob_cache:
-                token_prob_cache[token] = p_lang.get(token, 0.0)
-            return token_prob_cache[token]
-        
-        # Forward pass - first compute alpha_without_unk
-        for i in range(n):
-            base_val = alpha_without_unk[i]
-            if base_val == 0.0:
-                continue
-                
-            # Early termination check - if we're beyond what we can reach with regular tokens
-            if i > furthest_reachable:
+    # First, try to estimate file size
+    sample_size = None
+    with open(file_path, 'r', encoding='utf-8', errors='replace') as f:
+        # Read first 1000 lines to estimate
+        first_lines = []
+        i = 0
+        for i, line in enumerate(f):
+            if i >= 1000:
                 break
-                
-            # Try all valid subwords
-            end_limit = min(n, i+max_sub_len)
-            found_valid = False
-            
-            for j in range(i+1, end_limit+1):
-                sub = word[i:j]
-                p_sub = token_prob(sub)
-                if p_sub > prob_threshold:
-                    alpha_without_unk[j] += base_val * p_sub
-                    found_valid = True
-                    furthest_reachable = max(furthest_reachable, j)
-            
-            # Mark positions that need UNK
-            if not found_valid and i+1 <= n:
-                requires_unk[i+1] = True
+            if line.strip():
+                first_lines.append(line.strip())
         
-        # Forward pass with UNK - compute full alpha values
-        # Reset furthest reachable to account for UNK tokens
-        furthest_reachable_with_unk = furthest_reachable
+        # If file is small, just return all lines
+        if i < 1000:
+            return first_lines
         
-        for i in range(n):
-            base_val = alpha[i]
-            if base_val == 0.0:
+        # Estimate total lines (rough approximation)
+        f.seek(0, 2)  # End of file
+        file_size = f.tell()
+        f.seek(0)
+        avg_line_size = sum(len(line) for line in first_lines) / len(first_lines)
+        estimated_lines = int(file_size / avg_line_size)
+        sample_size = max(1000, int(estimated_lines * sample_proportion))
+    
+    # Now do reservoir sampling
+    reservoir = []
+    with open(file_path, 'r', encoding='utf-8', errors='replace') as f:
+        for i, line in enumerate(f):
+            line = line.strip()
+            if not line:
                 continue
                 
-            # Early termination check
-            if i > furthest_reachable_with_unk:
-                break
-                
-            # Only allow UNK for positions that require it
-            if i+1 <= n and requires_unk[i+1]:
-                alpha[i+1] += base_val * p_unk
-                furthest_reachable_with_unk = max(furthest_reachable_with_unk, i+1)
-            
-            # Try all valid subwords
-            end_limit = min(n, i+max_sub_len)
-            for j in range(i+1, end_limit+1):
-                sub = word[i:j]
-                p_sub = token_prob(sub)
-                if p_sub > prob_threshold:
-                    alpha[j] += base_val * p_sub
-                    furthest_reachable_with_unk = max(furthest_reachable_with_unk, j)
-        
-        # Calculate normalization factor
-        Z = alpha[n]
-        if Z <= 0:
-            # If we can't segment this word, count it as one <unk>
-            total_counts[unk_token] = total_counts.get(unk_token, 0.0) + 1.0
-            continue
-        
-        # Backward pass
-        beta[n] = 1.0
-        for i in range(n-1, -1, -1):
-            # Skip positions that can't contribute to any valid path
-            if alpha[i] == 0.0:
-                continue
-                
-            # Only allow UNK for positions that require it
-            if i+1 <= n and requires_unk[i+1]:
-                beta[i] += p_unk * beta[i+1]
-                
-            # Try all valid subwords
-            end_limit = min(n, i+max_sub_len)
-            for j in range(i+1, end_limit+1):
-                sub = word[i:j]
-                p_sub = token_prob(sub)
-                if p_sub > prob_threshold:
-                    beta[i] += p_sub * beta[j]
-        
-        # Accumulate expected counts
-        for i in range(n):
-            ai = alpha[i]
-            if ai == 0.0:
-                continue
-                
-            # Early termination check
-            if i > furthest_reachable_with_unk:
-                break
-                
-            # Count <unk> token usage only where required
-            if i+1 <= n and requires_unk[i+1] and beta[i+1] > 0:
-                frac_unk = (ai * p_unk * beta[i+1]) / Z
-                if frac_unk > 0:
-                    total_counts[unk_token] = total_counts.get(unk_token, 0.0) + frac_unk
-            
-            # Count subword token usage
-            end_limit = min(n, i+max_sub_len)
-            for j in range(i+1, end_limit+1):
-                # Skip if this can't possibly contribute
-                if beta[j] == 0.0:
-                    continue
-                    
-                sub = word[i:j]
-                p_sub = token_prob(sub)
-                if p_sub > prob_threshold:
-                    frac = (ai * p_sub * beta[j]) / Z
-                    if frac > 0:
-                        total_counts[sub] = total_counts.get(sub, 0.0) + frac
-    
-    return total_counts
-
-
-def _accumulate_usage_worker_soft(args):
-    """
-    Worker for the 'soft' E-step, i.e. forward-backward to accumulate fractional usage.
-    """
-    chunk_lines, p_lang, unk_token, byte_level = args
-
-    c_dict = defaultdict(float)
-    total = 0.0
-
-    for line in chunk_lines:
-        usage_line = forward_backward_unigram(line, 
-            p_lang, 
-            unk_token=unk_token, 
-            byte_level=byte_level, 
-            max_sub_len=30 if byte_level else 20)
-        line_count = sum(usage_line.values())  # total subwords in a segmentation => expected # of tokens
-        total+= line_count
-        for tk, frac in usage_line.items():
-            c_dict[tk]+= frac
-
-    return (dict(c_dict), total)
-
-def _accumulate_usage_worker_hard(args):
-    """
-    Top-level function for multiprocessing usage, with optimized batch processing.
-    Args:
-        chunk_lines: list of text lines
-        p_lang: dict(token -> prob) for the current language's distribution
-        unk_token: string for unknown token
-    Returns: (counts_dict, total_subwords)
-    """
-    chunk_lines, p_lang, unk_token, byte_level = args
-
-    c_dict = defaultdict(float)
-    total = 0
-    
-    # Process in batches for better CPU cache utilization
-    batch_size = 50  # Adjust based on your typical line length
-    
-    for i in range(0, len(chunk_lines), batch_size):
-        batch = chunk_lines[i:i+batch_size]
-        
-        for line in batch:
-            # Apply beam search pruning in Viterbi (5.0 is a reasonable default beam width)
-            tokens = segment_text_viterbi(
-                line, 
-                p_lang, 
-                unk_token=unk_token, 
-                max_sub_len=30 if byte_level else 20,
-                byte_level=byte_level
-            )
-
-            total += len(tokens)
-            for tk in tokens:
-                c_dict[tk] += 1
-
-    return (dict(c_dict), total)
-
-
-def _find_alternatives_for_tokens_batch(text_context: str, target_tokens: set, 
-                                        token_probs: dict, unk_token: str, 
-                                        byte_level: bool = False) -> Dict[str, set]:
-    """
-    Efficiently find alternatives for multiple tokens in a single text context.
-    Only does one re-segmentation per unique token, avoiding redundant work.
-    """
-    alternatives = {token: set() for token in target_tokens}
-    
-    # Process each target token
-    for target_token in target_tokens:
-        if target_token not in token_probs or target_token == unk_token:
-            continue
-            
-        # Temporarily set target token probability to near-zero (more efficient than copying vocab)
-        original_prob = token_probs[target_token]
-        token_probs[target_token] = 1e-30  # Very small but not zero to avoid log issues
-        
-        try:
-            # Get alternative segmentation
-            if byte_level:
-                mapped_text = _apply_bytelevel_mapping_hf(text_context)
-                alt_seg = _segment_word_viterbi(mapped_text, token_probs, unk_token, 30 if byte_level else 20)
+            if len(reservoir) < sample_size:
+                reservoir.append(line)
             else:
-                words = text_context.strip().split()
-                alt_seg = []
-                for word in words:
-                    alt_seg.extend(_segment_word_viterbi(word, token_probs, unk_token, 30 if byte_level else 20))
-            
-            # Collect alternatives for this token
-            for alt_token in alt_seg:
-                if alt_token != target_token and alt_token in token_probs and alt_token != unk_token:
-                    alternatives[target_token].add(alt_token)
-                    
-        finally:
-            # Always restore original probability
-            token_probs[target_token] = original_prob
+                j = random.randint(0, i)
+                if j < sample_size:
+                    reservoir[j] = line
     
-    return alternatives
+    return reservoir
 
 
-def _accumulate_alternatives_worker_optimized(args):
-    """
-    Optimized worker that processes tokens more efficiently with global caching.
-    """
-    chunk_lines, p_lang, unk_token, byte_level, processed_tokens = args
-    
-    alternatives = defaultdict(set)
-    
-    for line in chunk_lines:
-        # Get best segmentation for this line
-        if byte_level:
-            mapped_line = _apply_bytelevel_mapping_hf(line)
-            best_seg = _segment_word_viterbi(mapped_line, p_lang, unk_token, 30 if byte_level else 20)
-            text_context = mapped_line
-        else:
-            words = line.strip().split()
-            best_seg = []
-            for word in words:
-                best_seg.extend(_segment_word_viterbi(word, p_lang, unk_token, 30 if byte_level else 20))
-            text_context = line
-        
-        # Only process tokens we haven't seen before
-        unique_tokens = set(best_seg) - processed_tokens
-        if not unique_tokens:
-            continue
-            
-        # Process all unseen tokens in this line at once
-        line_alternatives = _find_alternatives_for_tokens_batch(
-            text_context, unique_tokens, p_lang, unk_token, byte_level
-        )
-        
-        # Merge results
-        for token, alts in line_alternatives.items():
-            alternatives[token].update(alts)
-    
-    return {token: list(alts) for token, alts in alternatives.items()}
-
-
-def _accumulate_usage(train_file,
-                      p_lang,
-                      unk_token,
-                      num_processes=None,
-                      mode='soft',
-                      byte_level=False):
-        """
-        For a single language's corpus:
-          - segment each line with distribution p_lang
-          - collect usage counts c(token), total usage
-        We'll do it in parallel to speed up big corpora.
-        """
-        if num_processes is None:
-            # at most 20
-            num_processes = min(20, multiprocessing.cpu_count()-1)
-
-        # 1) read entire file's lines into memory (if feasible)
-        lines = []
-        with open(train_file, 'r', encoding='utf-8', errors="replace") as fin:
-            for line in fin:
-                line = line.strip()
-                if line:
-                    lines.append(line)
-
-        if not lines:
-            return (defaultdict(float), 0)
-
-        # 2) chunk the lines for each process
-        n = len(lines)
-        chunk_size = max(1, n // num_processes)
-        chunks = []
-        idx = 0
-        while idx < n:
-            chunk = lines[idx:idx + chunk_size]
-            idx += chunk_size
-            chunks.append(chunk)
-
-        # 3) Build worker args
-        # we pass p_lang + unk_token for the segmentation
-        worker_args = []
-        for ch in chunks:
-            worker_args.append((ch, p_lang, unk_token, byte_level))
-
-        # 4) Launch pool
-        with multiprocessing.Pool(processes=num_processes) as pool:
-            if mode == 'hard': 
-                results = pool.map(_accumulate_usage_worker_hard, worker_args)
-            else: 
-                results = pool.map(_accumulate_usage_worker_soft, worker_args)
-
-        # 5) combine partial results
-        c_dict = defaultdict(float)
-        total = 0
-        for partial_cdict, partial_total in results:
-            total += partial_total
-            for tk, cnt in partial_cdict.items():
-                c_dict[tk] += cnt
-
-        return (c_dict, total)
-
-
-def _accumulate_usage_dummy(
-    file_path: str,
-    p_token: Dict[str, float],
-    unk_token: str,
-    mode: str = "soft",
-    avg_tokens_per_line: int = 20,
-) -> Tuple[Dict[str, float], float]:
-    """
-    Return synthetic token-usage counts without touching `file_path`.
-
-    • Keeps the signature (and return types) identical to the real
-      `_accumulate_usage`, so the rest of the pipeline works unmodified.
-    • Draws counts from a Dirichlet distribution centred on the current
-      probabilities `p_token`, then scales them to mimic `avg_tokens_per_line`
-      over 1 000 virtual lines.
-    """
-    # ---------- synthetic corpus size ----------
-    virtual_lines = 1_000
-    tot_subwords  = avg_tokens_per_line * virtual_lines   # e.g. 20k
-
-    # ---------- sample a Dirichlet centred on p_token ----------
-    # α = p * β; choose β so the sample variance is reasonably small.
-    beta = 10_000                                         # larger = lower var
-    alpha = [max(p * beta, 1e-9) for p in p_token.values()]
-    sample = random.gammavariate  # alias
-
-    dirichlet = [sample(a, 1.0) for a in alpha]
-    z = sum(dirichlet)
-    probs = [d / z for d in dirichlet]
-
-    counts = {tk: p * tot_subwords for tk, p in zip(p_token.keys(), probs)}
-
-    # ---------- enforce fixed UNK prior ----------
-    counts[unk_token] = p_token[unk_token] * tot_subwords
-
-    return counts, float(tot_subwords)
-
-
-def _compute_alternatives(corpus_files: List[str], token_probs: dict, unk_token: str, 
-                          byte_level: bool = False, 
-                          sample_proportion: float = 0.05,  # Reduced default
-                          num_processes: int = None) -> Dict[str, List[str]]:
-    """
-    optimized alternative computation with global token tracking and smart sampling.
-    
-    """
-    if num_processes is None:
-        num_processes = min(20, multiprocessing.cpu_count() - 1)
-    
-    all_alternatives = defaultdict(set)
-    processed_tokens = set()  # Global tracking
-    
-    # Process files in order, with early stopping logic
-    for file_idx, file_path in enumerate(corpus_files):
-        logger.info(f"Computing alternatives from {file_path} ({file_idx+1}/{len(corpus_files)}) "
-                   f"- {len(processed_tokens)} tokens processed so far")
-        
-        # Read and sample lines
-        lines = []
-        with open(file_path, 'r', encoding='utf-8', errors="replace") as fin:
-            for line in fin:
-                line = line.strip()
-                if line:
-                    lines.append(line)
-        
-        if not lines:
-            continue
-            
-        sample_size = max(1000, int(len(lines) * sample_proportion))
-        
-        if sample_size < len(lines):
-            random.seed(42 + file_idx)  # Reproducible but different per file
-            lines = random.sample(lines, sample_size)
-        
-        logger.info(f"  Processing {len(lines)} lines")
-        
-        # Chunk lines for parallel processing
-        chunk_size = max(1, len(lines) // num_processes)
-        chunks = [lines[i:i + chunk_size] for i in range(0, len(lines), chunk_size)]
-        
-        # Prepare worker arguments
-        worker_args = [(chunk, token_probs, unk_token, byte_level, processed_tokens.copy()) 
-                      for chunk in chunks]
-        
-        # Process in parallel
-        with multiprocessing.Pool(processes=num_processes) as pool:
-            results = pool.map(_accumulate_alternatives_worker_optimized, worker_args)
-        
-        # Merge results and update global tracking
-        new_tokens_found = 0
-        for partial_alternatives in results:
-            for token, alts in partial_alternatives.items():
-                if token not in processed_tokens:
-                    new_tokens_found += 1
-                    processed_tokens.add(token)
-                all_alternatives[token].update(alts)
-        
-        logger.info(f"  Found alternatives for {new_tokens_found} new tokens")
-    
-    # Convert sets to lists
-    final_alternatives = {token: list(alts) for token, alts in all_alternatives.items()}
-    
-    logger.info(f"Pre-computed alternatives for {len(final_alternatives)} tokens "
-               f"({len(final_alternatives)/len(token_probs):.1%} of vocabulary)")
-    
-    return final_alternatives
-
-
-def _compute_loss_with_alternatives(token_to_remove: str, counts: Dict[str, float], 
-                                              alternatives: Dict[str, List[str]], 
-                                              p_token: Dict[str, float],
-                                              unk_token: str) -> float:
-    """
-    Compute loss using SentencePiece's analytical formula with pre-computed alternatives.
-    This follows the exact formula from SentencePiece source code.
-    """
-    if token_to_remove not in counts or counts[token_to_remove] == 0:
-        return 0.0
-    
-    total_freq = sum(counts.values())
-    freq_i = counts[token_to_remove]
-    
-    # Current log probability of token being removed
-    logprob_sp = math.log(freq_i) - math.log(total_freq)
-    
-    # Get alternatives for this token
-    token_alternatives = alternatives.get(token_to_remove, [])
-    if not token_alternatives:
-        # Fallback: assume frequency goes to UNK
-        token_alternatives = [unk_token] if unk_token in counts else []
-    
-    if not token_alternatives:
-        return 0.0
-    
-    # Compute new total frequency after redistribution
-    # Following SentencePiece formula: new_sum = current_sum + freq[i] * (alternatives.size() - 1)
-    num_alternatives = len(token_alternatives)
-    logsum_alt = math.log(total_freq + freq_i * (num_alternatives - 1))
-    
-    # Compute alternative log probabilities
-    logprob_alt = 0.0
-    for alt_token in token_alternatives:
-        if alt_token in counts:
-            # Each alternative gets an equal share of the redistributed frequency
-            new_freq = counts[alt_token] + freq_i
-            logprob_alt += math.log(new_freq) - logsum_alt
-    
-    # Loss is frequency-weighted difference (following SentencePiece's F * (logprob_sp - logprob_alt))
-    loss = freq_i/total_freq * (logprob_sp - logprob_alt)
-    return loss
-
-   # Flatten/truncate
-def fix_input_ids(example, max_length=1024):
-    if len(example["input_ids"])>0 and isinstance(example["input_ids"][0], list):
-        flat=[]
-        for s in example["input_ids"]:
-            flat.extend(s)
-        example["input_ids"] = flat
-    if len(example["input_ids"])>max_length:
-        example["input_ids"] = example["input_ids"][:max_length]
-    example["labels"] = list(example["input_ids"])
-    return example
-
-def nonempty(example):
-    return (len(example["input_ids"])>0)
+def np_logaddexp(x, y):
+    """Numerically stable log(exp(x) + exp(y))"""
+    if x == float("-inf"):
+        return y
+    if y == float("-inf"):
+        return x
+    return max(x, y) + math.log(1 + math.exp(-abs(x - y)))
 
 
 def set_special_tokens(tokenizer):
     vocab = tokenizer.get_vocab()
 
-    for token_name, token in SPECIAL_TOKENS.items():
+    for token_name, token in constants.SPECIAL_TOKENS.items():
         if token in vocab:
                 # This sets the pad_token to <pad> if the user wants it recognized as special
             setattr(tokenizer, token_name, token)
@@ -1094,7 +485,7 @@ def _build_hf_tokenizer_from_probs(
     """
     Turn a plain probability dictionary into a HF Unigram tokenizer.
     """
-    #TODO: Add byte_fallback=self.byte_level when feature becomes available
+    #TODO: Add byte_fallback=self.byte_level if/when feature becomes available
     model = Unigram(probs_tuples, unk_id)
     tok = Tokenizer(model)
     tok.pre_tokenizer = ByteLevel(add_prefix_space=False) if byte_level else Whitespace()
@@ -1110,7 +501,7 @@ def tokmix_merge(
     special: List[str],
 ) -> Tokenizer:
     """
-    Merge per-language UnigramLM vocabularies à la TokMix.
+    Merge per-language UnigramLM vocabularies according to TokMix alg.
     Each `per_lang_tokenizers[lg]` is a dict {token -> prob} with
     probabilities summing to 1 inside that language.
     The merged vocabulary keeps the `k_final` highest averaged probs.
@@ -1140,7 +531,7 @@ def tokmix_merge(
     Z = sum(avg_prob[t] for t in kept if t not in pinned)
     probs_tuples = []
     for t in kept:
-        p = MIN_TOKEN_PROB if t not in avg_prob else (avg_prob[t] / Z)
+        p = constants.MIN_TOKEN_PROB if t not in avg_prob else (avg_prob[t] / Z)
         probs_tuples.append((t, math.log(p)))
 
     # 5. build HF tokenizer

@@ -4,7 +4,8 @@ import math
 import numpy as np
 from collections import Counter, defaultdict
 
-from code.utils import _accumulate_usage, MIN_TOKEN_PROB
+from code.em_utils import _accumulate_usage
+from code.constants import MIN_TOKEN_PROB
 
 logger = logging.getLogger(__name__)
 

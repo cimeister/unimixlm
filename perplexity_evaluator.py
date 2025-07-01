@@ -35,8 +35,9 @@ from transformers import (
     DataCollatorWithPadding
 )
 
-from code.utils import fix_input_ids, nonempty, set_special_tokens, MAX_VAL_TEST_SIZE
-from code.model_trainer import PackedStreamingDataCollator
+from code.utils import set_special_tokens
+from code.constants import MAX_VAL_TEST_SIZE
+from code.model_trainer import PackedStreamingDataCollator, CausalLMDataCollatorWithPadding
 
 # Import and setup environment variables
 from code.environment_setup import setup_environment
@@ -125,17 +126,18 @@ class ModelEvaluator:
         Rebuilds labels to ignore padding, then does per‐example NLL → PPL.
         """
         # 1. Prepare inputs for the collator
-        batch_for_collator = []
-        original_texts = []
-        for i in range(len(batch_data['input_ids'])):
-            batch_for_collator.append({'input_ids': batch_data['input_ids'][i]})
-            original_texts.append(batch_data['text'][i])
+        # batch_for_collator = []
+        original_texts = [entry['text'] for entry in batch_data] 
+        # for i in range(len(batch_data['input_ids'])):
+        #     batch_for_collator.append({'input_ids': batch_data['input_ids'][i]})
+        #     original_texts.append(batch_data['text'][i])
 
         # 2. Collate & move to device
-        collated = data_collator(batch_for_collator)
+        collated = data_collator(batch_data)
         input_ids      = collated["input_ids"].to(self.device)        # [B, L]
         attention_mask = collated["attention_mask"].to(self.device)   # [B, L]
         B, L = input_ids.shape
+        logger.info(f"batch size {B}, data size {len(batch_data)}")
 
         # 3. Rebuild labels so that pads → -100
         labels = input_ids.clone()
@@ -190,6 +192,9 @@ class ModelEvaluator:
                     # clamp again
                     nll_per_byte = min(nll_per_byte, 1000.0)
                     byte_ppl = math.exp(nll_per_byte)
+                    if byte_ppl > 100000:
+                        print(f"Skipping {text}")
+                        continue
                 else:
                     byte_ppl = float('inf')
 
@@ -201,7 +206,8 @@ class ModelEvaluator:
         self, 
         test_file_path: str, 
         batch_size: int = 8, 
-        max_samples: Optional[int] = None
+        max_samples: Optional[int] = None,
+        use_packing: bool = False
     ) -> Dict[str, Any]:
         """
         Evaluate model on a tokenized test set using the same processing as training.
@@ -225,82 +231,294 @@ class ModelEvaluator:
                     if max_samples is not None and i >= max_samples:
                         break
                     item = json.loads(line.strip())
+                    if not item['token_ids']:
+                        continue
                     test_data.append({
                             'input_ids': item['token_ids'],
                             'text': item['text']
                         })
         except Exception as e:
             logger.error(f"Error loading test data from {test_file_path}: {str(e)}")
-            return {
-                "error": str(e),
-                "perplexity": float('inf'),
-                "byte_perplexity": float('inf'),
-                "token_count": 0,
-                "byte_count": 0,
-                "sample_count": 0
-            }
-            
+            return self._create_error_result(str(e))
+                
         if not test_data:
             logger.warning(f"No test data found in {test_file_path}")
-            return {
-                "perplexity": float('inf'),
-                "byte_perplexity": float('inf'),
-                "token_count": 0,
-                "byte_count": 0,
-                "sample_count": 0
-            }
+            return self._create_empty_result()
         
-        # Apply the same preprocessing functions used in training
-        # First, create a dataset for consistent processing
-        import datasets
-        dataset = datasets.Dataset.from_list(test_data)
+        if use_packing:
+            return self._evaluate_with_packing(test_data, batch_size)
+        else:
+            return self._evaluate_with_padding(test_data, batch_size)
+
+    def _evaluate_with_padding(self, dataset, batch_size: int) -> Dict[str, Any]:
+        """Evaluate using simple padding - maintains 1:1 correspondence between examples and batch rows."""
         
-        # Apply the same fix_input_ids function used in training
-        dataset = dataset.map(fix_input_ids)
-        # Filter out empty sequences just like in training
-        dataset = dataset.filter(nonempty)
+        data_collator = CausalLMDataCollatorWithPadding(                  
+                         tokenizer=self.tokenizer,                                
+                         pad_to_multiple_of=None, 
+                         max_length=self.model.config.n_ctx                                   
+                )
         
-        # Check if we still have data after filtering
-        if len(dataset) == 0:
-            logger.warning(f"No data left after preprocessing {test_file_path}")
-            return {
-                "perplexity": float('inf'),
-                "byte_perplexity": float('inf'),
-                "token_count": 0,
-                "byte_count": 0,
-                "sample_count": 0
-            }
-        
-        data_collator = DataCollatorWithPadding(
-            tokenizer=self.tokenizer,
-            pad_to_multiple_of=None,      # dynamic pad to longest in batch
-            return_tensors="pt"
-        )      
-        # data_collator = PackedStreamingDataCollator(self.tokenizer.pad_token_id, 
-        #     self.tokenizer.eos_token_id,
-        #     max_seq_len=self.model.config.n_ctx,           
-        #     blocks_per_batch=4
-        # )
-        
-        # Process in batches
         all_token_perplexities = []
         all_byte_perplexities = []
         total_tokens = sum(len(item["input_ids"]) for item in dataset)
         total_bytes = 0
-        per_example=[]
+        per_example = []
         
-        # Process batches with progress indicator
-        for i in tqdm(range(0, len(dataset), batch_size), desc=f"Evaluating {os.path.basename(test_file_path)}"):
-            batch = dataset[i:i+batch_size]
-            token_perplexities, byte_perplexities, byte_counts, ex_ids = self.compute_perplexity_batch(batch, data_collator)
+        # Process in batches
+        for i in tqdm(range(0, len(dataset), batch_size), desc="Evaluating with padding"):
+            batch_data = dataset[i:i+batch_size]
+            token_perplexities, byte_perplexities, byte_counts, ex_ids = self._compute_perplexity_batch_padded(
+                batch_data, data_collator
+            )
+            
             all_token_perplexities.extend(token_perplexities)
             all_byte_perplexities.extend(byte_perplexities)
             total_bytes += sum(byte_counts)
             per_example.extend(
-                dict(id=i, token_pp=t, byte_pp=b)           # NEW
-                for i, t, b in zip(ex_ids, token_perplexities, byte_perplexities)
+                dict(id=ex_id, token_pp=t, byte_pp=b)
+                for ex_id, t, b in zip(ex_ids, token_perplexities, byte_perplexities)
+            )
+        
+        return self._create_result(all_token_perplexities, all_byte_perplexities, total_tokens, total_bytes, per_example)
+
+    def _evaluate_with_packing(self, dataset, batch_size: int) -> Dict[str, Any]:
+        """Evaluate using packing - handles multiple examples per packed block."""
+        
+        all_token_perplexities = []
+        all_byte_perplexities = []
+        total_tokens = sum(len(item["input_ids"]) for item in dataset)
+        total_bytes = 0
+        per_example = []
+        
+        # Process all examples through packing in larger chunks to get better packing efficiency
+        chunk_size = batch_size * 4  # Process more examples at once for better packing
+        
+        for i in tqdm(range(0, len(dataset), chunk_size), desc="Evaluating with packing"):
+            chunk_data = dataset[i:i+chunk_size]
+            token_perplexities, byte_perplexities, byte_counts, ex_ids = self._compute_perplexity_batch_packed(
+                chunk_data, batch_size
             )
             
+            all_token_perplexities.extend(token_perplexities)
+            all_byte_perplexities.extend(byte_perplexities)
+            total_bytes += sum(byte_counts)
+            per_example.extend(
+                dict(id=ex_id, token_pp=t, byte_pp=b)
+                for ex_id, t, b in zip(ex_ids, token_perplexities, byte_perplexities)
+            )
+        
+        return self._create_result(all_token_perplexities, all_byte_perplexities, total_tokens, total_bytes, per_example)
+
+    def _compute_perplexity_batch_padded(self, batch_data, data_collator):
+        """
+        Compute perplexity for padded batches where each row corresponds to one example.
+        """
+        # Prepare inputs for the collator
+        original_texts = [entry.pop('text') for entry in batch_data]
+        batch_for_collator = [{"input_ids": entry["input_ids"] for entry in batch_data}]
+
+        # Collate & move to device
+        collated = data_collator(batch_for_collator)
+        input_ids = collated["input_ids"].to(self.device)
+        attention_mask = collated["attention_mask"].to(self.device)
+        B, L = input_ids.shape
+
+        # Create labels (same as input_ids but with -100 for padding)
+        labels = input_ids.clone()
+        labels[attention_mask == 0] = -100
+
+        token_perplexities, byte_perplexities, byte_counts, ex_ids = [], [], [], []
+
+        with torch.no_grad():
+            # Forward pass
+            outputs = self.model(
+                input_ids=input_ids,
+                attention_mask=attention_mask,
+                labels=labels,
+            )
+            logits = outputs.logits  # [B, L, V]
+
+            # Per-example loop - direct 1:1 correspondence
+            for i in range(B):
+                # Shift for next-token prediction
+                example_logits = logits[i, :-1, :]    # [L-1, V]
+                example_labels = labels[i, 1:]        # [L-1]
+
+                # Mask out padding positions
+                valid = example_labels != -100
+                token_count = int(valid.sum().item())
+                if token_count == 0:
+                    continue
+
+                filt_logits = example_logits[valid]
+                filt_labels = example_labels[valid]
+
+                # Compute mean NLL per token
+                loss_fct = torch.nn.CrossEntropyLoss(reduction='mean')
+                avg_nll = loss_fct(filt_logits, filt_labels).item()
+                avg_nll = min(avg_nll, 1000.0)  # Clamp to avoid overflow
+
+                # Token-level perplexity
+                token_ppl = math.exp(avg_nll)
+                token_perplexities.append(token_ppl)
+
+                # Byte-level perplexity
+                text = original_texts[i]
+                ex_id = make_example_id(text)
+                ex_ids.append(ex_id)
+                byte_count = len(text.encode('utf-8'))
+                byte_counts.append(byte_count)
+
+                if byte_count > 0:
+                    total_nll = avg_nll * token_count
+                    nll_per_byte = total_nll / byte_count
+                    nll_per_byte = min(nll_per_byte, 1000.0)
+                    byte_ppl = math.exp(nll_per_byte)
+                    if byte_ppl > 100000:  # Skip extreme outliers
+                        continue
+                else:
+                    byte_ppl = float('inf')
+
+                byte_perplexities.append(byte_ppl)
+
+        return token_perplexities, byte_perplexities, byte_counts, ex_ids
+
+    def _compute_perplexity_batch_packed(self, batch_data, batch_size: int):
+        """
+        Compute perplexity for packed data where multiple examples may be in each block.
+        This requires tracking example boundaries within packed blocks.
+        """
+        # Create fresh collator for each batch to avoid state contamination
+        data_collator = PackedStreamingDataCollator(
+            pad_id=self.tokenizer.pad_token_id,
+            eos_id=self.tokenizer.eos_token_id,
+            max_seq_len=self.model.config.n_ctx,
+            blocks_per_batch=batch_size,
+        )
+        
+        # Collate the data - this packs multiple examples into fixed-length blocks
+        collated = data_collator(batch_data)
+        input_ids = collated["input_ids"].to(self.device)
+        attention_mask = collated["attention_mask"].to(self.device)
+        labels = collated["labels"].to(self.device)
+        
+        # Now we need to figure out which tokens in which blocks belong to which examples
+        # The collator concatenates examples with EOS tokens between them
+        token_perplexities, byte_perplexities, byte_counts, ex_ids = [], [], [], []
+        
+        with torch.no_grad():
+            # Forward pass on packed blocks
+            outputs = self.model(
+                input_ids=input_ids,
+                attention_mask=attention_mask,
+                labels=labels,
+            )
+            logits = outputs.logits  # [num_blocks, seq_len, vocab_size]
+            
+            # Reconstruct the original sequence from packed blocks
+            # This is complex because examples span across block boundaries
+            all_logits = []
+            all_labels = []
+            
+            for block_idx in range(logits.shape[0]):
+                block_logits = logits[block_idx]  # [seq_len, vocab_size]
+                block_labels = labels[block_idx]  # [seq_len]
+                block_attention = attention_mask[block_idx]  # [seq_len]
+                
+                # Only include non-padded positions
+                valid_positions = block_attention == 1
+                valid_logits = block_logits[valid_positions]  # [valid_len, vocab_size]
+                valid_labels = block_labels[valid_positions]   # [valid_len]
+                
+                all_logits.append(valid_logits)
+                all_labels.append(valid_labels)
+            
+            # Concatenate all valid logits and labels
+            if all_logits:
+                combined_logits = torch.cat(all_logits, dim=0)  # [total_valid_tokens, vocab_size]
+                combined_labels = torch.cat(all_labels, dim=0)   # [total_valid_tokens]
+                
+                # Now parse through the combined sequence to extract per-example tokens
+                # The sequence should be: [ex1_tokens] [EOS] [ex2_tokens] [EOS] ...
+                pos = 0
+                
+                for example in batch_data:
+                    expected_tokens = len(example['tokens'])
+                    
+                    # Skip if we've run out of tokens
+                    if pos >= len(combined_labels):
+                        break
+                    
+                    # Extract logits/labels for this example (excluding the EOS that follows)
+                    if pos + expected_tokens <= len(combined_labels):
+                        example_logits = combined_logits[pos:pos + expected_tokens - 1]  # [len-1, V] (shift for next-token)
+                        example_labels = combined_labels[pos + 1:pos + expected_tokens]  # [len-1] (shift for next-token)
+                        
+                        # Skip if empty
+                        if len(example_labels) == 0:
+                            pos += expected_tokens + 1  # +1 for EOS
+                            continue
+                        
+                        # Compute NLL for this example
+                        loss_fct = torch.nn.CrossEntropyLoss(reduction='mean')
+                        avg_nll = loss_fct(example_logits, example_labels).item()
+                        avg_nll = min(avg_nll, 1000.0)
+                        
+                        # Token-level perplexity
+                        token_ppl = math.exp(avg_nll)
+                        token_perplexities.append(token_ppl)
+                        
+                        # Byte-level perplexity
+                        text = example['text']
+                        ex_ids.append(example['example_id'])
+                        byte_count = len(text.encode('utf-8'))
+                        byte_counts.append(byte_count)
+                        
+                        if byte_count > 0:
+                            total_nll = avg_nll * len(example_labels)
+                            nll_per_byte = total_nll / byte_count
+                            nll_per_byte = min(nll_per_byte, 1000.0)
+                            byte_ppl = math.exp(nll_per_byte)
+                            if byte_ppl <= 100000:  # Skip extreme outliers
+                                byte_perplexities.append(byte_ppl)
+                            else:
+                                # Remove from other lists too
+                                token_perplexities.pop()
+                                ex_ids.pop()
+                                byte_counts.pop()
+                                continue
+                        else:
+                            byte_perplexities.append(float('inf'))
+                    
+                    # Move to next example (skip current example + EOS token)
+                    pos += expected_tokens + 1
+        
+        return token_perplexities, byte_perplexities, byte_counts, ex_ids
+
+    def _create_error_result(self, error_msg: str) -> Dict[str, Any]:
+        """Create error result dictionary."""
+        return {
+            "error": error_msg,
+            "perplexity": float('inf'),
+            "byte_perplexity": float('inf'),
+            "token_count": 0,
+            "byte_count": 0,
+            "sample_count": 0
+        }
+
+    def _create_empty_result(self) -> Dict[str, Any]:
+        """Create empty result dictionary."""
+        return {
+            "perplexity": float('inf'),
+            "byte_perplexity": float('inf'),
+            "token_count": 0,
+            "byte_count": 0,
+            "sample_count": 0
+        }
+
+    def _create_result(self, all_token_perplexities, all_byte_perplexities, total_tokens, total_bytes, per_example):
+        """Create result dictionary from computed metrics."""
         # Calculate token-level statistics
         if all_token_perplexities:
             avg_token_perplexity = np.mean(all_token_perplexities)
@@ -329,7 +547,6 @@ class ModelEvaluator:
             max_byte_perplexity = float('inf')
             std_byte_perplexity = 0.0
         
-        # Return results with both token and byte metrics
         return {
             "perplexity": avg_token_perplexity,
             "median_perplexity": median_token_perplexity,
@@ -343,10 +560,9 @@ class ModelEvaluator:
             "std_byte_perplexity": std_byte_perplexity,
             "token_count": total_tokens,
             "byte_count": total_bytes,
-            "sample_count": len(dataset),
+            "sample_count": len(per_example),
             "per_example": per_example
         }
-
 
 def evaluate_model_on_all_languages(
     model_config: Dict[str, Any],
@@ -515,16 +731,15 @@ def evaluate_all_models_on_all_languages(
             continue
             
         # Evaluate model
-        try:
-            model_results = evaluate_model_on_all_languages(
-                model_config=model_config,
-                tokenized_test_files=test_files,
-                max_samples_per_language=max_samples_per_language,
-                batch_size=batch_size
-            )
-        except Exception as e:
-            logger.error(f"Unable to evaluate model {model_name}. Error {e}")
-            continue
+        model_results = evaluate_model_on_all_languages(
+            model_config=model_config,
+            tokenized_test_files=test_files,
+            max_samples_per_language=max_samples_per_language,
+            batch_size=batch_size
+        )
+        # except Exception as e:
+        #     logger.error(f"Unable to evaluate model {model_name}. Error {e}")
+        #     continue
         all_results[model_name] = model_results
         
         # Save individual model results
@@ -1006,7 +1221,8 @@ def find_models_and_tokenizers(
     # Look for model directories
     for item in os.listdir(models_dir):
         model_path = os.path.join(models_dir, item)
-        if not os.path.isdir(model_path):
+        #TODO: make this a flag
+        if not os.path.isdir(model_path) or "small" not in model_path:
             continue
             
         # Extract model name from directory name

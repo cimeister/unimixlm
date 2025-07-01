@@ -10,8 +10,7 @@ from pathlib import Path
 # New faster helpers (module‑level – put them near the top of the file)
 # ----------------------------------------------------------------------
 import ujson                # 2‑3× faster than stdlib json
-from tokenizers import AddedToken    # only used in one fast‑path check
-from code.utils import encode_text, load_tokenizer_from_config
+from code.utils import encode_text, load_tokenizer_from_config, mk_id
 
 logging.basicConfig(
     level=logging.INFO,
@@ -61,8 +60,10 @@ def _process_batch_lines(lines):
 
     best = enc.get("best_lang")
     for i, (txt, ids) in enumerate(zip(lines, enc["input_ids"])):
+        if not txt or txt.isspace():
+            continue
         unk_total += ids.count(unk_id)
-        rec = {"text": txt, "token_ids": ids}
+        rec = {"text": txt, "token_ids": ids, 'sample_id': mk_id(txt)}
         if best is not None:
             rec["best_lang"] = best[i]
         json_parts.append(ujson.dumps(rec))
@@ -94,41 +95,6 @@ def _tokenize_file(
             unk_cnt  += unks
 
     return line_cnt, unk_cnt
-
-def _tokenize_split(args):
-    """
-    Worker target: tokenise *one* split file and write JSONL.
-    Returns (lang, split, out_path, n_lines, n_unk)
-    """
-    lang, split, in_path, out_path = args
-    line_cnt = 0
-    unk_cnt  = 0
-    batch    = []
-    bs       = 1024
-
-    with open(in_path, "r", encoding="utf-8", errors="replace") as fin, \
-         open(out_path, "w", encoding="utf-8") as fout:
-
-        for raw in fin:
-            txt = raw.rstrip("\n")
-            if not txt:
-                continue
-            batch.append(txt)
-
-            if len(batch) >= bs:
-                chunk, u = _process_batch_lines(batch)
-                fout.write(chunk)
-                unk_cnt  += u
-                line_cnt += len(batch)
-                batch.clear()
-
-        if batch:
-            chunk, u = _process_batch_lines(batch)
-            fout.write(chunk)
-            unk_cnt  += u
-            line_cnt += len(batch)
-
-    return lang, split, out_path, line_cnt, unk_cnt
 
 
 class CorpusTokenizer:
@@ -256,57 +222,6 @@ class CorpusTokenizer:
 
                     logger.info(f"{tag}: done in {dt:,.1f}s – "
                                 f"{n_lines:,} lines, {n_unk:,} UNK → {out_path}")
-
-        return self.tokenized_files
-
-    def tokenize_all_old(self):
-        """
-        Tokenise every split of every language with every tokenizer.
-        Uses a process pool (fork) for throughput; each worker handles
-        one <language, split> file.
-        """
-        for tname, tdata in self.tokenizers.items():
-            tok      = tdata["tokenizer"]
-            cfg      = tdata["config"]
-            use_best = cfg.get("use_best_lang", True)
-
-            base_out = Path(self.output_dir) / tname
-            base_out.mkdir(parents=True, exist_ok=True)
-            self.tokenized_files[tname] = {}
-
-            # -------- build task list -------------------------------------
-            tasks = []
-            for lang, info in self.corpus_info.items():
-                if "splits" not in info:
-                    continue
-                self.tokenized_files[tname][lang] = {}
-                lang_out = base_out / lang
-                lang_out.mkdir(exist_ok=True)
-                for split, in_path in info["splits"].items():
-                    if not os.path.isfile(in_path):
-                        logger.warning(f"{in_path} missing – skipped")
-                        continue
-                    out_path = lang_out / f"{split}.jsonl"
-                    if self.skip_if_exists and out_path.is_file():
-                        self.tokenized_files[tname][lang][split] = str(out_path)
-                        continue
-                    tasks.append((lang, split, in_path, str(out_path)))
-
-            # -------- run in pool -----------------------------------------
-            if not tasks:
-                continue
-            with Pool(min(20, cpu_count()-1),
-                      initializer=_init_worker,
-                      initargs=(tok, use_best)) as pool:
-
-                for lang, split, outp, n_lines, n_unk in tqdm(
-                        pool.imap_unordered(_tokenize_split, tasks),
-                        total=len(tasks),
-                        desc=f"{tname}"):
-                    if n_lines:
-                        self.tokenized_files[tname][lang][split] = outp
-                    logger.info(f"[{tname}] {lang}-{split}: "
-                                f"{n_lines} lines, {n_unk} UNK → {outp}")
 
         return self.tokenized_files
 
