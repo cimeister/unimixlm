@@ -89,15 +89,7 @@ class StandardUnigramLMTokenizer:
             return getattr(self.base_tokenizer, name)
         raise AttributeError(name)
 
-    # -----------------------------------------------------------------
-    # Unified single / batch call interface  (→ works with `encode_text`)
-    # -----------------------------------------------------------------
     def __call__(self, texts, *, add_special_tokens: bool = False, **kwargs):
-        """
-        Unified callable interface – behaves exactly like a HF fast tokenizer.
-        Extra kwargs that the Rust core does not understand are silently
-        dropped so user code never crashes.
-        """
         if self.base_tokenizer is None:
             raise ValueError("Tokenizer not yet loaded or trained.")
 
@@ -448,33 +440,14 @@ class StandardUnigramLMTokenizer:
                     }
                 if not loss_approximation:
                     logger.info("Pre-computing token alternatives using parallel processing...")
-                    # if per_lang:
-                    #     # For multilingual, compute alternatives for each language
-                    #     lang_alternatives = {}
-                    #     for lc, file in zip(self.lang_codes, corpus_files):
-                    #         lang_alternatives[lc] = _compute_alternatives(
-                    #             [file], self.per_lang_probs[lc], self.unk_token, 
-                    #             byte_level=self.byte_level
-                    #         )
-                    # else:
-                    #     alternatives = _compute_alternatives(
-                    #         corpus_files, p_token, self.unk_token, 
-                    #         byte_level=self.byte_level
-                    # )
+
                     if per_lang:
                         # For multilingual, compute alternatives for each language
                         lang_alternative_sequences = {}
                         for lc, file in zip(self.lang_codes, corpus_files):
                             lang_alternative_sequences[lc] = _compute_alternatives_direct(self.per_lang_probs[lc], self.unk_token, byte_level=self.byte_level)
-                            #  _compute_alternatives_sequences(
-                            #     [file], self.per_lang_probs[lc], self.unk_token, 
-                            #     byte_level=self.byte_level
-                            # )
                     else:
                         alternative_sequences = _compute_alternatives_direct(p_token, self.unk_token, byte_level=self.byte_level)
-                        #_compute_alternatives_sequences(
-                        #     corpus_files, p_token, self.unk_token, 
-                        #     byte_level=self.byte_level)
 
                 before = len(all_tokens)
                 under_consideration = all_tokens - pinned
@@ -493,10 +466,6 @@ class StandardUnigramLMTokenizer:
                                     self.per_lang_probs[lc], self.unk_token
                                 )
                             total_loss += self.mixture_weights[lc] * lang_loss
-                                # lang_loss = _compute_loss_with_alternatives(
-                                #     tk, lang_counts[lc], lang_alternatives[lc], self.per_lang_probs[lc], self.unk_token
-                                # )
-                            total_loss += self.mixture_weights[lc] * lang_loss
 
                         loss.append((tk, total_loss))
                         logging_dict[tk]["loss"] = total_loss
@@ -506,9 +475,6 @@ class StandardUnigramLMTokenizer:
                         if loss_approximation:
                             tk_loss = -counts[tk] * math.log(max(p_token[tk], 1e-30))
                         else:
-                            # tk_loss = _compute_loss_with_alternatives(
-                            #     tk, counts, alternatives, p_token, self.unk_token
-                            # )
                             tk_loss = _compute_loss_with_alternative_sequences(
                                 tk, counts, alternative_sequences, p_token, self.unk_token
                             )
@@ -523,7 +489,6 @@ class StandardUnigramLMTokenizer:
                 k_total -= pruned
                 logger.info("   tokens_pruned=%d | new_vocab=%d", pruned, len(all_tokens))
 
-                # restrict & renormalise ---------------------------------------
                 if per_lang:
                     for lc in self.lang_codes:
                         self.per_lang_probs[lc] = {tk: self.per_lang_probs[lc].get(tk, 0.0) for tk in all_tokens}
@@ -566,7 +531,7 @@ class StandardUnigramLMTokenizer:
         """
         logger.info("Using HuggingFace UnigramTrainer for standard Unigram.")
         tok = Tokenizer(Unigram())
-        tok.pre_tokenizer = Whitespace() if self.byte_level else ByteLevel(add_prefix_space=False)
+        tok.pre_tokenizer = ByteLevel(add_prefix_space=False) if self.byte_level else Whitespace()
 
         #TODO: Add byte_fallback=self.byte_level when feature becomes available
         trainer = UnigramTrainer(

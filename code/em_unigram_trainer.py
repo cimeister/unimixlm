@@ -1,8 +1,5 @@
 import os
 import logging
-import math
-import numpy as np
-from collections import Counter, defaultdict
 
 from code.em_utils import _accumulate_usage
 from code.constants import MIN_TOKEN_PROB
