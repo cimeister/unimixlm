@@ -1,20 +1,3 @@
-"""
-Per-language UnigramLM built on a *shared* vocabulary.
-
-Changes w.r.t. the original version
------------------------------------
-* For **every language** we now create a fully-fledged **HF Unigram
-  tokenizer** whose scores come from the EM step.  This guarantees that
-  encode / decode behave identically to the StandardUnigramLMTokenizer.
-* Saved artefacts are `langspec_<em_mode>_<lang>.tokenizer.json`
-  (no more *.npy* probability dumps).
-* The public API is still the same; code that calls `.train()` or
-  `.custom_viterbi_best_language()` needs **no modification**.
-
-Only two external edits are required elsewhere – see § 2 below.
-"""
-
-
 from __future__ import annotations
 
 import json
@@ -35,9 +18,6 @@ from code.constants import SPECIAL_TOKENS, MIN_TOKEN_LOG_PROB, MIN_TOKEN_PROB
 
 logger = logging.getLogger(__name__)
 
-# ---------------------------------------------------------------------------
-# constants
-# ---------------------------------------------------------------------------
 
 DEFAULT_LANGTOKENIZER_NAME = (
     "langspec_{em_mode}_{lang_code}.tokenizer.json"  # <- replaces .npy file
@@ -96,13 +76,7 @@ def _build_hf_tokenizer_with_new_probs(
 
 
 class LanguageSpecificUnigramLMTokenizer(StandardUnigramLMTokenizer):
-    """
-    Adds one *HF* tokenizer per language while inheriting everything else
-    from StandardUnigramLMTokenizer.
-    """
-
-    # The constructor is unchanged – we just remember how many EM iterations
-    # the caller asked for so we can forward the value later.
+    
     def __init__(
         self,
         vocab_size: int = 8_000,
@@ -260,7 +234,6 @@ class LanguageSpecificUnigramLMTokenizer(StandardUnigramLMTokenizer):
             raise ValueError(f"No tokenizer for language '{lang_code}'.")
         return self.language_info[lang_code]["tokenizer"].decode(ids)
 
-    # ------------------------------------------------ best-language selection
 
     def best_language_encode(self, text: str):
         """
@@ -317,16 +290,7 @@ def train_language_specific_tokenizer(corpus_info, vocab_size=8000,
                                       tokenizer_path_format=None,
                                       load_base_if_exists=True,
                                       load_tokenizers_if_exists=False):
-    """
-    Convenience function that:
-      1) Creates a LanguageSpecificUnigramLMTokenizer
-      2) Calls .train(...) with the given corpus info
-      3) Returns a dict with paths: { 'base': <base_path>, 'languages': {lang_code: <em_probs_path>} }
-         so you can load them later if you want.
-
-    You can skip re-training if 'langspec_base_tokenizer.json' is found (load_if_exists=True),
-    and skip re-running EM if 'langspec_{lang_code}_em_probs.npy' is found (load_available_probs=True).
-    """
+   
     tok = LanguageSpecificUnigramLMTokenizer(vocab_size=vocab_size, reestimation_em_mode=reestimation_em_mode, byte_level=byte_level)
     if not base_tokenizer_path:
         base_tokenizer_path = os.path.join(output_dir, DEFAULT_BASE_NAME)
