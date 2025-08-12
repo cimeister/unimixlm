@@ -277,7 +277,6 @@ def forward_backward_unigram_log_space(
     """
     LOG_NEG_INF = -np.inf
 
-    # Optional byte-level normalization (expects you to provide this function)
     if byte_level:
         text = _apply_bytelevel_mapping_hf(text)
 
@@ -286,7 +285,6 @@ def forward_backward_unigram_log_space(
     if n == 0:
         return {}
 
-    # --- Vocab prep
     # Use membership (not thresholds) to decide which substrings are valid tokens.
     if unk_token not in log_p_lang or not np.isfinite(log_p_lang[unk_token]):
         raise ValueError(f"'{unk_token}' must be in log_p_lang with a finite log-prob.")
@@ -295,9 +293,7 @@ def forward_backward_unigram_log_space(
     # "Real" vocab excludes UNK for the startability test and subword transitions.
     real_vocab = set(log_p_lang.keys()) - {unk_token}
 
-    # --- Pre-pass: where can a real token start?
-    # can_start[i] == True  iff there exists some token t in real_vocab such that t == word[i:j]
-    # for some j in (i+1 .. i+max_sub_len).
+    # --- Pre-pass: where can a real token start
     can_start = [False] * n
     for i in range(n):
         end = min(n, i + max_sub_len)
@@ -333,8 +329,7 @@ def forward_backward_unigram_log_space(
 
     log_Z = log_alpha[n]
     if not np.isfinite(log_Z):
-        # This should not happen if either (a) every position can start a real token at least somewhere,
-        # or (b) positions that cannot start real tokens are covered by a finite-prob UNK.
+        # This should not happen 
         raise RuntimeError(
             "Failed to reach the end of the word. Numerical stability issues."
         )
