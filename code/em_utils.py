@@ -5,6 +5,7 @@ from collections import defaultdict
 import numpy as np
 from typing import Dict, List, Tuple, Set, Any, Optional, Union
 
+from scipy.special import logsumexp
 
 from code.utils import _apply_bytelevel_mapping_hf, _sample_lines_from_file
 from code.constants import MIN_TOKEN_LOG_PROB, MIN_TOKEN_PROB, SPECIAL_TOKENS
@@ -253,6 +254,138 @@ def _segment_word_viterbi_sp(
     return tokens[::-1]
 
 
+def forward_backward_unigram_log_space(
+    text,
+    log_p_lang,
+    unk_token="<unk>",
+    max_sub_len=20,
+    byte_level=False,
+):
+    """
+    Forward–backward for UnigramLM in log-space, with SentencePiece-style UNK gating:
+    UNK is allowed exactly at positions where *no real token* can start.
+
+    Args:
+        text: input string (the whole line is treated as one 'word'; leading spaces matter)
+        log_p_lang: dict {token: log_prob} including <unk>
+        unk_token: the unknown-token string
+        max_sub_len: maximum subword length to consider
+        byte_level: if True, apply your byte-level mapping before DP (expects _apply_bytelevel_mapping_hf)
+
+    Returns:
+        dict {token: expected_count} (fractional EM counts)
+    """
+    LOG_NEG_INF = -np.inf
+
+    # Optional byte-level normalization (expects you to provide this function)
+    if byte_level:
+        text = _apply_bytelevel_mapping_hf(text)
+
+    word = text.rstrip("\n")
+    n = len(word)
+    if n == 0:
+        return {}
+
+    # --- Vocab prep
+    # Use membership (not thresholds) to decide which substrings are valid tokens.
+    if unk_token not in log_p_lang or not np.isfinite(log_p_lang[unk_token]):
+        raise ValueError(f"'{unk_token}' must be in log_p_lang with a finite log-prob.")
+    log_p_unk = log_p_lang[unk_token]
+
+    # "Real" vocab excludes UNK for the startability test and subword transitions.
+    real_vocab = set(log_p_lang.keys()) - {unk_token}
+
+    # --- Pre-pass: where can a real token start?
+    # can_start[i] == True  iff there exists some token t in real_vocab such that t == word[i:j]
+    # for some j in (i+1 .. i+max_sub_len).
+    can_start = [False] * n
+    for i in range(n):
+        end = min(n, i + max_sub_len)
+        # early-exit once we find any matching token
+        for j in range(i + 1, end + 1):
+            if word[i:j] in real_vocab:
+                can_start[i] = True
+                break
+
+    # UNK is *required* at i -> i+1 exactly when no real token can start at i
+    requires_unk = [False] * (n + 1)
+    for i in range(n):
+        requires_unk[i + 1] = not can_start[i]
+
+    # --- Forward pass (log-space)
+    log_alpha = np.full(n + 1, LOG_NEG_INF)
+    log_alpha[0] = 0.0  # log(1)
+
+    for i in range(n):
+        if log_alpha[i] == LOG_NEG_INF:
+            continue
+
+        # UNK transition (length-1) only where required
+        if requires_unk[i + 1]:
+            log_alpha[i + 1] = logsumexp([log_alpha[i + 1], log_alpha[i] + log_p_unk])
+
+        # Real tokens
+        end = min(n, i + max_sub_len)
+        for j in range(i + 1, end + 1):
+            sub = word[i:j]
+            if sub in real_vocab:
+                log_alpha[j] = logsumexp([log_alpha[j], log_alpha[i] + log_p_lang[sub]])
+
+    log_Z = log_alpha[n]
+    if not np.isfinite(log_Z):
+        # This should not happen if either (a) every position can start a real token at least somewhere,
+        # or (b) positions that cannot start real tokens are covered by a finite-prob UNK.
+        raise RuntimeError(
+            "Failed to reach the end of the word. Numerical stability issues."
+        )
+
+    # --- Backward pass (log-space)
+    log_beta = np.full(n + 1, LOG_NEG_INF)
+    log_beta[n] = 0.0  # log(1)
+
+    for i in range(n - 1, -1, -1):
+        # UNK transition (length-1) only where required
+        if requires_unk[i + 1]:
+            log_beta[i] = logsumexp([log_beta[i], log_p_unk + log_beta[i + 1]])
+
+        # Real tokens
+        end = min(n, i + max_sub_len)
+        for j in range(i + 1, end + 1):
+            sub = word[i:j]
+            if sub in real_vocab:
+                log_beta[i] = logsumexp([log_beta[i], log_p_lang[sub] + log_beta[j]])
+
+    # (Sanity) beta at 0 equals Z
+    if not np.isclose(log_beta[0], log_Z, rtol=1e-10, atol=1e-12):
+        # Floating-point differences aside, they should agree.
+        pass  # You can raise/log here if you'd like strict checking.
+
+    # --- Expected counts
+    total_counts = {}
+
+    # Helper to accumulate in linear space without instability
+    def add_count(tok, log_count):
+        if np.isfinite(log_count):
+            total_counts[tok] = total_counts.get(tok, 0.0) + float(np.exp(log_count))
+
+    for i in range(n):
+        if log_alpha[i] == LOG_NEG_INF:
+            continue
+
+        # UNK at i -> i+1 (only where required)
+        if requires_unk[i + 1] and log_beta[i + 1] != LOG_NEG_INF:
+            add_count(unk_token, log_alpha[i] + log_p_unk + log_beta[i + 1] - log_Z)
+
+        # Real tokens
+        end = min(n, i + max_sub_len)
+        for j in range(i + 1, end + 1):
+            sub = word[i:j]
+            if sub in real_vocab and log_beta[j] != LOG_NEG_INF:
+                add_count(sub, log_alpha[i] + log_p_lang[sub] + log_beta[j] - log_Z)
+
+    return total_counts
+
+
 def forward_backward_unigram(text, p_lang, unk_token="<unk>", max_sub_len=20, prob_threshold=MIN_TOKEN_PROB, byte_level=False):
     """
     Forward-backward algorithm for unigram language model training that matches SentencePiece's
@@ -420,7 +553,7 @@ def _accumulate_usage_worker_soft(args):
     total = 0.0
 
     for line in chunk_lines:
-        usage_line = forward_backward_unigram(line, 
+        usage_line = forward_backward_unigram_log_space(line, 
             p_lang, 
             unk_token=unk_token, 
             byte_level=byte_level, 
@@ -510,7 +643,7 @@ def _accumulate_usage(train_file,
         # we pass p_lang + unk_token for the segmentation
         worker_args = []
         for ch in chunks:
-            lang_dist = {tk: math.log(p if p else MIN_TOKEN_PROB) for tk, p in p_lang.items()} if mode == 'hard' else p_lang
+            lang_dist = {tk: math.log(p if p else MIN_TOKEN_PROB) for tk, p in p_lang.items()}
             worker_args.append((ch, lang_dist, unk_token, byte_level))
 
         # 4) Launch pool
