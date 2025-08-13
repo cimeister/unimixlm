@@ -56,7 +56,7 @@ def _build_hf_tokenizer_with_new_probs(
     ]
 
     unk_id = base_tokenizer.get_vocab()[unk_token]
-    tok = _build_hf_tokenizer_from_probs(tuples, unk_id)
+    tok = _build_hf_tokenizer_from_probs(tuples, unk_id, base_tokenizer.pre_tokenizer)
     if hasattr(base_tokenizer, 'pre_tokenizer'):
         tok.pre_tokenizer = base_tokenizer.pre_tokenizer
     else:
@@ -203,7 +203,8 @@ class LanguageSpecificUnigramLMTokenizer(StandardUnigramLMTokenizer):
                 em_mode=self.reestimation_em_mode,
                 max_iterations=self.num_reestimation_iterations,
                 unk_prior=self.unk_prior,
-                byte_level=self.byte_level
+                byte_level=self.byte_level,
+                pretokenizer=self._get_pretokenizer()
             )
             token_probs = em_trainer.train(train_file)  # token -> prob
 

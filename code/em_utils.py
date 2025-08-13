@@ -7,7 +7,7 @@ from typing import Dict, List, Tuple, Set, Any, Optional, Union
 
 from scipy.special import logsumexp
 
-from code.utils import _apply_bytelevel_mapping_hf, _sample_lines_from_file
+from code.utils import _apply_pretok_mapping_hf, _sample_lines_from_file
 from code.constants import MIN_TOKEN_LOG_PROB, MIN_TOKEN_PROB, SPECIAL_TOKENS
 
 import logging
@@ -18,7 +18,7 @@ logging.basicConfig(
 logger = logging.getLogger(__name__)
 
 
-def segment_text_viterbi(text, token_log_probs, unk_token="<unk>", max_sub_len=15, beam_width=5.0, byte_level=False):
+def segment_text_viterbi(text, token_log_probs, unk_token="<unk>", max_sub_len=15, beam_width=5.0, pretok=None):
     """
     Segment `text` into tokens using a whitespace split + Viterbi subword approach,
     under the distribution given by `token_probs` (a dict mapping token->prob).
@@ -35,19 +35,17 @@ def segment_text_viterbi(text, token_log_probs, unk_token="<unk>", max_sub_len=1
         A list of tokens (subwords).
     """
     # The final list of subword tokens across all whitespace-delimited words
-    if byte_level:
-        # Apply byte-level mapping first
-        text = _apply_bytelevel_mapping_hf(text)
+    text = _apply_pretok_mapping_hf(text, pretok)
+    if not isinstance(text, list):
         # For byte-level, treat the entire text as one sequence (no whitespace splitting)
         return _segment_word_viterbi(text, token_log_probs, unk_token, max_sub_len, beam_width)
     
     all_tokens = []
-    words = text.strip().split()  # 1) Whitespace split
-    if not words:
+    if not text:
         return all_tokens
 
     # Here we process the whole batch of words together
-    for word in words:
+    for word in text:
         # 2) For each word, run Viterbi
         sub_tokens = _segment_word_viterbi(word, token_log_probs, unk_token, max_sub_len, beam_width)
         all_tokens.extend(sub_tokens)
@@ -259,7 +257,7 @@ def forward_backward_unigram_log_space(
     log_p_lang,
     unk_token="<unk>",
     max_sub_len=20,
-    byte_level=False,
+    pretok=None,
 ):
     """
     Forward–backward for UnigramLM in log-space, with SentencePiece-style UNK gating:
@@ -277,8 +275,7 @@ def forward_backward_unigram_log_space(
     """
     LOG_NEG_INF = -np.inf
 
-    if byte_level:
-        text = _apply_bytelevel_mapping_hf(text)
+    text = _apply_pretok_mapping_hf(text, pretok)
 
     word = text.rstrip("\n")
     n = len(word)
@@ -381,7 +378,7 @@ def forward_backward_unigram_log_space(
     return total_counts
 
 
-def forward_backward_unigram(text, p_lang, unk_token="<unk>", max_sub_len=20, prob_threshold=MIN_TOKEN_PROB, byte_level=False):
+def forward_backward_unigram(text, p_lang, unk_token="<unk>", max_sub_len=20, prob_threshold=MIN_TOKEN_PROB, pretok=None):
     """
     Forward-backward algorithm for unigram language model training that matches SentencePiece's
     UNK handling approach.
@@ -391,149 +388,145 @@ def forward_backward_unigram(text, p_lang, unk_token="<unk>", max_sub_len=20, pr
     # Get probability for unknown token
     p_unk = p_lang.get(unk_token, prob_threshold)
     
-    # Split on whitespace first, like in Viterbi
-    if byte_level:
-        text = _apply_bytelevel_mapping_hf(text)
+    text = _apply_pretok_mapping_hf(text, pretok)
 
     # --- 2. Use the *whole* line; leading spaces matter --------------
-    words = [text.rstrip("\n")]
+    word = text.rstrip("\n")
     
     # Initialize global counts
     total_counts = {}
     
-    for word in words:
-        n = len(word)
-        if n == 0:
+    n = len(word)
+    if n == 0:
+        return {}
+    # Initialize alpha and beta arrays
+    alpha = [0.0] * (n+1)
+    alpha_without_unk = [0.0] * (n+1)  # Tracks probability mass WITHOUT using UNK
+    beta = [0.0] * (n+1)
+    alpha[0] = 1.0
+    alpha_without_unk[0] = 1.0
+    
+    # Track positions that need UNK (cannot be reached with regular tokens)
+    requires_unk = [False] * (n+1)
+    
+    # Track furthest reachable position for early termination
+    furthest_reachable = 0
+    
+    # Helper function for token probabilities with memoization
+    token_prob_cache = {}
+    def token_prob(token):
+        if token not in token_prob_cache:
+            token_prob_cache[token] = p_lang.get(token, 0.0)
+        return token_prob_cache[token]
+    
+    # Forward pass - first compute alpha_without_unk
+    for i in range(n):
+        base_val = alpha_without_unk[i]
+        if base_val == 0.0:
             continue
             
-        # Initialize alpha and beta arrays
-        alpha = [0.0] * (n+1)
-        alpha_without_unk = [0.0] * (n+1)  # Tracks probability mass WITHOUT using UNK
-        beta = [0.0] * (n+1)
-        alpha[0] = 1.0
-        alpha_without_unk[0] = 1.0
-        
-        # Track positions that need UNK (cannot be reached with regular tokens)
-        requires_unk = [False] * (n+1)
-        
-        # Track furthest reachable position for early termination
-        furthest_reachable = 0
-        
-        # Helper function for token probabilities with memoization
-        token_prob_cache = {}
-        def token_prob(token):
-            if token not in token_prob_cache:
-                token_prob_cache[token] = p_lang.get(token, 0.0)
-            return token_prob_cache[token]
-        
-        # Forward pass - first compute alpha_without_unk
-        for i in range(n):
-            base_val = alpha_without_unk[i]
-            if base_val == 0.0:
-                continue
-                
-            # Early termination check - if we're beyond what we can reach with regular tokens
-            if i > furthest_reachable:
-                break
-                
-            # Try all valid subwords
-            end_limit = min(n, i+max_sub_len)
-            found_valid = False
+        # Early termination check - if we're beyond what we can reach with regular tokens
+        if i > furthest_reachable:
+            break
             
-            for j in range(i+1, end_limit+1):
-                sub = word[i:j]
-                p_sub = token_prob(sub)
-                if p_sub > prob_threshold:
-                    alpha_without_unk[j] += base_val * p_sub
-                    found_valid = True
-                    furthest_reachable = max(furthest_reachable, j)
-            
-            # Mark positions that need UNK
-            if not found_valid and i+1 <= n:
-                requires_unk[i+1] = True
+        # Try all valid subwords
+        end_limit = min(n, i+max_sub_len)
+        found_valid = False
         
-        # Forward pass with UNK - compute full alpha values
-        # Reset furthest reachable to account for UNK tokens
-        furthest_reachable_with_unk = furthest_reachable
+        for j in range(i+1, end_limit+1):
+            sub = word[i:j]
+            p_sub = token_prob(sub)
+            if p_sub > prob_threshold:
+                alpha_without_unk[j] += base_val * p_sub
+                found_valid = True
+                furthest_reachable = max(furthest_reachable, j)
         
-        for i in range(n):
-            base_val = alpha[i]
-            if base_val == 0.0:
-                continue
-                
-            # Early termination check
-            if i > furthest_reachable_with_unk:
-                break
-                
-            # Only allow UNK for positions that require it
-            if i+1 <= n and requires_unk[i+1]:
-                alpha[i+1] += base_val * p_unk
-                furthest_reachable_with_unk = max(furthest_reachable_with_unk, i+1)
-            
-            # Try all valid subwords
-            end_limit = min(n, i+max_sub_len)
-            for j in range(i+1, end_limit+1):
-                sub = word[i:j]
-                p_sub = token_prob(sub)
-                if p_sub > prob_threshold:
-                    alpha[j] += base_val * p_sub
-                    furthest_reachable_with_unk = max(furthest_reachable_with_unk, j)
-        
-        # Calculate normalization factor
-        Z = alpha[n]
-        if Z <= 0:
-            # If we can't segment this word, count it as one <unk>
-            total_counts[unk_token] = total_counts.get(unk_token, 0.0) + 1.0
+        # Mark positions that need UNK
+        if not found_valid and i+1 <= n:
+            requires_unk[i+1] = True
+    
+    # Forward pass with UNK - compute full alpha values
+    # Reset furthest reachable to account for UNK tokens
+    furthest_reachable_with_unk = furthest_reachable
+    
+    for i in range(n):
+        base_val = alpha[i]
+        if base_val == 0.0:
             continue
-        
-        # Backward pass
-        beta[n] = 1.0
-        for i in range(n-1, -1, -1):
-            # Skip positions that can't contribute to any valid path
-            if alpha[i] == 0.0:
-                continue
-                
-            # Only allow UNK for positions that require it
-            if i+1 <= n and requires_unk[i+1]:
-                beta[i] += p_unk * beta[i+1]
-                
-            # Try all valid subwords
-            end_limit = min(n, i+max_sub_len)
-            for j in range(i+1, end_limit+1):
-                sub = word[i:j]
-                p_sub = token_prob(sub)
-                if p_sub > prob_threshold:
-                    beta[i] += p_sub * beta[j]
-        
-        # Accumulate expected counts
-        for i in range(n):
-            ai = alpha[i]
-            if ai == 0.0:
-                continue
-                
-            # Early termination check
-            if i > furthest_reachable_with_unk:
-                break
-                
-            # Count <unk> token usage only where required
-            if i+1 <= n and requires_unk[i+1] and beta[i+1] > 0:
-                frac_unk = (ai * p_unk * beta[i+1]) / Z
-                if frac_unk > 0:
-                    total_counts[unk_token] = total_counts.get(unk_token, 0.0) + frac_unk
             
-            # Count subword token usage
-            end_limit = min(n, i+max_sub_len)
-            for j in range(i+1, end_limit+1):
-                # Skip if this can't possibly contribute
-                if beta[j] == 0.0:
-                    continue
-                    
-                sub = word[i:j]
-                p_sub = token_prob(sub)
-                if p_sub > prob_threshold:
-                    frac = (ai * p_sub * beta[j]) / Z
-                    if frac > 0:
-                        total_counts[sub] = total_counts.get(sub, 0.0) + frac
+        # Early termination check
+        if i > furthest_reachable_with_unk:
+            break
+            
+        # Only allow UNK for positions that require it
+        if i+1 <= n and requires_unk[i+1]:
+            alpha[i+1] += base_val * p_unk
+            furthest_reachable_with_unk = max(furthest_reachable_with_unk, i+1)
+        
+        # Try all valid subwords
+        end_limit = min(n, i+max_sub_len)
+        for j in range(i+1, end_limit+1):
+            sub = word[i:j]
+            p_sub = token_prob(sub)
+            if p_sub > prob_threshold:
+                alpha[j] += base_val * p_sub
+                furthest_reachable_with_unk = max(furthest_reachable_with_unk, j)
+    
+    # Calculate normalization factor
+    Z = alpha[n]
+    if Z <= 0:
+        # If we can't segment this word, count it as one <unk>
+        total_counts[unk_token] = total_counts.get(unk_token, 0.0) + 1.0
+        return {}
+    
+    # Backward pass
+    beta[n] = 1.0
+    for i in range(n-1, -1, -1):
+        # Skip positions that can't contribute to any valid path
+        if alpha[i] == 0.0:
+            continue
+            
+        # Only allow UNK for positions that require it
+        if i+1 <= n and requires_unk[i+1]:
+            beta[i] += p_unk * beta[i+1]
+            
+        # Try all valid subwords
+        end_limit = min(n, i+max_sub_len)
+        for j in range(i+1, end_limit+1):
+            sub = word[i:j]
+            p_sub = token_prob(sub)
+            if p_sub > prob_threshold:
+                beta[i] += p_sub * beta[j]
+    
+    # Accumulate expected counts
+    for i in range(n):
+        ai = alpha[i]
+        if ai == 0.0:
+            continue
+            
+        # Early termination check
+        if i > furthest_reachable_with_unk:
+            break
+            
+        # Count <unk> token usage only where required
+        if i+1 <= n and requires_unk[i+1] and beta[i+1] > 0:
+            frac_unk = (ai * p_unk * beta[i+1]) / Z
+            if frac_unk > 0:
+                total_counts[unk_token] = total_counts.get(unk_token, 0.0) + frac_unk
+        
+        # Count subword token usage
+        end_limit = min(n, i+max_sub_len)
+        for j in range(i+1, end_limit+1):
+            # Skip if this can't possibly contribute
+            if beta[j] == 0.0:
+                continue
+                
+            sub = word[i:j]
+            p_sub = token_prob(sub)
+            if p_sub > prob_threshold:
+                frac = (ai * p_sub * beta[j]) / Z
+                if frac > 0:
+                    total_counts[sub] = total_counts.get(sub, 0.0) + frac
     
     return total_counts
 
@@ -542,7 +535,7 @@ def _accumulate_usage_worker_soft(args):
     """
     Worker for the 'soft' E-step, i.e. forward-backward to accumulate fractional usage.
     """
-    chunk_lines, p_lang, unk_token, byte_level = args
+    chunk_lines, p_lang, unk_token, byte_level, pretok = args
 
     c_dict = defaultdict(float)
     total = 0.0
@@ -551,8 +544,7 @@ def _accumulate_usage_worker_soft(args):
         usage_line = forward_backward_unigram_log_space(line, 
             p_lang, 
             unk_token=unk_token, 
-            byte_level=byte_level, 
-            max_sub_len=30 if byte_level else 20)
+            pretok=pretok)
         line_count = sum(usage_line.values())  # total subwords in a segmentation => expected # of tokens
         total+= line_count
         for tk, frac in usage_line.items():
@@ -569,7 +561,7 @@ def _accumulate_usage_worker_hard(args):
         unk_token: string for unknown token
     Returns: (counts_dict, total_subwords)
     """
-    chunk_lines, logp_lang, unk_token, byte_level = args
+    chunk_lines, logp_lang, unk_token, byte_level, pretok = args
 
     c_dict = defaultdict(float)
     total = 0
@@ -587,7 +579,8 @@ def _accumulate_usage_worker_hard(args):
                 logp_lang, 
                 unk_token=unk_token, 
                 max_sub_len=30 if byte_level else 20,
-                byte_level=byte_level
+                byte_level=byte_level, 
+                pretok=pretok
             )
 
             total += len(tokens)
@@ -602,7 +595,8 @@ def _accumulate_usage(train_file,
                       unk_token,
                       num_processes=None,
                       mode='soft',
-                      byte_level=False):
+                      byte_level=False,
+                      pretokenizer=None):
         """
         For a single language's corpus:
           - segment each line with distribution p_lang
@@ -615,6 +609,7 @@ def _accumulate_usage(train_file,
 
         # 1) read entire file's lines into memory (if feasible)
         lines = []
+        logger.info(f"Reading lines from {train_file}...")
         with open(train_file, 'r', encoding='utf-8', errors="replace") as fin:
             for line in fin:
                 line = line.strip()
@@ -633,13 +628,14 @@ def _accumulate_usage(train_file,
             chunk = lines[idx:idx + chunk_size]
             idx += chunk_size
             chunks.append(chunk)
-
+        
+        log_plang = {tk: math.log(p if p else MIN_TOKEN_PROB) for tk, p in p_lang.items()}
+        
         # 3) Build worker args
         # we pass p_lang + unk_token for the segmentation
         worker_args = []
         for ch in chunks:
-            lang_dist = {tk: math.log(p if p else MIN_TOKEN_PROB) for tk, p in p_lang.items()}
-            worker_args.append((ch, lang_dist, unk_token, byte_level))
+            worker_args.append((ch, log_plang, unk_token, byte_level, pretokenizer))
 
         # 4) Launch pool
         with multiprocessing.Pool(processes=num_processes) as pool:
@@ -957,7 +953,7 @@ def _accumulate_alternatives_worker_weighted(args):
     Worker that processes tokens and returns weighted alternatives.
     Optimized to segment each line only once.
     """
-    chunk_lines, logp_lang, unk_token, byte_level, processed_tokens = args
+    chunk_lines, logp_lang, unk_token, byte_level, processed_tokens, pretok = args
 
     alternatives = defaultdict(lambda: defaultdict(float))
     max_token_len = 30 if byte_level else 20
@@ -970,16 +966,16 @@ def _accumulate_alternatives_worker_weighted(args):
             continue
 
         # Get segmentation for this line
-        if byte_level:
-            mapped_line = _apply_bytelevel_mapping_hf(line)
-            best_seg = _segment_word_viterbi(mapped_line, logp_lang, unk_token, max_token_len)
-            text_for_alternatives = line  # Pass original line
-        else:
-            words = line.strip().split()
+        mapped_line = _apply_pretok_mapping_hf(line, pretok)
+        if isinstance(mapped_line, list):
             best_seg = []
-            for word in words:
+            for word in mapped_line:
                 best_seg.extend(_segment_word_viterbi(word, logp_lang, unk_token, max_token_len))
             text_for_alternatives = line
+        else:
+            best_seg = _segment_word_viterbi(mapped_line, logp_lang, unk_token, max_token_len)
+            text_for_alternatives = line  # Pass original line
+            
 
         # Find tokens we haven't processed yet
         unique_tokens = set(best_seg) & set(logp_lang.keys()) - processed_tokens - {unk_token}
