@@ -10,7 +10,7 @@ import code.constants as constants
 
 from tokenizers import Tokenizer
 from tokenizers.models import Unigram
-from tokenizers.pre_tokenizers import Whitespace, ByteLevel
+from tokenizers.pre_tokenizers import ByteLevel, Sequence
 from transformers import AutoTokenizer
 
 import logging
@@ -20,16 +20,11 @@ logging.basicConfig(
 )
 logger = logging.getLogger(__name__)
 
-# build once, reuse
-_B2U = {i: c for i, c in enumerate(ByteLevel.alphabet())}
-BY_PRETOK = ByteLevel(add_prefix_space=False)
 
-def _apply_bytelevel_mapping(raw: str) -> str:
-    return "".join(_B2U[b] for b in raw.encode("utf-8"))
-
-def _apply_bytelevel_mapping_hf(text: str) -> str:
+def _apply_pretok_mapping_hf(text: str, pretok: Any) -> str:
     
-    normalized = BY_PRETOK.pre_tokenize_str(text)
+    normalized = pretok.pre_tokenize_str(text)
+    #TODO: make work for only whitespace delimited
     return ''.join(piece[0] for piece in normalized)
 
 def mk_id(raw: str) -> str:
@@ -439,7 +434,7 @@ class SafeFormattingDict(dict):
 
 def load_tokenizer_with_mode(path: str):
     tok = Tokenizer.from_file(path)
-    byte_level = isinstance(tok.pre_tokenizer, ByteLevel)
+    byte_level = isinstance(tok.pre_tokenizer, ByteLevel) or (isinstance(tok.pre_tokenizer, Sequence) and isinstance(tok.pre_tokenizer[1], ByteLevel))
     try:
         # sanity-check the model as well
         byte_fallback = bool(tok.model.byte_fallback)
@@ -480,7 +475,7 @@ def load_tokenizer_from_config(config):
 def _build_hf_tokenizer_from_probs(
     probs_tuples: List[Tuple[str, float]],
     unk_id: int,
-    byte_level: bool = False
+    pretokenizer: Any
 ) -> Tokenizer:
     """
     Turn a plain probability dictionary into a HF Unigram tokenizer.
@@ -488,7 +483,8 @@ def _build_hf_tokenizer_from_probs(
     #TODO: Add byte_fallback=self.byte_level if/when feature becomes available
     model = Unigram(probs_tuples, unk_id)
     tok = Tokenizer(model)
-    tok.pre_tokenizer = ByteLevel(add_prefix_space=False) if byte_level else Whitespace()
+    if pretokenizer:
+        tok.pre_tokenizer = pretokenizer
 
     return tok
 
@@ -496,9 +492,9 @@ def _build_hf_tokenizer_from_probs(
 def tokmix_merge(
     per_lang_tokenizers: Dict[str, Dict[str, float]],
     k_final: int,
-    byte_level: bool,
     unk_token: str,
     special: List[str],
+    pretokenizer: Any
 ) -> Tokenizer:
     """
     Merge per-language UnigramLM vocabularies according to TokMix alg.
@@ -536,4 +532,4 @@ def tokmix_merge(
 
     # 5. build HF tokenizer
     unk_id = kept.index(unk_token)
-    return _build_hf_tokenizer_from_probs(probs_tuples, unk_id, byte_level)
+    return _build_hf_tokenizer_from_probs(probs_tuples, unk_id, pretokenizer)

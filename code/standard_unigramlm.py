@@ -5,14 +5,14 @@ import os
 import json
 import torch
 import logging
-from typing import Dict, List, Tuple, Set, Optional
+from typing import Dict, List, Tuple, Set, Optional, Any
 import numpy as np
 import pickle
 
 from tokenizers import Tokenizer
 from tokenizers.models import Unigram, BPE
 from tokenizers.trainers import UnigramTrainer, BpeTrainer
-from tokenizers.pre_tokenizers import ByteLevel, Whitespace
+from tokenizers.pre_tokenizers import ByteLevel, Whitespace, Sequence
 
 from code.utils import (
     get_baseline_characters,
@@ -56,6 +56,7 @@ class StandardUnigramLMTokenizer:
         multigram: bool = False,
         mixture_weights: Optional[Dict[str, float]] = None,
         byte_level: bool = False,
+        whitespace_token_boundaries: bool = True,
         min_char_occurence_threshold: Optional[int] = None
     ) -> None:
         self.vocab_size = vocab_size
@@ -63,6 +64,7 @@ class StandardUnigramLMTokenizer:
         self.unk_prior = 1.0 / (32 * vocab_size)  # SentencePiece default
         self.special_tokens = special_tokens or list(SPECIAL_TOKENS.values())
         self.byte_level = byte_level
+        self.whitespace_token_boundaries = whitespace_token_boundaries
         self.min_char_occurence_threshold = min_char_occurence_threshold
         if not self.min_char_occurence_threshold:
             self.min_char_occurence_threshold = MIN_CHAR_OCCURENCE_THRESHOLD
@@ -262,14 +264,24 @@ class StandardUnigramLMTokenizer:
             else set(get_baseline_characters(files, min_occurence_threshold=self.min_char_occurence_threshold)[0])
         )
 
+    def _get_pretokenizer(self):
+        if self.base_tokenizer:
+            return self.base_tokenizer.pre_tokenizer
+        components = []
+        if self.whitespace_token_boundaries:
+            components.append(Whitespace())
+        if self.byte_level:
+            components.append(ByteLevel(add_prefix_space=True))
+
+        if components:
+            return components[0] if len(components) == 1 else Sequence(components)
+    
     def _initial_vocab(self, train_files: List[str]) -> Set[str]:
         """Oversized HF trainer to bootstrap an initial token set."""
         tok = Tokenizer(Unigram())
-        tok.pre_tokenizer = (
-            ByteLevel(add_prefix_space=False)
-            if self.byte_level
-            else Whitespace()
-        )
+        pretokenizer = self._get_pretokenizer()
+        if pretokenizer:
+            tok.pre_tokenizer = pretokenizer
         seed_vocab_size = self.vocab_size * INITIAL_VOCAB_MULT_FACTOR
         logger.info(f"Attempting to find seed vocab of size {seed_vocab_size}...")
         trainer = UnigramTrainer(
@@ -359,6 +371,7 @@ class StandardUnigramLMTokenizer:
             self.lang_codes = []
 
         # ------------------ shared preparation ------------------
+        pretokenizer = self._get_pretokenizer()
         baseline = self._baseline_tokens(corpus_files)
         all_tokens = self._initial_vocab(corpus_files)
         all_tokens.update(baseline)
@@ -391,7 +404,8 @@ class StandardUnigramLMTokenizer:
                         self.per_lang_probs[lc], 
                         self.unk_token, 
                         mode=self.em_mode, 
-                        byte_level=self.byte_level
+                        byte_level=self.byte_level,
+                        pretokenizer=pretokenizer
                     )
                     for tk, v in c_dict.items():
                         lang_counts[lc][tk] += v
@@ -404,7 +418,7 @@ class StandardUnigramLMTokenizer:
             else:
                 counts = {tk: 0.0 for tk in all_tokens}
                 for file in corpus_files:
-                    c_dict, _ = _accumulate_usage(file, p_token, self.unk_token, mode=self.em_mode, byte_level=self.byte_level)
+                    c_dict, _ = _accumulate_usage(file, p_token, self.unk_token, mode=self.em_mode, byte_level=self.byte_level, pretokenizer=pretokenizer)
                     for tk, v in c_dict.items():
                         counts[tk] += v
                 unk_count = counts[self.unk_token]
@@ -531,7 +545,9 @@ class StandardUnigramLMTokenizer:
         """
         logger.info("Using HuggingFace UnigramTrainer for standard Unigram.")
         tok = Tokenizer(Unigram())
-        tok.pre_tokenizer = ByteLevel(add_prefix_space=False) if self.byte_level else Whitespace()
+        pretokenizer = self._get_pretokenizer()
+        if pretokenizer:
+            tok.pre_tokenizer = pretokenizer
 
         #TODO: Add byte_fallback=self.byte_level when feature becomes available
         trainer = UnigramTrainer(
@@ -551,9 +567,9 @@ class StandardUnigramLMTokenizer:
         """Plain HF BPE trainer; shares most hyper‑params with EM modes."""
         logger.info("Using HuggingFace BPETrainer.")
         tok = Tokenizer(BPE(unk_token=self.unk_token))
-        tok.pre_tokenizer = (
-            ByteLevel(add_prefix_space=False) if self.byte_level else Whitespace()
-        )
+        pretokenizer = self._get_pretokenizer()
+        if pretokenizer:
+            tok.pre_tokenizer = pretokenizer
 
         trainer = BpeTrainer(
             vocab_size=self.vocab_size,
@@ -617,7 +633,7 @@ class StandardUnigramLMTokenizer:
         tok = _build_hf_tokenizer_from_probs(
             vocab_list,
             unk_id,
-            byte_level=self.byte_level,
+            pretokenizer=self._get_pretokenizer()
         )
         self.base_tokenizer = tok
         if output_path:
@@ -772,15 +788,17 @@ def train_tokmix(per_lang_paths: Dict[str, str],
     Combine language‑specific tokenizers trained earlier.
     `per_lang_paths` maps lang → path/to/json
     """
-    tkzs = {lg: StandardUnigramLMTokenizer()for lg in per_lang_paths}
+    tkzs = {lg: StandardUnigramLMTokenizer(byte_level=byte_level) for lg in per_lang_paths}
+    pretokenizer = None
     for lg, path in per_lang_paths.items():
         tkzs[lg].load(path)
+        pretokenizer = tkzs[lg]._get_pretokenizer()
 
     merged = tokmix_merge({lg: tkz.global_probs for lg, tkz in tkzs.items()}, 
                           k_final,
-                          byte_level,
                           SPECIAL_TOKENS["unk_token"],
-                          list(SPECIAL_TOKENS.values()))
+                          list(SPECIAL_TOKENS.values()),
+                          pretokenizer)
     merged.save(output_path)
     logger.info("Saved TokMix tokenizer to %s", output_path)
     return output_path
