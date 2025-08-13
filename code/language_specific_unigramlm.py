@@ -206,7 +206,8 @@ class LanguageSpecificUnigramLMTokenizer(StandardUnigramLMTokenizer):
                 max_iterations=self.num_reestimation_iterations,
                 unk_prior=self.unk_prior,
                 whitespace_token_boundaries=self.whitespace_token_boundaries,
-                pretokenizer=self._get_pretokenizer()
+                pretokenizer=self._get_pretokenizer(),
+                byte_level=self.byte_level
             )
             token_probs = em_trainer.train(train_file)  # token -> prob
 

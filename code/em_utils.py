@@ -6,7 +6,13 @@ import numpy as np
 from typing import Dict, List, Tuple, Set, Any, Optional, Union
 
 from code.utils import _apply_pretok_mapping_hf, _sample_lines_from_file
-from code.constants import MIN_TOKEN_LOG_PROB, MIN_TOKEN_PROB, SPECIAL_TOKENS
+from code.constants import (
+    MIN_TOKEN_LOG_PROB, 
+    MIN_TOKEN_PROB, 
+    SPECIAL_TOKENS,
+    MAX_BYTE_TOKEN_LEN,
+    MAX_CHAR_TOKEN_LEN
+)
 
 import logging
 logging.basicConfig(
@@ -16,8 +22,14 @@ logging.basicConfig(
 logger = logging.getLogger(__name__)
 
 
-def segment_text_viterbi(text, token_log_probs, unk_token="<unk>", max_sub_len=15, beam_width=5.0, pretok=None, whitespace_boundaries=None):
-    """
+def segment_text_viterbi(text, 
+                         token_log_probs, 
+                         unk_token="<unk>", 
+                         max_sub_len=MAX_CHAR_TOKEN_LEN, 
+                         beam_width=5.0, 
+                         pretok=None, 
+                         whitespace_boundaries=None):
+    """ 
     Segment `text` into tokens using a whitespace split + Viterbi subword approach,
     under the distribution given by `token_probs` (a dict mapping token->prob).
     Returns a list of tokens.
@@ -55,7 +67,7 @@ def _segment_word_viterbi(
     word: str,
     token_log_probs: dict,
     unk_token: str = "<unk>",
-    max_sub_len: int = 20,
+    max_sub_len: int = MAX_CHAR_TOKEN_LEN,
     beam_width: float = 5.0,
 ):
     """
@@ -158,7 +170,7 @@ def _segment_word_viterbi_sp(
     word: str,
     token_log_probs: dict,
     unk_token: str = "<unk>",
-    max_sub_len: int = 20,
+    max_sub_len: int = MAX_CHAR_TOKEN_LEN,
     beam_width: float = 5.0,
 ):
     """
@@ -254,7 +266,7 @@ def forward_backward_unigram_log_space(
     text,
     log_p_lang,
     unk_token="<unk>",
-    max_sub_len=20,
+    max_sub_len=MAX_CHAR_TOKEN_LEN,
     pretok=None,
     whitespace_boundaries=False
 ):
@@ -383,7 +395,12 @@ def forward_backward_unigram_log_space(
     return total_counts
 
 
-def forward_backward_unigram(text, p_lang, unk_token="<unk>", max_sub_len=20, prob_threshold=MIN_TOKEN_PROB, pretok=None, whitespace_boundaries=False):
+def forward_backward_unigram(text, 
+                             p_lang, unk_token="<unk>", 
+                             max_sub_len=MAX_CHAR_TOKEN_LEN, 
+                             prob_threshold=MIN_TOKEN_PROB, 
+                             pretok=None, 
+                             whitespace_boundaries=False):
     """
     Forward-backward algorithm for unigram language model training that matches SentencePiece's
     UNK handling approach.
@@ -538,21 +555,22 @@ def _accumulate_usage_worker_soft(args):
     """
     Worker for the 'soft' E-step, i.e. forward-backward to accumulate fractional usage.
     """
-    chunk_lines, p_lang, unk_token, whitespace_boundaries, pretok = args
+    chunk_lines, p_lang, unk_token, whitespace_boundaries, pretok, max_token_len = args
 
     c_dict = defaultdict(float)
     total = 0.0
 
     for line in chunk_lines:
         usage_line = forward_backward_unigram_log_space(line, 
-            p_lang, 
-            unk_token=unk_token, 
-            pretok=pretok,
-            whitespace_boundaries=whitespace_boundaries)
+                                                        p_lang, 
+                                                        unk_token=unk_token, 
+                                                        pretok=pretok,
+                                                        max_sub_len=max_token_len,
+                                                        whitespace_boundaries=whitespace_boundaries)
         line_count = sum(usage_line.values())  # total subwords in a segmentation => expected # of tokens
-        total+= line_count
+        total += line_count
         for tk, frac in usage_line.items():
-            c_dict[tk]+= frac
+            c_dict[tk] += frac
 
     return (dict(c_dict), total)
 
@@ -565,7 +583,7 @@ def _accumulate_usage_worker_hard(args):
         unk_token: string for unknown token
     Returns: (counts_dict, total_subwords)
     """
-    chunk_lines, logp_lang, unk_token, whitespace_boundaries, pretok = args
+    chunk_lines, logp_lang, unk_token, whitespace_boundaries, pretok, max_token_len = args
 
     c_dict = defaultdict(float)
     total = 0
@@ -582,7 +600,7 @@ def _accumulate_usage_worker_hard(args):
                 line, 
                 logp_lang, 
                 unk_token=unk_token, 
-                max_sub_len=30,
+                max_sub_len=max_token_len,
                 pretok=pretok,
                 whitespace_boundaries=whitespace_boundaries
             )
@@ -599,8 +617,9 @@ def _accumulate_usage(train_file,
                       unk_token,
                       num_processes=None,
                       mode='soft',
-                      whitespace_boundaries=False,
-                      pretokenizer=None):
+                      whitespace_boundaries=True,
+                      pretokenizer=None,
+                      byte_level=False):
         """
         For a single language's corpus:
           - segment each line with distribution p_lang
@@ -634,12 +653,14 @@ def _accumulate_usage(train_file,
             chunks.append(chunk)
         
         log_plang = {tk: math.log(p if p else MIN_TOKEN_PROB) for tk, p in p_lang.items()}
-        
+        max_token_len = MAX_BYTE_TOKEN_LEN if byte_level else MAX_CHAR_TOKEN_LEN
         # 3) Build worker args
         # we pass p_lang + unk_token for the segmentation
         worker_args = []
         for ch in chunks:
-            worker_args.append((ch, log_plang, unk_token, whitespace_boundaries, pretokenizer))
+            worker_args.append(
+                (ch, log_plang, unk_token, whitespace_boundaries, pretokenizer, max_token_len)
+            )
 
         # 4) Launch pool
         with multiprocessing.Pool(processes=num_processes) as pool:
@@ -777,7 +798,7 @@ def _compute_alternatives_direct(
             token_log_probs, 
             unk_token, 
             token, 
-            max_token_len=30 if byte_level else 20
+            max_token_len=MAX_BYTE_TOKEN_LEN if byte_level else MAX_CHAR_TOKEN_LEN
         )
         
         # Since we're using only second best seg, all weight is on the single alternative
@@ -791,7 +812,7 @@ def _get_segmentation_excluding_token(substring: str, token_log_probs: dict, unk
     Get alternative tokenization sequences when excluded_token is not available.
     """
     # Create modified probabilities without the excluded token
-    exc_tok_lprob = token_log_probs.pop(excluded_token, None)#{k: math.exp(v) for k, v in token_log_probs.items() if k != excluded_token}
+    exc_tok_lprob = token_log_probs.pop(excluded_token, None)
     
     # Get the best alternative segmentation
     alt_seg = _segment_word_viterbi(substring, token_log_probs, unk_token, max_token_len)
@@ -960,7 +981,7 @@ def _accumulate_alternatives_worker_weighted(args):
     chunk_lines, logp_lang, unk_token, byte_level, processed_tokens, pretok = args
 
     alternatives = defaultdict(lambda: defaultdict(float))
-    max_token_len = 30 if byte_level else 20
+    max_token_len = MAX_BYTE_TOKEN_LEN if byte_level else MAX_CHAR_TOKEN_LEN
 
     # Pre-process all lines to get tokens that need alternatives
     lines_and_tokens = []

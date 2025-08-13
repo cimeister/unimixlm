@@ -59,6 +59,7 @@ class StandardUnigramLMTokenizer:
         whitespace_token_boundaries: bool = True,
         min_char_occurence_threshold: Optional[int] = None
     ) -> None:
+
         self.vocab_size = vocab_size
         self.unk_token = unk_token
         self.unk_prior = 1.0 / (32 * vocab_size)  # SentencePiece default
@@ -288,8 +289,8 @@ class StandardUnigramLMTokenizer:
             vocab_size=seed_vocab_size,
             special_tokens=self.special_tokens,
             unk_token=self.unk_token,
+            # not strictly necessary since these will be added back later
             initial_alphabet=ByteLevel.alphabet() if self.byte_level else [],
-            #n_sub_iterations=1
         )
         tok.train(train_files, trainer)
         init_vocab = tok.get_vocab()
@@ -371,7 +372,6 @@ class StandardUnigramLMTokenizer:
             self.lang_codes = []
 
         # ------------------ shared preparation ------------------
-        pretokenizer = self._get_pretokenizer()
         baseline = self._baseline_tokens(corpus_files)
         all_tokens = self._initial_vocab(corpus_files)
         all_tokens.update(baseline)
@@ -401,12 +401,11 @@ class StandardUnigramLMTokenizer:
                 total_counts = 0
                 for lc, file in zip(self.lang_codes, corpus_files):
                     c_dict, _ = _accumulate_usage(file, 
-                        self.per_lang_probs[lc], 
-                        self.unk_token, 
-                        mode=self.em_mode, 
-                        whitespace_boundaries=self.whitespace_token_boundaries,
-                        pretokenizer=pretokenizer
-                    )
+                                                  self.per_lang_probs[lc], 
+                                                  self.unk_token, 
+                                                  mode=self.em_mode, 
+                                                  whitespace_boundaries=self.whitespace_token_boundaries,
+                                                  pretokenizer=self._get_pretokenizer())
                     for tk, v in c_dict.items():
                         lang_counts[lc][tk] += v
                     unk_count += lang_counts[lc][self.unk_token]
@@ -419,7 +418,9 @@ class StandardUnigramLMTokenizer:
                 counts = {tk: 0.0 for tk in all_tokens}
                 for file in corpus_files:
                     c_dict, _ = _accumulate_usage(file, p_token, self.unk_token, 
-                        mode=self.em_mode, whitespace_boundaries=self.whitespace_token_boundaries, pretokenizer=pretokenizer)
+                                                  mode=self.em_mode, 
+                                                  whitespace_boundaries=self.whitespace_token_boundaries, 
+                                                  pretokenizer=self._get_pretokenizer())
                     for tk, v in c_dict.items():
                         counts[tk] += v
                 unk_count = counts[self.unk_token]
