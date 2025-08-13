@@ -21,11 +21,14 @@ logging.basicConfig(
 logger = logging.getLogger(__name__)
 
 
-def _apply_pretok_mapping_hf(text: str, pretok: Any) -> str:
+def _apply_pretok_mapping_hf(text: str, pretok: Any, whitespace_boundaries: bool = False) -> str:
     
     normalized = pretok.pre_tokenize_str(text)
     #TODO: make work for only whitespace delimited
-    return ''.join(piece[0] for piece in normalized)
+    pieces = [piece[0] for piece in normalized]
+    if whitespace_boundaries:
+        return pieces
+    return [''.join(pieces)]
 
 def mk_id(raw: str) -> str:
     # 8-byte / 16-char hex digest, utf-8, replace errors

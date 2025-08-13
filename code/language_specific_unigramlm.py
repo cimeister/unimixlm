@@ -84,7 +84,8 @@ class LanguageSpecificUnigramLMTokenizer(StandardUnigramLMTokenizer):
         special_tokens=None,
         reestimation_em_mode: str = "soft",
         num_iterations: int = 20,
-        byte_level: bool = False
+        byte_level: bool = False,
+        whitespace_token_boundaries: bool = True
     ):
         super().__init__(
             vocab_size=vocab_size,
@@ -92,7 +93,8 @@ class LanguageSpecificUnigramLMTokenizer(StandardUnigramLMTokenizer):
             special_tokens=special_tokens,
             em_mode=reestimation_em_mode,
             num_iterations=num_iterations,
-            byte_level=byte_level
+            byte_level=byte_level,
+            whitespace_token_boundaries=whitespace_token_boundaries
         )
 
         self.reestimation_em_mode = reestimation_em_mode
@@ -203,7 +205,7 @@ class LanguageSpecificUnigramLMTokenizer(StandardUnigramLMTokenizer):
                 em_mode=self.reestimation_em_mode,
                 max_iterations=self.num_reestimation_iterations,
                 unk_prior=self.unk_prior,
-                byte_level=self.byte_level,
+                whitespace_token_boundaries=self.whitespace_token_boundaries,
                 pretokenizer=self._get_pretokenizer()
             )
             token_probs = em_trainer.train(train_file)  # token -> prob

@@ -5,8 +5,6 @@ from collections import defaultdict
 import numpy as np
 from typing import Dict, List, Tuple, Set, Any, Optional, Union
 
-from scipy.special import logsumexp
-
 from code.utils import _apply_pretok_mapping_hf, _sample_lines_from_file
 from code.constants import MIN_TOKEN_LOG_PROB, MIN_TOKEN_PROB, SPECIAL_TOKENS
 
@@ -18,7 +16,7 @@ logging.basicConfig(
 logger = logging.getLogger(__name__)
 
 
-def segment_text_viterbi(text, token_log_probs, unk_token="<unk>", max_sub_len=15, beam_width=5.0, pretok=None):
+def segment_text_viterbi(text, token_log_probs, unk_token="<unk>", max_sub_len=15, beam_width=5.0, pretok=None, whitespace_boundaries=None):
     """
     Segment `text` into tokens using a whitespace split + Viterbi subword approach,
     under the distribution given by `token_probs` (a dict mapping token->prob).
@@ -35,7 +33,7 @@ def segment_text_viterbi(text, token_log_probs, unk_token="<unk>", max_sub_len=1
         A list of tokens (subwords).
     """
     # The final list of subword tokens across all whitespace-delimited words
-    text = _apply_pretok_mapping_hf(text, pretok)
+    text = _apply_pretok_mapping_hf(text, pretok, whitespace_boundaries)
     if not isinstance(text, list):
         # For byte-level, treat the entire text as one sequence (no whitespace splitting)
         return _segment_word_viterbi(text, token_log_probs, unk_token, max_sub_len, beam_width)
@@ -258,6 +256,7 @@ def forward_backward_unigram_log_space(
     unk_token="<unk>",
     max_sub_len=20,
     pretok=None,
+    whitespace_boundaries=False
 ):
     """
     Forward–backward for UnigramLM in log-space, with SentencePiece-style UNK gating:
@@ -275,12 +274,7 @@ def forward_backward_unigram_log_space(
     """
     LOG_NEG_INF = -np.inf
 
-    text = _apply_pretok_mapping_hf(text, pretok)
-
-    word = text.rstrip("\n")
-    n = len(word)
-    if n == 0:
-        return {}
+    texts = _apply_pretok_mapping_hf(text, pretok, whitespace_boundaries)#.rstrip("\n")
 
     # Use membership (not thresholds) to decide which substrings are valid tokens.
     if unk_token not in log_p_lang or not np.isfinite(log_p_lang[unk_token]):
@@ -290,95 +284,106 @@ def forward_backward_unigram_log_space(
     # "Real" vocab excludes UNK for the startability test and subword transitions.
     real_vocab = set(log_p_lang.keys()) - {unk_token}
 
+    token_cache = {}
+    def get_token_log_prob(token):
+        if token not in token_cache:
+            if token in real_vocab:
+                token_cache[token] = log_p_lang[token]
+            else:
+                token_cache[token] = LOG_NEG_INF
+        return token_cache[token]
+
     # --- Pre-pass: where can a real token start
-    can_start = [False] * n
-    for i in range(n):
-        end = min(n, i + max_sub_len)
-        # early-exit once we find any matching token
-        for j in range(i + 1, end + 1):
-            if word[i:j] in real_vocab:
-                can_start[i] = True
-                break
-
-    # UNK is *required* at i -> i+1 exactly when no real token can start at i
-    requires_unk = [False] * (n + 1)
-    for i in range(n):
-        requires_unk[i + 1] = not can_start[i]
-
-    # --- Forward pass (log-space)
-    log_alpha = np.full(n + 1, LOG_NEG_INF)
-    log_alpha[0] = 0.0  # log(1)
-
-    for i in range(n):
-        if log_alpha[i] == LOG_NEG_INF:
-            continue
-
-        # UNK transition (length-1) only where required
-        if requires_unk[i + 1]:
-            log_alpha[i + 1] = logsumexp([log_alpha[i + 1], log_alpha[i] + log_p_unk])
-
-        # Real tokens
-        end = min(n, i + max_sub_len)
-        for j in range(i + 1, end + 1):
-            sub = word[i:j]
-            if sub in real_vocab:
-                log_alpha[j] = logsumexp([log_alpha[j], log_alpha[i] + log_p_lang[sub]])
-
-    log_Z = log_alpha[n]
-    if not np.isfinite(log_Z):
-        # This should not happen 
-        raise RuntimeError(
-            "Failed to reach the end of the word. Numerical stability issues."
-        )
-
-    # --- Backward pass (log-space)
-    log_beta = np.full(n + 1, LOG_NEG_INF)
-    log_beta[n] = 0.0  # log(1)
-
-    for i in range(n - 1, -1, -1):
-        # UNK transition (length-1) only where required
-        if requires_unk[i + 1]:
-            log_beta[i] = logsumexp([log_beta[i], log_p_unk + log_beta[i + 1]])
-
-        # Real tokens
-        end = min(n, i + max_sub_len)
-        for j in range(i + 1, end + 1):
-            sub = word[i:j]
-            if sub in real_vocab:
-                log_beta[i] = logsumexp([log_beta[i], log_p_lang[sub] + log_beta[j]])
-
-    # (Sanity) beta at 0 equals Z
-    if not np.isclose(log_beta[0], log_Z, rtol=1e-10, atol=1e-12):
-        # Floating-point differences aside, they should agree.
-        pass  # You can raise/log here if you'd like strict checking.
-
-    # --- Expected counts
     total_counts = {}
-
     # Helper to accumulate in linear space without instability
     def add_count(tok, log_count):
         if np.isfinite(log_count):
             total_counts[tok] = total_counts.get(tok, 0.0) + float(np.exp(log_count))
 
-    for i in range(n):
-        if log_alpha[i] == LOG_NEG_INF:
+    for text in texts:
+        text = text.rstrip("\n")
+        n = len(text)
+        if n == 0:
             continue
+        can_start = [False] * n
+        for i in range(n):
+            end = min(n, i + max_sub_len)
+            # early-exit once we find any matching token
+            for j in range(i + 1, end + 1):
+                if text[i:j] in real_vocab:
+                    can_start[i] = True
+                    break
 
-        # UNK at i -> i+1 (only where required)
-        if requires_unk[i + 1] and log_beta[i + 1] != LOG_NEG_INF:
-            add_count(unk_token, log_alpha[i] + log_p_unk + log_beta[i + 1] - log_Z)
+        # UNK is *required* at i -> i+1 exactly when no real token can start at i
+        requires_unk = [False] * (n + 1)
+        for i in range(n):
+            requires_unk[i + 1] = not can_start[i]
 
-        # Real tokens
-        end = min(n, i + max_sub_len)
-        for j in range(i + 1, end + 1):
-            sub = word[i:j]
-            if sub in real_vocab and log_beta[j] != LOG_NEG_INF:
-                add_count(sub, log_alpha[i] + log_p_lang[sub] + log_beta[j] - log_Z)
+        # --- Forward pass (log-space)
+        log_alpha = np.full(n + 1, LOG_NEG_INF)
+        log_alpha[0] = 0.0  # log(1)
+
+        for i in range(n):
+            if log_alpha[i] == LOG_NEG_INF:
+                continue
+
+            # UNK transition (length-1) only where required
+            if requires_unk[i + 1]:
+                log_alpha[i + 1] = np.logaddexp(log_alpha[i + 1], log_alpha[i] + log_p_unk)
+
+            # Real tokens
+            end = min(n, i + max_sub_len)
+            for j in range(i + 1, end + 1):
+                sub = text[i:j]
+                if sub in real_vocab:
+                    log_alpha[j] = np.logaddexp(log_alpha[j], log_alpha[i] + log_p_lang[sub])
+
+        log_Z = log_alpha[n]
+        if not np.isfinite(log_Z):
+            # This should not happen 
+            raise RuntimeError(
+                "Failed to reach the end of the word. Numerical stability issues."
+            )
+
+        # --- Backward pass (log-space)
+        log_beta = np.full(n + 1, LOG_NEG_INF)
+        log_beta[n] = 0.0  # log(1)
+
+        for i in range(n - 1, -1, -1):
+            # UNK transition (length-1) only where required
+            if requires_unk[i + 1]:
+                log_beta[i] = np.logaddexp(log_beta[i], log_p_unk + log_beta[i + 1])
+
+            # Real tokens
+            end = min(n, i + max_sub_len)
+            for j in range(i + 1, end + 1):
+                sub = text[i:j]
+                if sub in real_vocab:
+                    log_beta[i] = np.logaddexp(log_beta[i], log_p_lang[sub] + log_beta[j])
+
+        # (Sanity) beta at 0 equals Z
+        if not np.isclose(log_beta[0], log_Z, rtol=1e-8, atol=1e-8):
+            logger.warning("Large floating point errors...")
+
+        for i in range(n):
+            if log_alpha[i] == LOG_NEG_INF:
+                continue
+
+            # UNK at i -> i+1 (only where required)
+            if requires_unk[i + 1] and log_beta[i + 1] != LOG_NEG_INF:
+                add_count(unk_token, log_alpha[i] + log_p_unk + log_beta[i + 1] - log_Z)
+
+            # Real tokens
+            end = min(n, i + max_sub_len)
+            for j in range(i + 1, end + 1):
+                sub = text[i:j]
+                if sub in real_vocab and log_beta[j] != LOG_NEG_INF:
+                    add_count(sub, log_alpha[i] + log_p_lang[sub] + log_beta[j] - log_Z)
 
     return total_counts
 
 
-def forward_backward_unigram(text, p_lang, unk_token="<unk>", max_sub_len=20, prob_threshold=MIN_TOKEN_PROB, pretok=None):
+def forward_backward_unigram(text, p_lang, unk_token="<unk>", max_sub_len=20, prob_threshold=MIN_TOKEN_PROB, pretok=None, whitespace_boundaries=False):
     """
     Forward-backward algorithm for unigram language model training that matches SentencePiece's
     UNK handling approach.
@@ -388,145 +393,143 @@ def forward_backward_unigram(text, p_lang, unk_token="<unk>", max_sub_len=20, pr
     # Get probability for unknown token
     p_unk = p_lang.get(unk_token, prob_threshold)
     
-    text = _apply_pretok_mapping_hf(text, pretok)
-
-    # --- 2. Use the *whole* line; leading spaces matter --------------
-    word = text.rstrip("\n")
-    
-    # Initialize global counts
+    texts = _apply_pretok_mapping_hf(text, pretok, whitespace_boundaries)
+    #Initialize global counts
     total_counts = {}
-    
-    n = len(word)
-    if n == 0:
-        return {}
-    # Initialize alpha and beta arrays
-    alpha = [0.0] * (n+1)
-    alpha_without_unk = [0.0] * (n+1)  # Tracks probability mass WITHOUT using UNK
-    beta = [0.0] * (n+1)
-    alpha[0] = 1.0
-    alpha_without_unk[0] = 1.0
-    
-    # Track positions that need UNK (cannot be reached with regular tokens)
-    requires_unk = [False] * (n+1)
-    
-    # Track furthest reachable position for early termination
-    furthest_reachable = 0
-    
-    # Helper function for token probabilities with memoization
+
     token_prob_cache = {}
     def token_prob(token):
         if token not in token_prob_cache:
             token_prob_cache[token] = p_lang.get(token, 0.0)
         return token_prob_cache[token]
-    
-    # Forward pass - first compute alpha_without_unk
-    for i in range(n):
-        base_val = alpha_without_unk[i]
-        if base_val == 0.0:
+
+    # --- 2. Use the *whole* line; leading spaces matter --------------
+    for word in texts:
+        word = text.rstrip("\n")
+        n = len(word)
+        if n == 0:
             continue
-            
-        # Early termination check - if we're beyond what we can reach with regular tokens
-        if i > furthest_reachable:
-            break
-            
-        # Try all valid subwords
-        end_limit = min(n, i+max_sub_len)
-        found_valid = False
+        # Initialize alpha and beta arrays
+        alpha = [0.0] * (n+1)
+        alpha_without_unk = [0.0] * (n+1)  # Tracks probability mass WITHOUT using UNK
+        beta = [0.0] * (n+1)
+        alpha[0] = 1.0
+        alpha_without_unk[0] = 1.0
         
-        for j in range(i+1, end_limit+1):
-            sub = word[i:j]
-            p_sub = token_prob(sub)
-            if p_sub > prob_threshold:
-                alpha_without_unk[j] += base_val * p_sub
-                found_valid = True
-                furthest_reachable = max(furthest_reachable, j)
+        # Track positions that need UNK (cannot be reached with regular tokens)
+        requires_unk = [False] * (n+1)
         
-        # Mark positions that need UNK
-        if not found_valid and i+1 <= n:
-            requires_unk[i+1] = True
-    
-    # Forward pass with UNK - compute full alpha values
-    # Reset furthest reachable to account for UNK tokens
-    furthest_reachable_with_unk = furthest_reachable
-    
-    for i in range(n):
-        base_val = alpha[i]
-        if base_val == 0.0:
-            continue
-            
-        # Early termination check
-        if i > furthest_reachable_with_unk:
-            break
-            
-        # Only allow UNK for positions that require it
-        if i+1 <= n and requires_unk[i+1]:
-            alpha[i+1] += base_val * p_unk
-            furthest_reachable_with_unk = max(furthest_reachable_with_unk, i+1)
+        # Track furthest reachable position for early termination
+        furthest_reachable = 0    
         
-        # Try all valid subwords
-        end_limit = min(n, i+max_sub_len)
-        for j in range(i+1, end_limit+1):
-            sub = word[i:j]
-            p_sub = token_prob(sub)
-            if p_sub > prob_threshold:
-                alpha[j] += base_val * p_sub
-                furthest_reachable_with_unk = max(furthest_reachable_with_unk, j)
-    
-    # Calculate normalization factor
-    Z = alpha[n]
-    if Z <= 0:
-        # If we can't segment this word, count it as one <unk>
-        total_counts[unk_token] = total_counts.get(unk_token, 0.0) + 1.0
-        return {}
-    
-    # Backward pass
-    beta[n] = 1.0
-    for i in range(n-1, -1, -1):
-        # Skip positions that can't contribute to any valid path
-        if alpha[i] == 0.0:
-            continue
-            
-        # Only allow UNK for positions that require it
-        if i+1 <= n and requires_unk[i+1]:
-            beta[i] += p_unk * beta[i+1]
-            
-        # Try all valid subwords
-        end_limit = min(n, i+max_sub_len)
-        for j in range(i+1, end_limit+1):
-            sub = word[i:j]
-            p_sub = token_prob(sub)
-            if p_sub > prob_threshold:
-                beta[i] += p_sub * beta[j]
-    
-    # Accumulate expected counts
-    for i in range(n):
-        ai = alpha[i]
-        if ai == 0.0:
-            continue
-            
-        # Early termination check
-        if i > furthest_reachable_with_unk:
-            break
-            
-        # Count <unk> token usage only where required
-        if i+1 <= n and requires_unk[i+1] and beta[i+1] > 0:
-            frac_unk = (ai * p_unk * beta[i+1]) / Z
-            if frac_unk > 0:
-                total_counts[unk_token] = total_counts.get(unk_token, 0.0) + frac_unk
-        
-        # Count subword token usage
-        end_limit = min(n, i+max_sub_len)
-        for j in range(i+1, end_limit+1):
-            # Skip if this can't possibly contribute
-            if beta[j] == 0.0:
+        # Forward pass - first compute alpha_without_unk
+        for i in range(n):
+            base_val = alpha_without_unk[i]
+            if base_val == 0.0:
                 continue
                 
-            sub = word[i:j]
-            p_sub = token_prob(sub)
-            if p_sub > prob_threshold:
-                frac = (ai * p_sub * beta[j]) / Z
-                if frac > 0:
-                    total_counts[sub] = total_counts.get(sub, 0.0) + frac
+            # Early termination check - if we're beyond what we can reach with regular tokens
+            if i > furthest_reachable:
+                break
+                
+            # Try all valid subwords
+            end_limit = min(n, i+max_sub_len)
+            found_valid = False
+            
+            for j in range(i+1, end_limit+1):
+                sub = word[i:j]
+                p_sub = token_prob(sub)
+                if p_sub > prob_threshold:
+                    alpha_without_unk[j] += base_val * p_sub
+                    found_valid = True
+                    furthest_reachable = max(furthest_reachable, j)
+            
+            # Mark positions that need UNK
+            if not found_valid and i+1 <= n:
+                requires_unk[i+1] = True
+        
+        # Forward pass with UNK - compute full alpha values
+        # Reset furthest reachable to account for UNK tokens
+        furthest_reachable_with_unk = furthest_reachable
+        
+        for i in range(n):
+            base_val = alpha[i]
+            if base_val == 0.0:
+                continue
+                
+            # Early termination check
+            if i > furthest_reachable_with_unk:
+                break
+                
+            # Only allow UNK for positions that require it
+            if i+1 <= n and requires_unk[i+1]:
+                alpha[i+1] += base_val * p_unk
+                furthest_reachable_with_unk = max(furthest_reachable_with_unk, i+1)
+            
+            # Try all valid subwords
+            end_limit = min(n, i+max_sub_len)
+            for j in range(i+1, end_limit+1):
+                sub = word[i:j]
+                p_sub = token_prob(sub)
+                if p_sub > prob_threshold:
+                    alpha[j] += base_val * p_sub
+                    furthest_reachable_with_unk = max(furthest_reachable_with_unk, j)
+        
+        # Calculate normalization factor
+        Z = alpha[n]
+        if Z <= 0:
+            # If we can't segment this word, count it as one <unk>
+            total_counts[unk_token] = total_counts.get(unk_token, 0.0) + 1.0
+            return {}
+        
+        # Backward pass
+        beta[n] = 1.0
+        for i in range(n-1, -1, -1):
+            # Skip positions that can't contribute to any valid path
+            if alpha[i] == 0.0:
+                continue
+                
+            # Only allow UNK for positions that require it
+            if i+1 <= n and requires_unk[i+1]:
+                beta[i] += p_unk * beta[i+1]
+                
+            # Try all valid subwords
+            end_limit = min(n, i+max_sub_len)
+            for j in range(i+1, end_limit+1):
+                sub = word[i:j]
+                p_sub = token_prob(sub)
+                if p_sub > prob_threshold:
+                    beta[i] += p_sub * beta[j]
+        
+        # Accumulate expected counts
+        for i in range(n):
+            ai = alpha[i]
+            if ai == 0.0:
+                continue
+                
+            # Early termination check
+            if i > furthest_reachable_with_unk:
+                break
+                
+            # Count <unk> token usage only where required
+            if i+1 <= n and requires_unk[i+1] and beta[i+1] > 0:
+                frac_unk = (ai * p_unk * beta[i+1]) / Z
+                if frac_unk > 0:
+                    total_counts[unk_token] = total_counts.get(unk_token, 0.0) + frac_unk
+            
+            # Count subword token usage
+            end_limit = min(n, i+max_sub_len)
+            for j in range(i+1, end_limit+1):
+                # Skip if this can't possibly contribute
+                if beta[j] == 0.0:
+                    continue
+                    
+                sub = word[i:j]
+                p_sub = token_prob(sub)
+                if p_sub > prob_threshold:
+                    frac = (ai * p_sub * beta[j]) / Z
+                    if frac > 0:
+                        total_counts[sub] = total_counts.get(sub, 0.0) + frac
     
     return total_counts
 
@@ -535,7 +538,7 @@ def _accumulate_usage_worker_soft(args):
     """
     Worker for the 'soft' E-step, i.e. forward-backward to accumulate fractional usage.
     """
-    chunk_lines, p_lang, unk_token, byte_level, pretok = args
+    chunk_lines, p_lang, unk_token, whitespace_boundaries, pretok = args
 
     c_dict = defaultdict(float)
     total = 0.0
@@ -544,7 +547,8 @@ def _accumulate_usage_worker_soft(args):
         usage_line = forward_backward_unigram_log_space(line, 
             p_lang, 
             unk_token=unk_token, 
-            pretok=pretok)
+            pretok=pretok,
+            whitespace_boundaries=whitespace_boundaries)
         line_count = sum(usage_line.values())  # total subwords in a segmentation => expected # of tokens
         total+= line_count
         for tk, frac in usage_line.items():
@@ -561,7 +565,7 @@ def _accumulate_usage_worker_hard(args):
         unk_token: string for unknown token
     Returns: (counts_dict, total_subwords)
     """
-    chunk_lines, logp_lang, unk_token, byte_level, pretok = args
+    chunk_lines, logp_lang, unk_token, whitespace_boundaries, pretok = args
 
     c_dict = defaultdict(float)
     total = 0
@@ -578,9 +582,9 @@ def _accumulate_usage_worker_hard(args):
                 line, 
                 logp_lang, 
                 unk_token=unk_token, 
-                max_sub_len=30 if byte_level else 20,
-                byte_level=byte_level, 
-                pretok=pretok
+                max_sub_len=30,
+                pretok=pretok,
+                whitespace_boundaries=whitespace_boundaries
             )
 
             total += len(tokens)
@@ -595,7 +599,7 @@ def _accumulate_usage(train_file,
                       unk_token,
                       num_processes=None,
                       mode='soft',
-                      byte_level=False,
+                      whitespace_boundaries=False,
                       pretokenizer=None):
         """
         For a single language's corpus:
@@ -635,7 +639,7 @@ def _accumulate_usage(train_file,
         # we pass p_lang + unk_token for the segmentation
         worker_args = []
         for ch in chunks:
-            worker_args.append((ch, log_plang, unk_token, byte_level, pretokenizer))
+            worker_args.append((ch, log_plang, unk_token, whitespace_boundaries, pretokenizer))
 
         # 4) Launch pool
         with multiprocessing.Pool(processes=num_processes) as pool:

@@ -404,7 +404,7 @@ class StandardUnigramLMTokenizer:
                         self.per_lang_probs[lc], 
                         self.unk_token, 
                         mode=self.em_mode, 
-                        byte_level=self.byte_level,
+                        whitespace_boundaries=self.whitespace_token_boundaries,
                         pretokenizer=pretokenizer
                     )
                     for tk, v in c_dict.items():
@@ -418,7 +418,8 @@ class StandardUnigramLMTokenizer:
             else:
                 counts = {tk: 0.0 for tk in all_tokens}
                 for file in corpus_files:
-                    c_dict, _ = _accumulate_usage(file, p_token, self.unk_token, mode=self.em_mode, byte_level=self.byte_level, pretokenizer=pretokenizer)
+                    c_dict, _ = _accumulate_usage(file, p_token, self.unk_token, 
+                        mode=self.em_mode, whitespace_boundaries=self.whitespace_token_boundaries, pretokenizer=pretokenizer)
                     for tk, v in c_dict.items():
                         counts[tk] += v
                 unk_count = counts[self.unk_token]

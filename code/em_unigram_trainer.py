@@ -14,7 +14,7 @@ class EMUnigramTrainer:
 
     def __init__(self, vocab, unk_token="<unk>", special_tokens=None,
                  max_iterations=20, em_mode="hard", convergence_threshold=1e-7, 
-                 unk_prior=MIN_TOKEN_PROB, byte_level=False, pretokenizer=None):
+                 unk_prior=MIN_TOKEN_PROB, whitespace_token_boundaries=True, pretokenizer=None):
         """
         Args:
             vocab: dict(token -> ID), the shared vocabulary.
@@ -31,7 +31,7 @@ class EMUnigramTrainer:
         self.em_mode = em_mode
         self.convergence_threshold = convergence_threshold
         self.unk_prior = unk_prior
-        self.byte_level = byte_level
+        self.whitespace_token_boundaries = whitespace_token_boundaries
         self.pretokenizer = pretokenizer
         
         # Ensure em_mode is valid
@@ -90,7 +90,7 @@ class EMUnigramTrainer:
                 self.unk_token, 
                 num_processes=num_processes,
                 mode=self.em_mode,
-                byte_level=self.byte_level,
+                whitespace_boundaries=self.whitespace_token_boundaries,
                 pretokenizer=self.pretokenizer
             )
             # Update counts
