@@ -29,7 +29,7 @@ logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
 
 
-def initialize_gpt_for_classification(model_path, num_labels, tokenizer):
+def initialize_gpt_for_classification(model_path, num_labels, tokenizer, model_kwargs):
     """
     Properly initialize GPT model for classification tasks.
     """
@@ -45,7 +45,8 @@ def initialize_gpt_for_classification(model_path, num_labels, tokenizer):
     model = GPT2ForSequenceClassification.from_pretrained(
         model_path,
         config=config,  # Config already has num_labels
-        ignore_mismatched_sizes=True
+        ignore_mismatched_sizes=True,
+        **model_kwargs
     )
     
     # Initialize classification head properly if it's new
@@ -355,7 +356,6 @@ def setup_xnli(tokenizer, lang_codes, args):
     
     # Run diagnostics
     diagnose_training_issues(model, tokenizer, train_ds, args)
-    exit(0)
     
     return train_ds, val_ds, model, compute_metrics
 
@@ -381,6 +381,9 @@ def setup_ner(tokenizer, lang_codes, args):
             else:
                 split = create_train_val_split(ds["train"], val_size=args.val_size, seed=args.seed)
                 train_ds, val_ds = split["train"], split["test"]
+            
+            train_ds = train_ds.map(lambda ex: {"language": lg})
+            val_ds = val_ds.map(lambda ex: {"language": lg})
             
             logger.info(f"WikiANN {lg} - train: {len(train_ds)}, val: {len(val_ds)}")
             train_subsets.append(train_ds)
@@ -430,9 +433,11 @@ def setup_ner(tokenizer, lang_codes, args):
                                for k, v in tokenized_inputs.items()}
             examples_tokens = [examples["tokens"]]
             examples_tags = [examples["ner_tags"]]
+            examples_language = [examples["language"]]
         else:
             examples_tokens = examples["tokens"]
             examples_tags = examples["ner_tags"]
+            examples_language = examples["language"]
         
         labels = []
         for idx, (tokens, tags) in enumerate(zip(examples_tokens, examples_tags)):
@@ -480,6 +485,7 @@ def setup_ner(tokenizer, lang_codes, args):
             labels.append(label_ids)
         
         tokenized_inputs["labels"] = labels
+        tokenized_inputs["language"] = examples_language
         
         # Remove offset_mapping as it's not needed for training
         tokenized_inputs.pop("offset_mapping", None)
@@ -495,7 +501,7 @@ def setup_ner(tokenizer, lang_codes, args):
     )
     
     # Set format for PyTorch
-    train_ds.set_format(type='torch', columns=['input_ids', 'attention_mask', 'labels'])
+    train_ds.set_format(type='torch', columns=['input_ids', 'attention_mask', 'labels','language'])
     
     logger.info("Preprocessing WikiANN validation data...")
     val_ds = val_ds.map(
@@ -506,7 +512,7 @@ def setup_ner(tokenizer, lang_codes, args):
     )
     
     # Set format for PyTorch
-    val_ds.set_format(type='torch', columns=['input_ids', 'attention_mask', 'labels'])
+    val_ds.set_format(type='torch', columns=['input_ids', 'attention_mask', 'labels', 'language'])
     
     seqeval = evaluate.load("seqeval")
     
@@ -514,23 +520,65 @@ def setup_ner(tokenizer, lang_codes, args):
         predictions, labels = p
         predictions = np.argmax(predictions, axis=2)
         
-        # Remove ignored index (special tokens)
-        true_predictions = [
-            [label_list[p] for (p, l) in zip(prediction, label) if l != -100]
-            for prediction, label in zip(predictions, labels)
-        ]
-        true_labels = [
-            [label_list[l] for (p, l) in zip(prediction, label) if l != -100]
-            for prediction, label in zip(predictions, labels)
-        ]
+        # Get language information from the evaluation dataset
+        # Note: This requires accessing the dataset during evaluation
+        languages = []
+        for batch in val_ds:
+            if isinstance(batch['language'], torch.Tensor):
+                languages.extend(batch['language'].tolist())
+            else:
+                languages.append(batch['language'])
         
-        results = seqeval.compute(predictions=true_predictions, references=true_labels)
-        return {
-            "precision": results["overall_precision"],
-            "recall": results["overall_recall"],
-            "f1": results["overall_f1"],
-            "accuracy": results["overall_accuracy"],
-        }
+        # Group by language
+        lang_predictions = {}
+        lang_labels = {}
+        
+        for i, (pred, label, lang) in enumerate(zip(predictions, labels, languages)):
+            if lang not in lang_predictions:
+                lang_predictions[lang] = []
+                lang_labels[lang] = []
+            
+            # Remove ignored index (special tokens)
+            true_pred = [label_list[p] for (p, l) in zip(pred, label) if l != -100]
+            true_label = [label_list[l] for (p, l) in zip(pred, label) if l != -100]
+            
+            lang_predictions[lang].append(true_pred)
+            lang_labels[lang].append(true_label)
+        
+        # Compute metrics for each language
+        results = {}
+        overall_predictions = []
+        overall_labels = []
+        
+        for lang in lang_predictions:
+            lang_results = seqeval.compute(
+                predictions=lang_predictions[lang], 
+                references=lang_labels[lang]
+            )
+            
+            results[f"{lang}_precision"] = lang_results["overall_precision"]
+            results[f"{lang}_recall"] = lang_results["overall_recall"]
+            results[f"{lang}_f1"] = lang_results["overall_f1"]
+            results[f"{lang}_accuracy"] = lang_results["overall_accuracy"]
+            
+            # Add to overall
+            overall_predictions.extend(lang_predictions[lang])
+            overall_labels.extend(lang_labels[lang])
+        
+        # Compute overall metrics
+        overall_results = seqeval.compute(
+            predictions=overall_predictions, 
+            references=overall_labels
+        )
+        
+        results.update({
+            "precision": overall_results["overall_precision"],
+            "recall": overall_results["overall_recall"],
+            "f1": overall_results["overall_f1"],
+            "accuracy": overall_results["overall_accuracy"],
+        })
+        
+        return results
     
     model = AutoModelForTokenClassification.from_pretrained(
         args.model_path, 
@@ -539,6 +587,7 @@ def setup_ner(tokenizer, lang_codes, args):
         pad_token_id=tokenizer.pad_token_id,  # Explicitly set
         bos_token_id=tokenizer.bos_token_id,
         eos_token_id=tokenizer.eos_token_id,
+        **args.model_kwargs
         )
     adjust_padding_side(model, tokenizer)
     return train_ds, val_ds, model, compute_metrics
@@ -648,9 +697,9 @@ def finetune_from_config(entry: Dict[str, Any]) -> Dict[str, str]:
     }
     Returns { task -> metrics_json_path }.
     """
-
     args = SimpleNamespace(
         model_path   = entry["model_path"],
+        model_kwargs = entry["model_kwargs"], 
         task         = entry["tasks"],
         epochs       = entry["hyper"].get("epochs", 3),  # Increased default
         batch_size   = entry["hyper"].get("batch_size", 16),

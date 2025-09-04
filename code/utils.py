@@ -21,10 +21,9 @@ logging.basicConfig(
 logger = logging.getLogger(__name__)
 
 
-def _apply_pretok_mapping_hf(text: str, pretok: Any, whitespace_boundaries: bool = False) -> str:
+def _apply_pretok_mapping_hf(text: str, pretok: Any, whitespace_boundaries: bool = True) -> str:
     
     normalized = pretok.pre_tokenize_str(text)
-    #TODO: make work for only whitespace delimited
     pieces = [piece[0] for piece in normalized]
     if whitespace_boundaries:
         return pieces
@@ -535,4 +534,101 @@ def tokmix_merge(
 
     # 5. build HF tokenizer
     unk_id = kept.index(unk_token)
+    return _build_hf_tokenizer_from_probs(probs_tuples, unk_id, pretokenizer)
+
+
+def tokmix_merge_loss_based(
+    per_lang_tokenizers: Dict[str, Dict[str, float]],
+    k_final: int,
+    unk_token: str,
+    special: List[str],
+    pretokenizer: Any,
+    byte_level: bool = False
+) -> Tokenizer:
+    """
+    Merge per-language UnigramLM vocabularies using loss-based selection.
+    Keep tokens whose removal would cause the highest average loss across languages.
+    """
+    from code.em_utils import _compute_alternatives_direct, _compute_loss_with_alternative_sequences
+    
+    # Get all unique tokens across languages
+    all_tokens = set()
+    for token_probs in per_lang_tokenizers.values():
+        all_tokens.update(token_probs.keys())
+    
+    pinned = set(special)
+    candidate_tokens = all_tokens - pinned
+    
+    # Step 1: Pre-compute alternative sequences for all tokens across all languages
+    logger.info("Pre-computing alternative sequences...")
+    per_lang_alternatives = {}
+    
+    for lang, token_probs in per_lang_tokenizers.items():
+        alternatives = _compute_alternatives_direct(
+            token_probs, unk_token, byte_level=byte_level
+        )
+        per_lang_alternatives[lang] = alternatives
+    
+    # Step 2: Compute removal loss for each token across all languages
+    logger.info("Computing removal losses...")
+    token_losses = {}
+    
+    for token in candidate_tokens:
+        total_loss = 0.0
+        num_languages = len(per_lang_tokenizers)
+        
+        for lang, token_probs in per_lang_tokenizers.items():
+            # Skip if token doesn't exist in this language
+            if token not in token_probs:
+                continue
+            
+            # Create synthetic counts dict using probabilities as implicit counts
+            synthetic_counts = token_probs
+            
+            # Compute loss using existing function
+            lang_loss = _compute_loss_with_alternative_sequences(
+                token, synthetic_counts, per_lang_alternatives[lang], 
+                token_probs, unk_token
+            )
+            
+            total_loss += lang_loss
+        
+        # Average loss across languages
+        token_losses[token] = total_loss / num_languages
+    
+    # Step 3: Select tokens with highest removal loss
+    sorted_by_loss = sorted(
+        token_losses.items(),
+        key=lambda x: x[1], 
+        reverse=True  # Highest loss first = most important tokens
+    )
+    
+    # Keep top k tokens (accounting for special tokens)
+    num_regular_tokens = k_final - len(special)
+    kept_regular = [token for token, _ in sorted_by_loss[:num_regular_tokens]]
+    kept_tokens = list(special) + kept_regular
+    
+    logger.info(f"Selected {len(kept_tokens)} tokens based on removal loss")
+    
+    # Step 4: Build final vocabulary with probability averaging (same as original)
+    avg_prob = defaultdict(float)
+    n_langs = len(per_lang_tokenizers)
+    
+    for token in kept_tokens:
+        for lang_probs in per_lang_tokenizers.values():
+            avg_prob[token] += lang_probs.get(token, 0.0)
+        avg_prob[token] /= n_langs
+    
+    # Step 5: Normalize and build tokenizer (same as original)
+    Z = sum(avg_prob[t] for t in kept_tokens if t not in pinned)
+    probs_tuples = []
+    for token in kept_tokens:
+        if token in pinned:
+            p = avg_prob[token]  # Don't renormalize special tokens
+        else:
+            p = avg_prob[token] / Z if Z > 0 else constants.MIN_TOKEN_PROB
+        probs_tuples.append((token, math.log(max(p, constants.MIN_TOKEN_PROB))))
+    
+    # Build HF tokenizer
+    unk_id = kept_tokens.index(unk_token)
     return _build_hf_tokenizer_from_probs(probs_tuples, unk_id, pretokenizer)

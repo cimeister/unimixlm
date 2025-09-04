@@ -48,7 +48,7 @@ def segment_text_viterbi(text,
     text = _apply_pretok_mapping_hf(text, pretok, whitespace_boundaries)
     if not isinstance(text, list):
         # For byte-level, treat the entire text as one sequence (no whitespace splitting)
-        return _segment_word_viterbi(text, token_log_probs, unk_token, max_sub_len, beam_width)
+        return _segment_word_viterbi_sp(text, token_log_probs, unk_token, max_sub_len, beam_width)
     
     all_tokens = []
     if not text:
@@ -617,7 +617,7 @@ def _accumulate_usage(train_file,
                       unk_token,
                       num_processes=None,
                       mode='soft',
-                      whitespace_boundaries=True,
+                      whitespace_boundaries=False,
                       pretokenizer=None,
                       byte_level=False):
         """
@@ -815,7 +815,7 @@ def _get_segmentation_excluding_token(substring: str, token_log_probs: dict, unk
     exc_tok_lprob = token_log_probs.pop(excluded_token, None)
     
     # Get the best alternative segmentation
-    alt_seg = _segment_word_viterbi(substring, token_log_probs, unk_token, max_token_len)
+    alt_seg = _segment_word_viterbi_sp(substring, token_log_probs, unk_token, max_token_len)
     if exc_tok_lprob:
         token_log_probs[excluded_token] = exc_tok_lprob
     
