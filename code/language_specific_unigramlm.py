@@ -57,9 +57,8 @@ def _build_hf_tokenizer_with_new_probs(
 
     unk_id = base_tokenizer.get_vocab()[unk_token]
     tok = _build_hf_tokenizer_from_probs(tuples, unk_id, base_tokenizer.pre_tokenizer)
-    if hasattr(base_tokenizer, 'pre_tokenizer'):
-        tok.pre_tokenizer = base_tokenizer.pre_tokenizer
-    else:
+    if not tok.pre_tokenizer:
+        logger.warning("No pretokenizer set for new HF tokenizer. Defaulting to whitespace")
         tok.pre_tokenizer = Whitespace()
 
     if hasattr(base_tokenizer, 'post_processor'):

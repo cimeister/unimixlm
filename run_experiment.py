@@ -4,6 +4,9 @@ import argparse
 import json
 from datetime import datetime
 from typing import Dict, Any, List
+from collections import defaultdict
+
+
 
 # Import and setup environment variables
 from code.environment_setup import setup_environment
@@ -53,7 +56,7 @@ def process_corpora(config: Dict[str, Any], args: argparse.Namespace) -> Dict[st
             raise FileNotFoundError(f"Directory not found: {processed_dir}")
             
         for lang_code in os.listdir(processed_dir):
-            if lang_code == "sampled":
+            if "sampled" in lang_code:
                 continue
             lang_dir = os.path.join(processed_dir, lang_code)
             if os.path.isdir(lang_dir):
@@ -79,7 +82,7 @@ def train_tokenizers(config: Dict[str, Any], corpus_info: Dict[str, Any]) -> Dic
     tokenizer_paths = {}
     tokenizers_dir = config["experiment"]["tokenizers_dir"].format(data_dir=config["experiment"]["data_dir"])
 
-    sample_root = os.path.join(config["corpus"]["processed_dir"], "sampled")
+    sample_root = os.path.join(config["corpus"]["processed_dir"], "sampled_small")
     tokenizer_training_files = proportional_sample({lg: info['splits']["train"] for lg, info in corpus_info.items()}, sample_root)
 
     # Process each tokenizer configuration
@@ -175,10 +178,14 @@ def train_tokenizers(config: Dict[str, Any], corpus_info: Dict[str, Any]) -> Dic
                                           byte_level=byte_level,
                                           approx_loss=approx_loss)
 
+            # Check if loss-based selection is requested for tokmix
+            use_loss_based = tokenizer_config.get("use_loss_based_selection", True)
+            
             tokmix_path = train_tokmix(paths,
                                        k_final=vocab_size,
+                                       output_path=output_file,
                                        byte_level=byte_level,
-                                       output_path=output_file)
+                                       use_loss_based_selection=use_loss_based)
 
             tokenizer_paths[tokenizer_name] = {"path": tokmix_path,
                                                "class": "standard",
@@ -225,11 +232,12 @@ def tokenize_corpora(config: Dict[str, Any], corpus_info: Dict[str, Any], tokeni
     """Tokenize corpora using the trained tokenizers."""
     if not config["steps"].get("tokenize_corpora", True):
         logger.info("Skipping corpus tokenization (configured to skip)") 
-        tokenized_info = {}
+        tokenized_info = defaultdict(dict)
         for tokenizer_config in config["tokenizers"]:
             tokenizer_name = tokenizer_config["name"]
-            output_dir = tokenizer_config.get("tokenized_data", tokenizer_name)
-            dir_path = os.path.join(tokenized_data_dir, output_dir)   
+            dir_path = tokenizer_config.get("tokenized_data", '').format(tokenized_data_dir=tokenized_data_dir)
+            if not dir_path:
+                dir_path = os.path.join(tokenized_data_dir, tokenizer_name)   
             for lang_code in os.listdir(dir_path):
                 lang_dir = os.path.join(dir_path, lang_code)
                 
@@ -280,7 +288,7 @@ def train_models(config: Dict[str, Any], tokenized_info: Dict[str, Dict[str, Dic
     """Train language models on the tokenized corpora."""
     
     # Check for pretrained models first
-    model_paths = {}
+    model_paths, model_kwargs = {}, {}
     models_dir = config["experiment"]["models_dir"].format(data_dir=config["experiment"]["data_dir"])
     for tokenizer_config in config["tokenizers"]:
         name = tokenizer_config["name"]
@@ -288,13 +296,14 @@ def train_models(config: Dict[str, Any], tokenized_info: Dict[str, Dict[str, Dic
         
         if model_config.get("pretrained", {}).get("enabled", False):
             pretrained_path = model_config["pretrained"]["path"].format(models_dir=models_dir)
-            if os.path.exists(pretrained_path):
-                logger.info(f"Using pretrained model for {name} from {pretrained_path}")
-                model_paths[name] = pretrained_path
+            opt_kwargs = model_config["pretrained"].get("kwargs", {})
+            logger.info(f"Using pretrained model for {name} from {pretrained_path}")
+            model_paths[name] = pretrained_path
+            model_kwargs[name] = opt_kwargs
     
     # If we have all models needed and train_models is False, return early
     if len(model_paths) == len(config["tokenizers"]) and not config["steps"].get("train_models", True):
-        return model_paths
+        return model_paths, model_kwargs
     
     # Otherwise, continue with training for any missing models
     if not config["steps"].get("train_models", True):
@@ -307,7 +316,7 @@ def train_models(config: Dict[str, Any], tokenized_info: Dict[str, Dict[str, Dic
             if os.path.exists(model_dir):
                 model_paths[name] = model_dir
         
-        return model_paths
+        return model_paths, model_kwargs
     
     logger.info("Step 4: Training language models...")
     # Prepare model training configuration
@@ -342,12 +351,13 @@ def train_models(config: Dict[str, Any], tokenized_info: Dict[str, Dict[str, Dic
     # Train models
     model_paths = train_models_from_config(model_config)
     
-    return model_paths
+    return model_paths, model_kwargs
 
 
 def finetune_models(
     config: Dict[str, Any],
     model_paths: Dict[str, str],
+    model_kwargs: Dict[str, Dict],
     tokenizer_paths: Dict[str, Dict[str, Any]],
     languages: List[str]
 ) -> Dict[str, Dict[str, str]]:
@@ -374,6 +384,7 @@ def finetune_models(
     for tok_cfg in config["tokenizers"]:
         name = tok_cfg["name"]
         model_dir = model_paths.get(name)
+        opt_kwargs = model_kwargs.get(name)
         if not model_dir:
             logger.warning("No trained model for %s; skipping fine‑tune.", name)
             continue
@@ -397,6 +408,7 @@ def finetune_models(
         ft_entry = {
             "name":          name,
             "model_path":    model_dir,
+            "model_kwargs":  opt_kwargs,
             "tokenizer_info": tokenizer_paths[name],
             "tasks":         config["finetune_tasks"],
             "hyper":         config.get("finetune_hyper", {}),
@@ -542,9 +554,9 @@ def main():
         tokenized_info = tokenize_corpora(config, corpus_info, tokenizer_paths)
         
         # Step 4: Train language models
-        model_paths = train_models(config, tokenized_info, tokenizer_paths)
+        model_paths, model_kwargs = train_models(config, tokenized_info, tokenizer_paths)
         
-        ft_results = finetune_models(config, model_paths, tokenizer_paths, languages=list(corpus_info.keys()))
+        ft_results = finetune_models(config, model_paths, model_kwargs, tokenizer_paths, languages=list(corpus_info.keys()))
         # Step 5: Evaluate models
         # TODO: update evaluate_models func  
        # evaluation_results = evaluate_models(config, model_paths, tokenized_info, tokenizer_paths)
