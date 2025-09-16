@@ -6,8 +6,6 @@ from datetime import datetime
 from typing import Dict, Any, List
 from collections import defaultdict
 
-
-
 # Import and setup environment variables
 from code.environment_setup import setup_environment
 setup_environment()
@@ -17,6 +15,7 @@ from code.standard_unigramlm import train_standard_tokenizer, train_lang_tokeniz
 from code.language_specific_unigramlm import train_language_specific_tokenizer
 from code.corpus_tokenizer import CorpusTokenizer
 from code.model_trainer import train_models_from_config
+from code.constants import TOKENIZER_TOTAL_TRAINING_LINES
 
 # Setup logging
 logging.basicConfig(
@@ -80,18 +79,27 @@ def train_tokenizers(config: Dict[str, Any], corpus_info: Dict[str, Any]) -> Dic
     
     # Dictionary to store tokenizer paths and configurations
     tokenizer_paths = {}
-    tokenizers_dir = config["experiment"]["tokenizers_dir"].format(data_dir=config["experiment"]["data_dir"])
+    tokenizers_dir = config["experiment"]["tokenizers_dir"]
 
-    sample_root = os.path.join(config["corpus"]["processed_dir"], "sampled_small")
-    tokenizer_training_files = proportional_sample({lg: info['splits']["train"] for lg, info in corpus_info.items()}, sample_root)
+    sample_out_dir = os.path.join(config["corpus"]["processed_dir"], "sampled")
+    tokenizer_training_files = proportional_sample(
+        {lg: info['splits']["train"] for lg, info in corpus_info.items()}, 
+        sample_out_dir,
+        TOKENIZER_TOTAL_TRAINING_LINES
+    )
 
     # Process each tokenizer configuration
     for tokenizer_config in config["tokenizers"]:
         tokenizer_name = tokenizer_config["name"]
         tokenizer_type = tokenizer_config["type"]
-        approx_loss = tokenizer_config.get("approx_loss", False)
+        pruning_criterion = tokenizer_config.get("pruning_criterion", "exact_loss")
         byte_level = config["experiment"].get("byte_level", False)
         em_mode = tokenizer_config.get("em_mode", "soft")
+        use_intersection_pruning = tokenizer_config.get("use_intersection_pruning", False)
+        # Generate improved filename consistent with standard tokenizer
+        pruning_criterion_str = pruning_criterion.replace('_', '-')
+        pruning_strategy = "intersection" if use_intersection_pruning else "average"
+        multigram = tokenizer_config.get("multigram", False)
 
         logger.info(f"Processing tokenizer: {tokenizer_name} (type: {tokenizer_type} at {'byte' if byte_level else 'char'}-level)")
         
@@ -126,12 +134,16 @@ def train_tokenizers(config: Dict[str, Any], corpus_info: Dict[str, Any]) -> Dic
                     logger.info(f"Loaded pretrained language-specific tokenizer from {pretrained_base_path}")
                     continue
             else:
-                pretrained_path = tokenizer_config["path"].format(tokenizers_dir=tokenizers_dir, em_mode=em_mode)
+                pretrained_path = tokenizer_config["path"].format_map(
+                    SafeFormattingDict(tokenizers_dir=tokenizers_dir, 
+                                       em_mode=em_mode,
+                                       pruning_criterion_str=pruning_criterion_str,
+                                       pruning_strategy=pruning_strategy))
                 if os.path.exists(pretrained_path):
                     tokenizer_paths[tokenizer_name] = {
                         "path": pretrained_path,
                         "class": "standard",
-                        "multigram": tokenizer_config.get("multigram", False)
+                        "multigram": multigram
                     }
                     logger.info(f"Loaded pretrained tokenizer from {pretrained_path}")
                     continue
@@ -141,7 +153,6 @@ def train_tokenizers(config: Dict[str, Any], corpus_info: Dict[str, Any]) -> Dic
         vocab_size = config["experiment"].get("vocab_size", 8000)
         if tokenizer_type == "langspec":
             # Handle language-specific tokenizer            
-            em_mode = tokenizer_config.get("em_mode", "soft")
             base_tokenizer_name = tokenizer_config.get("base_tokenizer", "").format_map(
                 SafeFormattingDict(tokenizers_dir=tokenizers_dir, em_mode=em_mode))
             if not base_tokenizer_name:
@@ -170,33 +181,39 @@ def train_tokenizers(config: Dict[str, Any], corpus_info: Dict[str, Any]) -> Dic
 
 
         elif tokenizer_type == "tokmix":
-            output_file = tokenizer_config.get("path", f"tokmix.json").format_map(
-                SafeFormattingDict(tokenizers_dir=tokenizers_dir))
+            # Get unified parameters matching standard tokenizer
+            
+            output_file = tokenizer_config["path"].format_map(
+                SafeFormattingDict(tokenizers_dir=tokenizers_dir, 
+                                 pruning_criterion_str=pruning_criterion_str,
+                                 pruning_strategy=pruning_strategy))
 
+            # Train individual language tokenizers first
             paths = train_lang_tokenizers(tokenizer_training_files, tokenizers_dir,
                                           vocab_size=vocab_size, 
-                                          byte_level=byte_level,
-                                          approx_loss=approx_loss)
+                                          byte_level=byte_level)
 
-            # Check if loss-based selection is requested for tokmix
-            use_loss_based = tokenizer_config.get("use_loss_based_selection", True)
-            
+            # Train TokMix with unified parameters
             tokmix_path = train_tokmix(paths,
                                        k_final=vocab_size,
                                        output_path=output_file,
                                        byte_level=byte_level,
-                                       use_loss_based_selection=use_loss_based)
+                                       pruning_criterion=pruning_criterion,
+                                       use_intersection_pruning=use_intersection_pruning)
 
             tokenizer_paths[tokenizer_name] = {"path": tokmix_path,
                                                "class": "standard",
                                                "multigram": False}
         
-        elif tokenizer_type in ["standard", "bpe"]:
+        elif tokenizer_type == "standard":
             # Handle standard tokenizer
-            em_mode = tokenizer_config.get("em_mode", "soft") if tokenizer_type == "standard" else "bpe"
-            multigram = tokenizer_config.get("multigram", False) if tokenizer_type == "standard" else False
-            output_file = tokenizer_config.get("path", f"standard_unigramlm_{em_mode}.json").format_map(
-                SafeFormattingDict(tokenizers_dir=tokenizers_dir, em_mode=em_mode))
+            initial_vocab_tokens = tokenizer_config.get("initial_vocab_tokens", None)
+            
+            output_file = tokenizer_config["path"].format_map(
+                SafeFormattingDict(tokenizers_dir=tokenizers_dir, 
+                                 em_mode=em_mode, 
+                                 pruning_criterion_str=pruning_criterion_str,
+                                 pruning_strategy=pruning_strategy))
                         
             # Train new tokenizer
             
@@ -207,7 +224,9 @@ def train_tokenizers(config: Dict[str, Any], corpus_info: Dict[str, Any]) -> Dic
                 multigram=multigram,
                 byte_level=byte_level,
                 output_path=output_file,
-                approx_loss=approx_loss
+                use_intersection_pruning=use_intersection_pruning,
+                pruning_criterion=pruning_criterion,
+                initial_vocab_tokens=initial_vocab_tokens
             )
             
             if path:
@@ -215,6 +234,31 @@ def train_tokenizers(config: Dict[str, Any], corpus_info: Dict[str, Any]) -> Dic
                     "path": path,
                     "class": "standard",
                     "multigram": multigram
+                }
+
+        elif tokenizer_type == "bpe":
+            # Handle BPE tokenizer
+            initial_vocab_tokens = tokenizer_config.get("initial_vocab_tokens", None)
+            
+            output_file = tokenizer_config["path"].format_map(
+                SafeFormattingDict(tokenizers_dir=tokenizers_dir))
+                        
+            # Train new tokenizer
+            
+            path = train_standard_tokenizer(
+                tokenizer_training_files, 
+                vocab_size=vocab_size, 
+                byte_level=byte_level,
+                output_path=output_file,
+                em_mode="bpe",
+                initial_vocab_tokens=initial_vocab_tokens
+            )
+            
+            if path:
+                tokenizer_paths[tokenizer_name] = {
+                    "path": path,
+                    "class": "standard",
+                    "multigram": False
                 }
 
         else:
@@ -227,17 +271,35 @@ def tokenize_corpora(config: Dict[str, Any], corpus_info: Dict[str, Any], tokeni
     """Tokenize corpora using the trained tokenizers."""
     
     # Check if we should use pre-tokenized data
-    tokenized_data_dir = config["experiment"].get("tokenized_data_dir", "").format(data_dir=config["experiment"]["data_dir"])
+    tokenized_data_dir = config["experiment"].get("tokenized_data_dir", "")
+
+    # Format tokenized data directory path
+    for tokenizer_config in config["tokenizers"]:
+        tokenizer_name = tokenizer_config["name"]
+        use_intersection_pruning = tokenizer_config.get("use_intersection_pruning", False)
+        
+        # Generate improved filename
+        pruning_criterion = tokenizer_config.get("pruning_criterion", "exact_loss")
+        pruning_criterion_str = pruning_criterion.replace('_', '-')
+        pruning_strategy = "intersection" if use_intersection_pruning else "average"
+        em_mode = tokenizer_config.get("em_mode", "soft")
+
+        dir_path = tokenizer_config.get("tokenized_data", '').format_map( 
+            SafeFormattingDict(tokenized_data_dir=tokenized_data_dir, 
+                               em_mode=em_mode, 
+                               pruning_criterion_str=pruning_criterion_str,
+                               pruning_strategy=pruning_strategy ))
+        if not dir_path:
+            dir_path = os.path.join(tokenized_data_dir, tokenizer_name)
+
+        tokenizer_config["tokenized_data_path"] = dir_path
     
     """Tokenize corpora using the trained tokenizers."""
     if not config["steps"].get("tokenize_corpora", True):
         logger.info("Skipping corpus tokenization (configured to skip)") 
         tokenized_info = defaultdict(dict)
         for tokenizer_config in config["tokenizers"]:
-            tokenizer_name = tokenizer_config["name"]
-            dir_path = tokenizer_config.get("tokenized_data", '').format(tokenized_data_dir=tokenized_data_dir)
-            if not dir_path:
-                dir_path = os.path.join(tokenized_data_dir, tokenizer_name)   
+            dir_path = tokenizer_config["tokenized_data"]
             for lang_code in os.listdir(dir_path):
                 lang_dir = os.path.join(dir_path, lang_code)
                 
@@ -260,6 +322,7 @@ def tokenize_corpora(config: Dict[str, Any], corpus_info: Dict[str, Any], tokeni
             logger.warning(f"No trained tokenizer found for {name}, skipping tokenization")
             continue
         tokenizer_configs[name] = tokenizer_paths[name]
+        tokenizer_configs[name]["tokenized_data_path"] = tokenizer_configs[name]["tokenized_data_path"]
     
     # Create corpus tokenizer
     max_lines = config["experiment"].get("max_samples_per_language")
@@ -289,7 +352,7 @@ def train_models(config: Dict[str, Any], tokenized_info: Dict[str, Dict[str, Dic
     
     # Check for pretrained models first
     model_paths, model_kwargs = {}, {}
-    models_dir = config["experiment"]["models_dir"].format(data_dir=config["experiment"]["data_dir"])
+    models_dir = config["experiment"]["models_dir"]
     for tokenizer_config in config["tokenizers"]:
         name = tokenizer_config["name"]
         model_config = config["models"].get(name, {})
@@ -501,6 +564,13 @@ def main():
     parser.add_argument("--byte-level", action="store_true", 
                       help="Use byte level tokenizers (overrides config)")
     
+    # Tokenizer strategy options
+    parser.add_argument("--pruning-criterion", type=str, 
+                      choices=["probability", "approx_loss", "exact_loss"],
+                      help="Pruning criterion for all tokenizers (overrides config)")
+    parser.add_argument("--use-intersection-pruning", action="store_true",
+                      help="Use intersection pruning strategy for all tokenizers (overrides config)")
+    
     # Step control
     step_group = parser.add_argument_group("Step control")
     step_group.add_argument("--skip-download", action="store_true", 
@@ -516,18 +586,33 @@ def main():
         
     # Load configuration
     config = load_config(args.config)
-    data_dir = config["experiment"]["data_dir"]
-    os.makedirs(data_dir, exist_ok=True)
-
-    for sub_dir_name in ["data_dir","tokenizers_dir","tokenized_data_dir","models_dir"]:
-        sub_dir = config["experiment"].get(sub_dir_name, "").format(data_dir=data_dir)
-        os.makedirs(sub_dir, exist_ok=True)
     
     # Override configuration with command-line arguments
     if args.byte_level:
         config["experiment"]["byte_level"] = True
     if args.vocab_size:
         config["experiment"]["vocab_size"] = args.vocab_size
+    
+    # Apply tokenizer strategy overrides to all tokenizer configs
+    if args.pruning_criterion:
+        for tokenizer_config in config["tokenizers"]:
+            tokenizer_config["pruning_criterion"] = args.pruning_criterion
+    if args.use_intersection_pruning:
+        for tokenizer_config in config["tokenizers"]:
+            tokenizer_config["use_intersection_pruning"] = True
+    
+    # Automatically derive vocab_size_str from vocab_size (after overrides)
+    vocab_size = config["experiment"]["vocab_size"]
+    vocab_size_str = f"{vocab_size//1000}k" if vocab_size >= 1000 else str(vocab_size)
+    
+    data_dir = config["experiment"]["data_dir"].format(vocab_size_str=vocab_size_str)
+    os.makedirs(data_dir, exist_ok=True)
+    config["experiment"]["data_dir"] = data_dir
+
+    for sub_dir_name in ["tokenizers_dir","tokenized_data_dir","models_dir"]:
+        sub_dir = config["experiment"].get(sub_dir_name, "").format(data_dir=data_dir)
+        os.makedirs(sub_dir, exist_ok=True)
+        config["experiment"][sub_dir_name] = sub_dir
     
     # Update step control based on arguments
     if args.skip_download:

@@ -6,6 +6,10 @@ from typing import Dict, List, Tuple, Set, Any, Optional, Union
 
 from pathlib import Path
 import hashlib
+import time
+from datetime import datetime
+import platform
+import sys
 import code.constants as constants
 
 from tokenizers import Tokenizer
@@ -139,6 +143,193 @@ def _count_worker(file_path):
     except Exception as e:
         logger.error(f"Error processing {file_path}: {e}")
         return file_path, Counter()
+
+
+def _detect_vocab_file_format(file_path: str) -> str:
+    """Automatically detect the format of a vocabulary file."""
+    if file_path.endswith('.json'):
+        try:
+            with open(file_path, 'r', encoding='utf-8') as f:
+                data = json.load(f)
+                # Check if it's HF tokenizer format
+                if isinstance(data, dict) and 'model' in data and 'vocab' in data.get('model', {}):
+                    return 'hf_tokenizer'
+                # Check if it's a simple JSON list
+                elif isinstance(data, list):
+                    return 'json_list'
+                else:
+                    raise ValueError(f"Unsupported JSON format in {file_path}")
+        except json.JSONDecodeError:
+            raise ValueError(f"Invalid JSON file: {file_path}")
+    else:
+        return 'text_file'
+
+def _load_vocab_from_text_file(file_path: str) -> List[str]:
+    """Load vocabulary from plain text file (one token per line)."""
+    tokens = []
+    with open(file_path, 'r', encoding='utf-8') as f:
+        for line_num, line in enumerate(f, 1):
+            token = line.rstrip('\n\r')
+            if token:  # Skip empty lines
+                tokens.append(token)
+            elif line.strip() == '':
+                logger.warning(f"Empty line {line_num} in vocab file {file_path}")
+    return tokens
+
+def _load_vocab_from_json_file(file_path: str) -> List[str]:
+    """Load vocabulary from JSON list file."""
+    with open(file_path, 'r', encoding='utf-8') as f:
+        data = json.load(f)
+    
+    if not isinstance(data, list):
+        raise ValueError(f"JSON file must contain a list of strings: {file_path}")
+    
+    tokens = []
+    for i, token in enumerate(data):
+        if not isinstance(token, str):
+            logger.warning(f"Non-string token at index {i} in {file_path}: {token}")
+            continue
+        if token:  # Skip empty strings
+            tokens.append(token)
+    
+    return tokens
+
+def _load_vocab_from_hf_tokenizer(file_path: str) -> List[str]:
+    """Load vocabulary from HuggingFace tokenizer JSON file."""
+    with open(file_path, 'r', encoding='utf-8') as f:
+        data = json.load(f)
+    
+    if 'model' not in data or 'vocab' not in data['model']:
+        raise ValueError(f"File does not appear to be a HuggingFace tokenizer: {file_path}")
+    
+    vocab_data = data['model']['vocab']
+    if isinstance(vocab_data, list):
+        # Format: [["token", score], ...]
+        tokens = [item[0] for item in vocab_data if isinstance(item, list) and len(item) >= 1]
+    elif isinstance(vocab_data, dict):
+        # Format: {"token": id, ...}
+        tokens = list(vocab_data.keys())
+    else:
+        raise ValueError(f"Unsupported vocab format in HF tokenizer file: {file_path}")
+    
+    return tokens
+
+def compute_intersection_pruning_tokens(
+    per_lang_losses: Dict[str, List[Tuple[str, float]]],
+    k_drop: int,
+    lang_codes: List[str],
+    under_consideration: Optional[Set[str]] = None
+) -> Set[str]:
+    """
+    Find tokens to prune using rank-based intersection approach.
+    Suitable for both standard multilingual and TokMix tokenizers with different vocabularies.
+
+    Args:
+        per_lang_losses: Dict[lang_code, List[Tuple[token, loss]]] - pre-computed losses per language
+        k_drop: Number of tokens to remove
+        lang_codes: List of language codes
+        under_consideration: Optional set of tokens to consider (if None, considers all tokens)
+
+    Returns:
+        Set of tokens to remove
+
+    Note: For each token, computes its rank within each language (1-indexed, lower loss = lower rank).
+    Tokens missing from a language's vocabulary get rank 0 (highest removal priority).
+    Each token's score is its maximum rank across all languages.
+    Returns the k_drop tokens with the smallest max-ranks (best worst-case performance).
+    """
+    import logging
+    logger = logging.getLogger(__name__)
+    
+    if k_drop <= 0:
+        return set()
+    
+    if not lang_codes or len(lang_codes) < 2:
+        logger.warning("Intersection pruning requires at least 2 languages")
+        return set()
+    
+    # Determine tokens under consideration
+    if under_consideration is None:
+        under_consideration = set()
+        for lang_losses in per_lang_losses.values():
+            under_consideration.update(token for token, _ in lang_losses)
+    
+    logger.info(f"Computing intersection pruning for {len(under_consideration)} tokens across {len(lang_codes)} languages")
+
+    # Rank tokens within each language based on pre-computed losses
+    per_lang_ranks = {}  # lang -> {token: rank}
+
+    for lc in lang_codes:
+        # Get losses for this language and sort by loss (ascending = lowest loss first)
+        lang_loss_tuples = per_lang_losses[lc].copy()
+        lang_loss_tuples.sort(key=lambda x: x[1])  # Sort by loss value
+
+        # Assign ranks (1-indexed)
+        token_to_rank = {}
+        for rank, (tk, loss) in enumerate(lang_loss_tuples):
+            if tk in under_consideration:  # Only rank tokens under consideration
+                token_to_rank[tk] = rank + 1
+
+        per_lang_ranks[lc] = token_to_rank
+        total_under_consideration_in_lang = len(token_to_rank)
+        missing_tokens = len(under_consideration) - total_under_consideration_in_lang
+        logger.info(f"Language {lc}: ranked {total_under_consideration_in_lang} tokens, {missing_tokens} missing (assigned rank 0)")
+    
+    # For each token, compute its maximum rank across all languages
+    # Missing tokens get rank 0 (highest removal priority for loss-based systems)
+    token_max_ranks = []  # (token, max_rank)
+
+    for tk in under_consideration:
+        # Get this token's rank in each language
+        # Missing tokens get rank 0 (highest priority for removal)
+        token_ranks = []
+        for lc in lang_codes:
+            if tk in per_lang_ranks[lc]:
+                token_ranks.append(per_lang_ranks[lc][tk])
+            else:
+                # Token not in this language's vocabulary - assign rank 0 (highest removal priority)
+                token_ranks.append(0)
+
+        # For intersection pruning, take the MAXIMUM (worst) rank across all languages
+        # Tokens missing from any language will have a rank of 0 contributing to their max
+        max_rank = max(token_ranks)
+        token_max_ranks.append((tk, max_rank))
+    
+    # Sort by max rank (ascending = tokens with best worst-case rank)
+    token_max_ranks.sort(key=lambda x: x[1])
+    
+    # Select k_drop tokens with smallest max-ranks
+    if len(token_max_ranks) < k_drop:
+        logger.warning(f"Only {len(token_max_ranks)} tokens available, but {k_drop} requested")
+        selected_tokens = set([tk for tk, _ in token_max_ranks])
+    else:
+        selected_tokens = set([tk for tk, _ in token_max_ranks[:k_drop]])
+    
+    if selected_tokens:
+        selected_ranks = [max_rank for tk, max_rank in token_max_ranks[:len(selected_tokens)]]
+        logger.info(f"Intersection pruning: selected {len(selected_tokens)} tokens with max-ranks from {min(selected_ranks)} to {max(selected_ranks)}")
+    
+    return selected_tokens
+
+
+def _load_custom_vocab_from_file(file_path: str) -> List[str]:
+    """Main method to load vocabulary from file, with automatic format detection."""
+    format_type = _detect_vocab_file_format(file_path)
+    
+    if format_type == 'text_file':
+        tokens = _load_vocab_from_text_file(file_path)
+    elif format_type == 'json_list':
+        tokens = _load_vocab_from_json_file(file_path)
+    elif format_type == 'hf_tokenizer':
+        tokens = _load_vocab_from_hf_tokenizer(file_path)
+    else:
+        raise ValueError(f"Unsupported vocabulary file format: {format_type}")
+    
+    if not tokens:
+        raise ValueError(f"No valid tokens found in vocabulary file: {file_path}")
+    
+    logger.info(f"Loaded {len(tokens)} tokens from {file_path} (format: {format_type})")
+    return tokens
 
 
 def _as_batch(txt):
@@ -321,7 +512,8 @@ def encode_text(
 
 
 def proportional_sample(train_files_by_lang: Dict[str, str],
-                        out_root: str) -> Dict[str, str]:
+                        out_root: str,
+                        total_lines: int) -> Dict[str, str]:
     """
     For each language copy ≤ n lines into <out_root>/<lang>/sample.txt,
     where n is proportional to the byte count recorded in meta.json.
@@ -335,8 +527,8 @@ def proportional_sample(train_files_by_lang: Dict[str, str],
     out_path.mkdir(parents=True, exist_ok=True)
     sampled_files = {}
     for lg, path in train_files_by_lang.items():
-        # ensure at least 1000 lines
-        k = max(1000, int(constants._TOTAL_SAMPLE_LINES * byte_tot[lg] / total))
+        # ensure at least MIN_TOKENIZER_LANG_TRAINING_LINES lines
+        k = max(constants.MIN_TOKENIZER_LANG_TRAINING_LINES, int(total_lines * byte_tot[lg] / total))
         dest_dir = out_path / lg
         dest_dir.mkdir(parents=True, exist_ok=True)
         dest = dest_dir / "sample.txt"
@@ -496,139 +688,225 @@ def tokmix_merge(
     k_final: int,
     unk_token: str,
     special: List[str],
-    pretokenizer: Any
-) -> Tokenizer:
-    """
-    Merge per-language UnigramLM vocabularies according to TokMix alg.
-    Each `per_lang_tokenizers[lg]` is a dict {token -> prob} with
-    probabilities summing to 1 inside that language.
-    The merged vocabulary keeps the `k_final` highest averaged probs.
-    """
-    langs          = list(per_lang_tokenizers)
-    n_langs        = len(langs)
-    avg_prob: Dict[str, float] = defaultdict(float)
-
-    # 1. accumulate probabilities
-    for lg_probs in per_lang_tokenizers.values():
-        for tok, p in lg_probs.items():
-            avg_prob[tok] += p
-    # 2. average (tokens missing in a language contribute 0)
-    for tok in avg_prob:
-        avg_prob[tok] /= n_langs
-
-    # 3. sort by averaged probability, keep top-k (specials are pinned)
-    pinned = set(special)
-    sorted_tokens = sorted(
-        (t for t in avg_prob if t not in pinned),
-        key=lambda t: avg_prob[t],
-        reverse=True,
-    )
-    kept = list(special) + sorted_tokens[: max(0, k_final - len(special))]
-
-    # 4. renormalise probs over the kept set
-    Z = sum(avg_prob[t] for t in kept if t not in pinned)
-    probs_tuples = []
-    for t in kept:
-        p = constants.MIN_TOKEN_PROB if t not in avg_prob else (avg_prob[t] / Z)
-        probs_tuples.append((t, math.log(p)))
-
-    # 5. build HF tokenizer
-    unk_id = kept.index(unk_token)
-    return _build_hf_tokenizer_from_probs(probs_tuples, unk_id, pretokenizer)
-
-
-def tokmix_merge_loss_based(
-    per_lang_tokenizers: Dict[str, Dict[str, float]],
-    k_final: int,
-    unk_token: str,
-    special: List[str],
     pretokenizer: Any,
+    pruning_criterion: str = "probability",      # "probability", "approx_loss", "exact_loss"
+    use_intersection_pruning: bool = False,      # True = intersection, False = average
     byte_level: bool = False
 ) -> Tokenizer:
     """
-    Merge per-language UnigramLM vocabularies using loss-based selection.
-    Keep tokens whose removal would cause the highest average loss across languages.
+    Unified TokMix merge function supporting all combinations of pruning criteria and strategies.
+    
+    Args:
+        per_lang_tokenizers: Dict[lang, Dict[token, prob]] - per-language tokenizer probabilities
+        k_final: Final vocabulary size
+        unk_token: UNK token string
+        special: List of special tokens to pin
+        pretokenizer: Tokenizer pretokenizer to use
+        pruning_criterion: What values to use for ranking ("probability", "approx_loss", "exact_loss")
+        use_intersection_pruning: Selection strategy (intersection vs average-based)
+        byte_level: Whether to use byte-level processing for exact loss computation
+    
+    Returns:
+        HuggingFace Tokenizer object
     """
     from code.em_utils import _compute_alternatives_direct, _compute_loss_with_alternative_sequences
+    import math
+    
+    lang_codes = list(per_lang_tokenizers.keys())
+    n_langs = len(lang_codes)
+    pinned = set(special)
     
     # Get all unique tokens across languages
     all_tokens = set()
     for token_probs in per_lang_tokenizers.values():
         all_tokens.update(token_probs.keys())
-    
-    pinned = set(special)
     candidate_tokens = all_tokens - pinned
     
-    # Step 1: Pre-compute alternative sequences for all tokens across all languages
-    logger.info("Pre-computing alternative sequences...")
-    per_lang_alternatives = {}
+    logger.info(f"TokMix merge: {len(all_tokens)} total tokens, {len(candidate_tokens)} candidates, "
+               f"criterion={pruning_criterion}, intersection={use_intersection_pruning}")
     
-    for lang, token_probs in per_lang_tokenizers.items():
-        alternatives = _compute_alternatives_direct(
-            token_probs, unk_token, byte_level=byte_level
-        )
-        per_lang_alternatives[lang] = alternatives
+    # Step 1: Compute per-language values based on pruning criterion
+    per_lang_values = {}  # lang -> List[Tuple[token, value]]
     
-    # Step 2: Compute removal loss for each token across all languages
-    logger.info("Computing removal losses...")
-    token_losses = {}
-    
-    for token in candidate_tokens:
-        total_loss = 0.0
-        num_languages = len(per_lang_tokenizers)
-        
+    if pruning_criterion == "probability":
+        # Use probabilities directly
         for lang, token_probs in per_lang_tokenizers.items():
-            # Skip if token doesn't exist in this language
-            if token not in token_probs:
-                continue
-            
-            # Create synthetic counts dict using probabilities as implicit counts
-            synthetic_counts = token_probs
-            
-            # Compute loss using existing function
-            lang_loss = _compute_loss_with_alternative_sequences(
-                token, synthetic_counts, per_lang_alternatives[lang], 
-                token_probs, unk_token
-            )
-            
-            total_loss += lang_loss
+            per_lang_values[lang] = [(token, prob) for token, prob in token_probs.items() 
+                                   if token in candidate_tokens]
+    
+    elif pruning_criterion in ["approx_loss", "exact_loss"]:
+        # Compute losses
+        if pruning_criterion == "exact_loss":
+            # Pre-compute alternative sequences for exact loss computation
+            logger.info("Pre-computing alternative sequences...")
+            per_lang_alternatives = {}
+            for lang, token_probs in per_lang_tokenizers.items():
+                alternatives = _compute_alternatives_direct(token_probs, unk_token, byte_level=byte_level)
+                per_lang_alternatives[lang] = alternatives
         
-        # Average loss across languages
-        token_losses[token] = total_loss / num_languages
+        logger.info(f"Computing {pruning_criterion} values...")
+        for lang, token_probs in per_lang_tokenizers.items():
+            lang_values = []
+            for token in candidate_tokens:
+                if token not in token_probs:
+                    continue  # Skip tokens not in this language
+                    
+                if pruning_criterion == "approx_loss":
+                    # Use probability as implicit count: prob * log(prob) 
+                    # Positive values to match exact_loss semantics (higher = more important)
+                    loss = token_probs[token] * math.log(max(token_probs[token], 1e-30))
+                else:  # exact_loss
+                    # Use exact loss with alternatives
+                    loss = _compute_loss_with_alternative_sequences(
+                        token, token_probs, per_lang_alternatives[lang], 
+                        token_probs, unk_token
+                    )
+                lang_values.append((token, loss))
+            per_lang_values[lang] = lang_values
     
-    # Step 3: Select tokens with highest removal loss
-    sorted_by_loss = sorted(
-        token_losses.items(),
-        key=lambda x: x[1], 
-        reverse=True  # Highest loss first = most important tokens
-    )
+    # Step 2: Token selection based on strategy
+    if use_intersection_pruning:
+        # Use intersection-based selection
+        tokens_to_keep_count = k_final - len(pinned)
+        tokens_to_drop = len(candidate_tokens) - tokens_to_keep_count
+        
+        if tokens_to_drop > 0:
+            selected_to_remove = compute_intersection_pruning_tokens(
+                per_lang_values, tokens_to_drop, lang_codes, candidate_tokens
+            )
+            kept_candidates = candidate_tokens - selected_to_remove
+        else:
+            kept_candidates = candidate_tokens
+            
+        kept_tokens = list(special) + list(kept_candidates)
+        
+    else:
+        # Use average-based selection
+        if pruning_criterion == "probability":
+            # Average probabilities (original tokmix_merge logic)
+            avg_values = defaultdict(float)
+            for lang_values in per_lang_values.values():
+                for token, prob in lang_values:
+                    avg_values[token] += prob
+            for token in avg_values:
+                avg_values[token] /= n_langs
+            
+            # Sort by averaged probability (descending - higher prob = keep)
+            sorted_tokens = sorted(
+                avg_values.items(),
+                key=lambda x: x[1], 
+                reverse=True
+            )
+        else:
+            # Average losses (original tokmix_merge_loss_based logic)  
+            avg_values = defaultdict(float)
+            for lang_values in per_lang_values.values():
+                for token, loss in lang_values:
+                    avg_values[token] += loss
+            for token in avg_values:
+                avg_values[token] /= n_langs
+            
+            # Sort by averaged loss (ascending - lower loss = less important = remove first)
+            # But we want to KEEP tokens with highest removal loss, so reverse=True
+            sorted_tokens = sorted(
+                avg_values.items(),
+                key=lambda x: x[1], 
+                reverse=True
+            )
+        
+        # Keep top tokens
+        num_regular_tokens = max(0, k_final - len(special))
+        kept_regular = [token for token, _ in sorted_tokens[:num_regular_tokens]]
+        kept_tokens = list(special) + kept_regular
     
-    # Keep top k tokens (accounting for special tokens)
-    num_regular_tokens = k_final - len(special)
-    kept_regular = [token for token, _ in sorted_by_loss[:num_regular_tokens]]
-    kept_tokens = list(special) + kept_regular
+    logger.info(f"Selected {len(kept_tokens)} tokens for final vocabulary")
     
-    logger.info(f"Selected {len(kept_tokens)} tokens based on removal loss")
-    
-    # Step 4: Build final vocabulary with probability averaging (same as original)
+    # Step 3: Build final tokenizer with probability averaging
+    # Always use probability averaging for final tokenizer construction
     avg_prob = defaultdict(float)
-    n_langs = len(per_lang_tokenizers)
     
     for token in kept_tokens:
         for lang_probs in per_lang_tokenizers.values():
             avg_prob[token] += lang_probs.get(token, 0.0)
         avg_prob[token] /= n_langs
     
-    # Step 5: Normalize and build tokenizer (same as original)
+    # Normalize probabilities
     Z = sum(avg_prob[t] for t in kept_tokens if t not in pinned)
     probs_tuples = []
     for token in kept_tokens:
         if token in pinned:
-            p = avg_prob[token]  # Don't renormalize special tokens
+            # Special tokens keep their averaged probability  
+            p = max(avg_prob[token], constants.MIN_TOKEN_PROB)
         else:
+            # Regular tokens get renormalized
             p = avg_prob[token] / Z if Z > 0 else constants.MIN_TOKEN_PROB
         probs_tuples.append((token, math.log(max(p, constants.MIN_TOKEN_PROB))))
     
     # Build HF tokenizer
     unk_id = kept_tokens.index(unk_token)
     return _build_hf_tokenizer_from_probs(probs_tuples, unk_id, pretokenizer)
+
+
+def _get_metadata_path(tokenizer_path: str) -> str:
+    """Convert tokenizer path to metadata path."""
+    if tokenizer_path.endswith('.json'):
+        return tokenizer_path[:-5] + '.metadata.json'  # Remove .json, add .metadata.json
+    else:
+        return tokenizer_path + '.metadata.json'  # Fallback
+
+
+def _save_tokenizer_metadata(tokenizer_path: str, metadata: Dict[str, Any]) -> str:
+    """
+    Save metadata to a separate .metadata.json file alongside the tokenizer.
+
+    Args:
+        tokenizer_path: Path to the tokenizer JSON file (e.g., "tokenizer.json")
+        metadata: Metadata dictionary to save
+
+    Returns:
+        Path to the created metadata file (e.g., "tokenizer.metadata.json")
+    """
+    try:
+        # Generate metadata file path
+        metadata_path = _get_metadata_path(tokenizer_path)
+
+        # Add reference to the original tokenizer file
+        metadata_with_ref = metadata.copy()
+        metadata_with_ref["tokenizer_file"] = Path(tokenizer_path).name
+
+        # Save metadata to separate file
+        with open(metadata_path, 'w', encoding='utf-8') as f:
+            json.dump(metadata_with_ref, f, indent=2, ensure_ascii=False, separators=(',', ': '))
+
+        logger.debug(f"Successfully saved metadata to {metadata_path}")
+        return metadata_path
+
+    except Exception as e:
+        logger.error(f"Failed to save metadata for {tokenizer_path}: {e}")
+        # Return empty string to indicate failure, but don't crash
+        return ""
+
+
+def _create_base_metadata(tokenizer_class: str, tokenizer_type: str) -> Dict[str, Any]:
+    """Create base metadata structure for any tokenizer"""
+    try:
+        return {
+            "version": "1.0",
+            "created_at": datetime.utcnow().isoformat() + "Z",
+            "tokenizer_class": str(tokenizer_class),
+            "tokenizer_type": str(tokenizer_type),
+            "environment_info": {
+                "python_version": str(sys.version).replace('\n', ' ').strip(),
+                "platform": str(platform.platform()),
+                "num_processes": int(multiprocessing.cpu_count())
+            }
+        }
+    except Exception as e:
+        # Fallback to minimal metadata if environment info fails
+        return {
+            "version": "1.0",
+            "created_at": datetime.utcnow().isoformat() + "Z",
+            "tokenizer_class": str(tokenizer_class),
+            "tokenizer_type": str(tokenizer_type),
+            "environment_info": {}
+        }

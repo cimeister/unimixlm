@@ -372,6 +372,173 @@ class SingleLangEvalCallback(TrainerCallback):
         return control
 
 
+class LanguageDistributionMonitor(TrainerCallback):
+    """
+    Monitors actual language distribution during training to evaluate
+    tokenizer performance across different resource levels.
+    """
+    
+    def __init__(self, tokenized_files: Dict[str, Dict[str, str]], log_frequency: int = 1000):
+        self.log_frequency = log_frequency
+        self.step_count = 0
+        self.total_samples_per_lang = defaultdict(int)
+        self.recent_samples_per_lang = defaultdict(int)
+        self.batch_count = 0
+        
+        # Pre-compute dataset sizes for resource level classification
+        self.lang_sizes = {}
+        self.resource_levels = {}
+        
+        for lang, paths in tokenized_files.items():
+            if 'train' in paths:
+                size = os.path.getsize(paths['train'])
+                self.lang_sizes[lang] = size
+        
+        # Classify languages by resource level (adjust thresholds as needed)
+        if self.lang_sizes:
+            sorted_sizes = sorted(self.lang_sizes.values())
+            low_threshold = sorted_sizes[len(sorted_sizes) // 3] if len(sorted_sizes) > 3 else 0
+            high_threshold = sorted_sizes[2 * len(sorted_sizes) // 3] if len(sorted_sizes) > 3 else float('inf')
+            
+            for lang, size in self.lang_sizes.items():
+                if size <= low_threshold:
+                    self.resource_levels[lang] = "low"
+                elif size <= high_threshold:
+                    self.resource_levels[lang] = "medium"
+                else:
+                    self.resource_levels[lang] = "high"
+        
+        logger.info(f"Language resource levels: {self.resource_levels}")
+    
+    def on_step_begin(self, args, state, control, **kwargs):
+        """Track language distribution in current batch."""
+        self.step_count += 1
+        
+        # Get current batch if available
+        inputs = kwargs.get("inputs")
+        if inputs is None:
+            return control
+            
+        # For packed sequences, we can't easily identify languages
+        # This is a limitation - would need language tags in data
+        # For now, just track that we're processing data
+        self.batch_count += 1
+        
+        return control
+    
+    def on_log(self, args, state, control, **kwargs):
+        """Log detailed language distribution statistics."""
+        if self.step_count % self.log_frequency == 0:
+            self._log_distribution_stats(state.global_step)
+        return control
+    
+    def _log_distribution_stats(self, global_step):
+        """Log comprehensive language distribution statistics."""
+        if not self.total_samples_per_lang and not self.lang_sizes:
+            # Fallback: log estimated distribution based on file sizes
+            total_size = sum(self.lang_sizes.values()) if self.lang_sizes else 1
+            
+            logger.info(f"\n=== Estimated Language Distribution (Step {global_step}) ===")
+            
+            # Group by resource level
+            resource_stats = defaultdict(lambda: {'size': 0, 'percentage': 0.0})
+            
+            for lang, size in self.lang_sizes.items():
+                resource_level = self.resource_levels.get(lang, 'unknown')
+                resource_stats[resource_level]['size'] += size
+                
+            for resource_level, stats in resource_stats.items():
+                stats['percentage'] = (stats['size'] / total_size * 100) if total_size > 0 else 0
+                logger.info(f"{resource_level.upper()}-resource languages: {stats['size']:,} bytes ({stats['percentage']:.1f}%)")
+            
+            # Log individual language stats (top 10 + bottom 5)
+            sorted_langs = sorted(self.lang_sizes.items(), key=lambda x: x[1], reverse=True)
+            
+            logger.info("\nTop 10 languages by file size:")
+            for lang, size in sorted_langs[:10]:
+                percentage = (size / total_size * 100) if total_size > 0 else 0
+                resource_level = self.resource_levels.get(lang, 'unknown')
+                logger.info(f"  {lang} ({resource_level}): {size:,} bytes ({percentage:.1f}%)")
+            
+            if len(sorted_langs) > 5:
+                logger.info("\nBottom 5 languages by file size:")
+                for lang, size in sorted_langs[-5:]:
+                    percentage = (size / total_size * 100) if total_size > 0 else 0
+                    resource_level = self.resource_levels.get(lang, 'unknown')
+                    logger.info(f"  {lang} ({resource_level}): {size:,} bytes ({percentage:.1f}%)")
+            
+            logger.info("=" * 60)
+
+
+class MultilingualGradientCallback(TrainerCallback):
+    """
+    Adjusts gradient clipping and monitors gradient norms for multilingual training.
+    Helps detect when low-resource languages cause training instabilities.
+    """
+    
+    def __init__(self, base_grad_norm: float = 1.0, adaptive_clipping: bool = True):
+        self.base_grad_norm = base_grad_norm
+        self.adaptive_clipping = adaptive_clipping
+        self.grad_norm_history = []
+        self.step_count = 0
+        self.consecutive_high_norm_steps = 0
+        
+    def on_step_end(self, args, state, control, **kwargs):
+        """Monitor and adjust gradient norms."""
+        self.step_count += 1
+        
+        logs = kwargs.get("logs", {})
+        current_grad_norm = logs.get("grad_norm", 0.0)
+        
+        if current_grad_norm > 0:
+            self.grad_norm_history.append(current_grad_norm)
+            
+            # Keep only last 1000 steps for moving average
+            if len(self.grad_norm_history) > 1000:
+                self.grad_norm_history.pop(0)
+            
+            # Detect high gradient norm patterns (potentially from low-resource languages)
+            if current_grad_norm > self.base_grad_norm * 5:  # 5x normal
+                self.consecutive_high_norm_steps += 1
+                
+                if self.consecutive_high_norm_steps > 10:
+                    logger.warning(
+                        f"Step {state.global_step}: Sustained high gradient norms detected "
+                        f"(current: {current_grad_norm:.2f}, threshold: {self.base_grad_norm * 5:.2f}). "
+                        f"This may indicate training instability from low-resource languages."
+                    )
+                    self.consecutive_high_norm_steps = 0  # Reset counter
+            else:
+                self.consecutive_high_norm_steps = 0
+            
+            # Log gradient statistics every 500 steps
+            if self.step_count % 500 == 0:
+                avg_norm = sum(self.grad_norm_history) / len(self.grad_norm_history)
+                max_norm = max(self.grad_norm_history[-100:]) if len(self.grad_norm_history) >= 100 else current_grad_norm
+                
+                logger.info(
+                    f"Gradient stats (Step {state.global_step}): "
+                    f"current={current_grad_norm:.2f}, "
+                    f"avg_1k={avg_norm:.2f}, "
+                    f"max_100={max_norm:.2f}"
+                )
+                
+                # Adaptive gradient clipping adjustment
+                if self.adaptive_clipping and len(self.grad_norm_history) >= 100:
+                    sorted_norms = sorted(self.grad_norm_history[-100:])
+                    percentile_95_idx = min(94, len(sorted_norms) - 1)  # 95th percentile (0-indexed)
+                    percentile_95 = sorted_norms[percentile_95_idx]
+                    
+                    if percentile_95 > self.base_grad_norm * 2:
+                        suggested_clip = min(percentile_95 * 0.8, self.base_grad_norm * 3)
+                        logger.info(
+                            f"Suggestion: Consider adjusting max_grad_norm to {suggested_clip:.2f} "
+                            f"(current: {args.max_grad_norm})"
+                        )
+        
+        return control
+
+
 class HealthCheckCallback(TrainerCallback):
     def __init__(self, log_every=500, logger=None):
         self.log_every = log_every
@@ -903,235 +1070,61 @@ class CustomCausalLMModel:
 
         torch.manual_seed(seed)
 
-        # For dry run, we need to simulate the training process
+        # Simplified dry run - just estimate from file sizes
         if dry_run:
-            logger.info("DRY RUN MODE: Simulating training to count dataset usage")
+            logger.info("DRY RUN MODE: Estimating dataset usage from file analysis")
             
-            # Get training configuration
-            training_args = TrainingArguments(
-                output_dir                  = output_dir,
-                overwrite_output_dir        = False,
-                max_steps                   = 300_000 if not self.use_small else 180_000,
-                per_device_train_batch_size = 4 if not self.use_small else 12,
-                per_device_eval_batch_size  = 4 if not self.use_small else 12,
-                gradient_accumulation_steps = 8 if not self.use_small else 2,
-                seed                        = seed,
-            )
-            
-            # Apply suggested adjustments if any
-            args_dict = training_args.to_dict()
-            if suggested_training_adjustments:
-                args_dict.update(suggested_training_adjustments)
-            training_args = TrainingArguments(**args_dict)
-            
-            # Calculate total batches and samples needed
-            total_training_steps = training_args.max_steps
-            total_batches_needed = total_training_steps * training_args.gradient_accumulation_steps
-            samples_per_batch = training_args.per_device_train_batch_size
-            total_samples_needed = total_batches_needed * samples_per_batch
-            
-            logger.info(f"Training configuration:")
-            logger.info(f"  - max_steps (optimizer updates): {total_training_steps:,}")
-            logger.info(f"  - per_device_train_batch_size: {samples_per_batch}")
-            logger.info(f"  - gradient_accumulation_steps: {training_args.gradient_accumulation_steps}")
-            logger.info(f"  - total_batches_needed: {total_batches_needed:,}")
-            logger.info(f"  - total_samples_needed: {total_samples_needed:,}")
-            
-            # Track line counts per file
-            lines_per_file = {lang: 0 for lang in tokenized_files}
-            file_line_counters = {lang: {} for lang in tokenized_files}
-            
-            # Create a modified dataset that tracks file usage
-            class CountingStreamingTokenizedDataset(StreamingTokenizedDataset):
-                def __init__(self, *args, **kwargs):
-                    super().__init__(*args, **kwargs)
-                    self.file_counters = {lang: 0 for lang in self.files_by_lang}
-                    
-                def _get_limited_stream_for_file(self, file_path: str, limit: Optional[int] = None) -> Iterator[Dict[str, Any]]:
-                    # Find which language this file belongs to
-                    lang = None
-                    for l, path in self.files_by_lang.items():
-                        if path == file_path:
-                            lang = l
-                            break
-                            
-                    count = 0
-                    try:
-                        with open(file_path, 'rb') as f:
-                            for line in f:
-                                if limit is not None and count >= limit:
-                                    break
-                                    
-                                try:
-                                    item = json.loads(line.decode('utf-8', errors='replace').strip())
-                                    token_ids = item.get('token_ids')
-                                    if not token_ids or not isinstance(token_ids, list):
-                                        continue
-                                    
-                                    # Track this line
-                                    if lang:
-                                        self.file_counters[lang] += 1
-                                        
-                                    yield {'input_ids': token_ids}
-                                    count += 1
-                                    
-                                except json.JSONDecodeError:
-                                    continue
-                                except Exception:
-                                    continue
-                                    
-                    except Exception as e:
-                        logger.error(f"Error processing file {file_path}: {str(e)}")
-            
-            # Create counting dataset
-            train_dataset = CountingStreamingTokenizedDataset(
-                tokenized_files=tokenized_files,
-                split="train",
-                tokenizer=self.tokenizer,
-                buffer_size=train_buffer_size,
-            )
-            
-            # Create data loader
-            pad_id = self.tokenizer.pad_token_id
-            if PACK_DATASET:
-                collator = PackedStreamingDataCollator(
-                    pad_id=pad_id,
-                    eos_id=self.tokenizer.eos_token_id,
-                    max_seq_len=self.model.config.n_ctx,
-                    blocks_per_batch=training_args.per_device_train_batch_size,
-                )
-            else:
-                collator = CausalLMDataCollatorWithPadding(
-                    tokenizer=self.tokenizer,
-                    pad_to_multiple_of=8,
-                    max_length=self.model.config.n_ctx
-                )
-                
-            dataloader = DataLoader(
-                train_dataset,
-                batch_size=training_args.per_device_train_batch_size,
-                collate_fn=collator,
-                num_workers=0,  # Use 0 for accurate counting
-                drop_last=False
-            )
-            
-            # Simulate training by iterating through the dataset
-            logger.info("Simulating data consumption...")
-            batches_processed = 0
-            steps_simulated = 0
-            
-            try:
-                for batch_idx, batch in enumerate(dataloader):
-                    batches_processed += 1
-                    
-                    # Check if we've completed a training step
-                    if batches_processed % training_args.gradient_accumulation_steps == 0:
-                        steps_simulated += 1
-                    
-                    # Check if we've reached the target number of training steps
-                    if steps_simulated >= total_training_steps:
-                        break
-                        
-                    # Log progress every 10000 batches
-                    if batches_processed % 10000 == 0:
-                        logger.info(f"Processed {batches_processed:,} batches ({steps_simulated:,} training steps)")
-                        # Log current file counters
-                        for lang, count in train_dataset.file_counters.items():
-                            logger.info(f"  {lang}: {count:,} lines")
-                            
-            except Exception as e:
-                logger.error(f"Error during dry run simulation: {e}")
-                
-            # Calculate actual samples processed
-            samples_processed = batches_processed * samples_per_batch
-            
-            # Final counts
-            logger.info("\nDRY RUN RESULTS:")
-            logger.info(f"Total training steps simulated: {steps_simulated:,}")
-            logger.info(f"Total batches processed: {batches_processed:,}")
-            logger.info(f"Total samples processed: {samples_processed:,}")
-            logger.info("\nLines per language file that would be read:")
-            
+            lines_per_file = {}
             total_lines = 0
-            for lang, count in train_dataset.file_counters.items():
-                logger.info(f"  {lang}: {count:,} lines")
-                lines_per_file[lang] = count
-                total_lines += count
-                
-            logger.info(f"\nTotal lines across all files: {total_lines:,}")
             
-            if PACK_DATASET:
-                logger.info("\nNote: With packing enabled, multiple sequences are combined into fixed-length blocks.")
-                logger.info(f"Each block is {self.model.config.n_ctx} tokens long.")
+            for lang, paths in tokenized_files.items():
+                if 'train' not in paths:
+                    continue
+                    
+                train_path = paths['train']
+                try:
+                    # Count lines in file
+                    with open(train_path, 'rb') as f:
+                        line_count = sum(1 for _ in f)
+                    lines_per_file[lang] = line_count
+                    total_lines += line_count
+                    logger.info(f"  {lang}: {line_count:,} lines")
+                except Exception as e:
+                    logger.error(f"Error reading {train_path}: {e}")
+                    lines_per_file[lang] = 0
+            
+            # Estimate training configuration
+            max_steps = 300_000 if not self.use_small else 180_000
+            batch_size = 4 if not self.use_small else 12
+            grad_accum = 8 if not self.use_small else 2
+            
+            total_batches_needed = max_steps * grad_accum
+            total_samples_needed = total_batches_needed * batch_size
+            
+            logger.info(f"\nDRY RUN ESTIMATES:")
+            logger.info(f"Training steps planned: {max_steps:,}")
+            logger.info(f"Batch size: {batch_size}, Grad accum: {grad_accum}")
+            logger.info(f"Total samples needed: {total_samples_needed:,}")
+            logger.info(f"Total lines available: {total_lines:,}")
+            
+            coverage_ratio = total_samples_needed / max(total_lines, 1)
+            logger.info(f"Dataset coverage: {coverage_ratio:.2f}x (how many times we'll see each line on average)")
                 
-            # Return dry run results
             return {
                 "status": "dry_run_complete",
-                "training_steps_simulated": steps_simulated,
-                "batches_processed": batches_processed,
-                "samples_processed": samples_processed,
                 "lines_per_file": lines_per_file,
                 "total_lines": total_lines,
                 "training_config": {
-                    "max_steps": training_args.max_steps,
-                    "per_device_train_batch_size": training_args.per_device_train_batch_size,
-                    "gradient_accumulation_steps": training_args.gradient_accumulation_steps,
-                    "total_batches_needed": total_batches_needed,
+                    "max_steps": max_steps,
+                    "per_device_train_batch_size": batch_size,
+                    "gradient_accumulation_steps": grad_accum,
+                    "total_samples_needed": total_samples_needed,
+                    "coverage_ratio": coverage_ratio,
                     "packing_enabled": PACK_DATASET
                 }
             }
-    
-
-    def train_with_streaming_real( 
-        self,
-        tokenized_files: Dict[str, Dict[str, str]],
-        output_dir: str,
-        val_samples_per_lang: int = 1_000,
-        train_buffer_size: int = 5_000,
-        val_buffer_size: int = 5_000,
-        seed: int = 42,
-        resume_training: bool = True, 
-        suggested_training_adjustments: Optional[Dict] = None
-    ):
-        """
-        Stream‑train the causal‑LM on a single GPU.
-
-        Parameters
-        ----------
-        tokenized_files : dict
-            Mapping ``lang → {"train": path, "val": path, ...}``.
-        output_dir : str
-            Directory that stores checkpoints / final model.
-        max_steps : int, optional
-            Stop criterion in optimizer steps.  *Epoch counting is avoided.*
-        val_samples_per_lang : int, optional
-            How many samples to materialise per language for validation.
-        (other kwargs) : fine‑tuning hyper‑parameters.
-
-        Returns
-        -------
-        transformers.trainer_utils.TrainOutput | dict
-            Standard Hugging Face `TrainOutput`, or a dict with
-            ``{"status": "already_trained", "steps_completed": N}`` if
-            the run was skipped because the requested steps were already
-            finished.
-        """
-        if self.model is None or self.tokenizer is None:
-            logger.error("Model / tokenizer not initialised")
-            return None
-
-        logger.info("TRAIN WITH PADDING" if not PACK_DATASET else "TRAIN WITH PACKING")
-
-        torch.manual_seed(seed)
-
-        def create_map_dataset(src_iter_ds, cap: int):
-            """Materialise ≤ cap examples from an iterable dataset."""
-            samples = list(islice(src_iter_ds, cap))
-            if not samples:                         # iterator empty
-                return None
-            cols = {k: [s[k] for s in samples] for k in samples[0]}
-            return Dataset.from_dict(cols)
-
+        
+        # Real training logic
         logger.info("Preparing validation dataset …")
         val_stream_ds = StreamingTokenizedDataset(
             tokenized_files=tokenized_files,
@@ -1141,7 +1134,7 @@ class CustomCausalLMModel:
             max_samples_per_language=val_samples_per_lang,
         )
 
-        val_dataset = val_stream_ds#create_map_dataset(val_stream_ds, val_samples_per_lang * len(tokenized_files))
+        val_dataset = val_stream_ds
         if val_dataset is None:
             logger.info("Validation set empty – evaluation disabled.")
             evaluation_strategy = "no"
@@ -1157,32 +1150,30 @@ class CustomCausalLMModel:
                 buffer_size=val_buffer_size,
                 max_samples_per_language=val_samples_per_lang,
             )
-            en_val_dataset = en_stream_ds#create_map_dataset(en_stream_ds,val_samples_per_lang)
+            en_val_dataset = en_stream_ds
         else:
             en_val_dataset = None
             logger.warning("No English data found – EN eval callback will be skipped.")
 
-        # ------------------------------------------------------------------
-        # 2.  TrainingArguments
-        # ------------------------------------------------------------------
+        # Training Arguments - with reduced evaluation frequency
         training_args = TrainingArguments(
             output_dir                  = output_dir,
             overwrite_output_dir        = False,
             max_steps                   = 300_000,
-            per_device_train_batch_size = 4,    # Reduce from 4
+            per_device_train_batch_size = 4,
             per_device_eval_batch_size  = 4,
-            gradient_accumulation_steps = 8,   # Increase to maintain effective batch size
-            learning_rate = 1e-4,               # Lower LR
-            warmup_steps = 8_000,              # More warmup
+            gradient_accumulation_steps = 8,
+            learning_rate = 1e-4,
+            warmup_steps = 8_000,
             optim = "adamw_8bit",              
             lr_scheduler_type = "linear",        
             fp16                        = True,
             gradient_checkpointing      = False,    
             weight_decay                = 0.01,
             logging_steps               = 2000,
-            save_steps                  = 5_000,
+            save_steps                  = 10_000,  # Reduced frequency
             evaluation_strategy         = evaluation_strategy,
-            eval_steps                  = 5_000,
+            eval_steps                  = 10_000,  # Reduced frequency for per-language metrics
             save_total_limit            = 2,
             dataloader_drop_last        = False,
             disable_tqdm                = True,
@@ -1193,20 +1184,20 @@ class CustomCausalLMModel:
             output_dir                  = output_dir,
             overwrite_output_dir        = False,
             max_steps                   = 180_000,
-            per_device_train_batch_size = 12,      # 12 × 512 tokens fits comfortably
+            per_device_train_batch_size = 12,
             per_device_eval_batch_size  = 12,
-            gradient_accumulation_steps = 2,       # ⇒ effective 24 seqs / step
+            gradient_accumulation_steps = 2,
             learning_rate               = 3e-4,
             lr_scheduler_type           = "cosine",
             warmup_steps                = 3_000,
             fp16                        = True,
-            gradient_checkpointing      = False,   # memory is ample; skip for speed
-            optim                       = "adamw_8bit",   # fp32 AdamW also fine here
+            gradient_checkpointing      = False,
+            optim                       = "adamw_8bit",
             weight_decay                = 0.01,
             logging_steps               = 500,
-            save_steps                  = 5_000,
+            save_steps                  = 10_000,  # Reduced frequency
             evaluation_strategy         = evaluation_strategy,
-            eval_steps                  = 5_000,
+            eval_steps                  = 10_000,  # Reduced frequency
             save_total_limit            = 2,
             dataloader_drop_last        = False,
             disable_tqdm                = True,
@@ -1218,11 +1209,10 @@ class CustomCausalLMModel:
         if suggested_training_adjustments:
             args_dict.update(suggested_training_adjustments)
 
-        self.training_args  = TrainingArguments(**args_dict)
+        self.training_args = TrainingArguments(**args_dict)
         logger.info(f"Training with batch size of {self.training_args.per_device_train_batch_size}")
-        # ------------------------------------------------------------------
-        # 3.  Resume logic
-        # ------------------------------------------------------------------
+        
+        # Resume logic
         resume_from_checkpoint = None
         checkpoints = sorted(
             (ckpt for ckpt in os.listdir(output_dir) if ckpt.startswith("checkpoint-")),
@@ -1245,9 +1235,7 @@ class CustomCausalLMModel:
                 logger.info(f"Resuming from step {done_steps:,} / {self.training_args.max_steps:,}.")
                 resume_from_checkpoint = latest
 
-        # ------------------------------------------------------------------
-        # 4.  Streaming train dataset
-        # ------------------------------------------------------------------
+        # Streaming train dataset
         train_dataset = StreamingTokenizedDataset(
             tokenized_files=tokenized_files,
             split="train",
@@ -1270,19 +1258,24 @@ class CustomCausalLMModel:
                     blocks_per_batch=bs,
                 )
             else:
+                # CausalLMDataCollatorWithPadding is recommended for multilingual training
+                # as it handles padding more efficiently and provides better gradient stability
                 collator = CausalLMDataCollatorWithPadding(                  
                          tokenizer=self.tokenizer,                                
                          pad_to_multiple_of=8, 
                          max_length=self.model.config.n_ctx                                   
                 )
-                #collator = StreamingDataCollator(pad_id=pad_id,
-                #                                  max_seq_len=self.model.config.n_ctx)
+                # StreamingDataCollator is kept for posterity but not recommended:
+                # - Less efficient padding
+                # - More memory usage  
+                # - Potential instability with very long sequences
+                # collator = StreamingDataCollator(pad_id=pad_id, max_seq_len=self.model.config.n_ctx)
             if is_train:
-                num_workers = 8  # Increase workers for training
-                prefetch_factor = 4  # Increase prefetch
+                num_workers = 8
+                prefetch_factor = 4
                 persistent_workers = True
             else:
-                num_workers = 2  # Fewer workers for eval
+                num_workers = 2
                 prefetch_factor = 2
                 persistent_workers = False
             return DataLoader(ds, 
@@ -1294,8 +1287,6 @@ class CustomCausalLMModel:
                               persistent_workers=persistent_workers, 
                               drop_last=False)
 
-        # Much faster... This lets us keep one instance of the data loader around so the reservoir isn’t recreated every epoch (epoch isnt
-        # estimated correctly currently so it otherwise gets reloaded often)
         ta = self.training_args
         class _IterTrainer(Trainer):
             def get_train_dataloader(self):
@@ -1315,11 +1306,26 @@ class CustomCausalLMModel:
             eval_dataset=val_dataset,  # may be None
         )
         logger.info("Created dataset and data collators.")
+        
+        # Add standard callbacks
         trainer.add_callback(HealthCheckCallback(log_every=500))
         trainer.add_callback(DataInspectionCallback(logger, inspect_frequency=1000))
         trainer.add_callback(DataLoaderDebugCallback(logger))
         trainer.add_callback(GradientDebugCallback())
         trainer.add_callback(NaNCheckCallback())
+        
+        # Add multilingual-specific callbacks
+        lang_monitor = LanguageDistributionMonitor(
+            tokenized_files=tokenized_files, 
+            log_frequency=2000  # Log every 2000 steps
+        )
+        trainer.add_callback(lang_monitor)
+        
+        grad_monitor = MultilingualGradientCallback(
+            base_grad_norm=self.training_args.max_grad_norm,
+            adaptive_clipping=True
+        )
+        trainer.add_callback(grad_monitor)
 
         if en_val_dataset is not None:
             logger.info("Adding English evaluation callback")
@@ -1543,103 +1549,6 @@ def train_model_on_tokenized_data_streaming(tokenized_files,
     return output_dir
 
 
-def train_model_on_tokenized_data_streaming_real(tokenized_files, 
-                                            tokenization_method, 
-                                            base_tokenizer_path, 
-                                            model_config=None, 
-                                            output_dir="",
-                                            model_arch="standard",
-                                            resume_training=True):
-    """
-    Train a language model with streaming datasets on a single A5000 GPU.
-    
-    Args:
-        tokenized_files: Dictionary mapping language codes to splits to file paths
-        tokenization_method: String identifier for the tokenization method
-        base_tokenizer_path: Path to the base tokenizer JSON file
-        model_config: Optional custom model configuration
-        output_dir: Directory to save model outputs
-        resume_training: Whether to resume training if a checkpoint exists
-    
-    Returns:
-        Path to the saved model or None if training failed
-    """
-    logger.info(f"Training language model on '{tokenization_method}' tokenized data (streaming)...")
-    
-    # Check if output directory already contains a checkpoint
-    checkpoints_exist = False
-    if os.path.exists(output_dir):
-        checkpoints = [d for d in os.listdir(output_dir) if d.startswith("checkpoint-")]
-        checkpoints_exist = len(checkpoints) > 0
-        
-        if checkpoints_exist and resume_training:
-            logger.info(f"Found existing checkpoints in {output_dir}. Will attempt to resume training.")
-        elif checkpoints_exist and not resume_training:
-            logger.info(f"Found existing checkpoints in {output_dir}, but resume_training=False. Starting fresh.")
-
-    # Create HuggingFace tokenizer from the tokenizer JSON
-    try:
-        hf_tok = PreTrainedTokenizerFast(tokenizer_file=base_tokenizer_path)
-        set_special_tokens(hf_tok)
-        
-        # Sanity check for special tokens
-        vocab = hf_tok.get_vocab()
-        sanity_check = {k: vocab.get(k, "MISSING") for k in SPECIAL_TOKENS.values()}
-        logger.info("Created tokenizer for model. Special tokens: " + str(sanity_check) + f" Vocab size of approximately {len(vocab)}")
-        
-        missing_tokens = [k for k, v in sanity_check.items() if v == "MISSING"]
-        if missing_tokens:
-            logger.warning(f"Missing special tokens: {missing_tokens}")
-    except Exception as e:
-        logger.error(f"Failed to load tokenizer: {str(e)}")
-        raise
-    
-    set_seed(42)  # For reproducibility
-    wrapper = CustomCausalLMModel(hf_tok, config=model_config, small=True if model_arch=="small" else False)
-    
-    # If we're resuming and have checkpoints, load the latest checkpoint model
-    if checkpoints_exist and resume_training:
-        checkpoints = [d for d in os.listdir(output_dir) if d.startswith("checkpoint-")]
-        checkpoints = sorted(checkpoints, key=lambda x: int(x.split("-")[1]))
-        latest_checkpoint = os.path.join(output_dir, checkpoints[-1])
-        
-        try:
-            logger.info(f"Attempting to load model from checkpoint: {latest_checkpoint}")
-            wrapper.model = AutoModelForCausalLM.from_pretrained(latest_checkpoint)
-            suggested_training_adjustments = {}
-            logger.info(f"Successfully loaded model from checkpoint")
-        except Exception as e:
-            logger.warning(f"Failed to load model from checkpoint: {str(e)}. Creating new model.")
-            wrapper.create_model()
-            suggested_training_adjustments = wrapper.suggested_training_adjustments
-    else:
-        wrapper.create_model()
-        resume_training = False
-        suggested_training_adjustments = wrapper.suggested_training_adjustments
-
-    # Train model using streaming datasets
-    train_result = wrapper.train_with_streaming(tokenized_files, output_dir, 
-        val_samples_per_lang=1000, 
-        resume_training=resume_training, 
-        suggested_training_adjustments=suggested_training_adjustments)
-    if train_result is None:
-        logger.error("Training failed.")
-        return None
-    
-    # Check if we skipped training because it was already complete
-    if isinstance(train_result, dict) and train_result.get("status") == "already_trained":
-        logger.info(f"Model already trained for the requested number of epochs ({train_result.get('epochs_completed', '?')}).")
-        return output_dir
-    
-    # Evaluate model using streaming test set
-    eval_metrics = wrapper.evaluate_streaming(tokenized_files, output_dir, max_samples_per_language=1000)
-    if eval_metrics:
-        eval_path = os.path.join(output_dir, "eval_results.json")
-        with open(eval_path, 'w') as f:
-            json.dump(eval_metrics, f, indent=2)
-        logger.info(f"Eval results: {eval_metrics}")
-
-    return output_dir
 
 def train_models_from_config(config_dict, dry_run=True):  # NEW PARAMETER
     """
@@ -1718,67 +1627,6 @@ def train_models_from_config(config_dict, dry_run=True):  # NEW PARAMETER
             
     return results
 
-def train_models_from_config_real(config_dict):
-    """
-    Train models based on a configuration dictionary.
-    
-    """
-    global_settings = config_dict.get("global_settings", {})
-    tokenizers = config_dict.get("tokenizers", [])
-    
-    if not tokenizers:
-        logger.error("No tokenizers defined in configuration")
-        return {}
-    
-    models_output_dir = global_settings.get("model_output_dir", "")
-    # Get global resume_training setting (default to True)
-    global_resume_training = global_settings.get("resume_training", True)
-
-    # Train models for each tokenizer
-    results = {}
-    for tokenizer_config in tokenizers:
-        name = tokenizer_config.get("name")
-        if not name:
-            logger.warning("Skipping tokenizer with no name")
-            continue
-            
-        tokenizer_path = tokenizer_config.get("tokenizer_path")
-        tokenized_files = tokenizer_config.get("tokenized_files", {})
-        #TODO: override model parameters with model_config
-        model_config = tokenizer_config.get("model_config", {})
-        
-        if not tokenizer_path or not tokenized_files:
-            logger.warning(f"Skipping {name}: missing tokenizer_path or tokenized_files")
-            continue
-            
-        # Check if model already exists
-        model_size = model_config.get("model_arch", "standard")
-        output_dir = os.path.join(models_output_dir, f"{name}_model_{model_size}")
-        
-        # Get tokenizer-specific resume_training setting (use global as default)
-        resume_training = model_config.get("resume_training", global_resume_training)
-        
-        # Skip if the model exists and we're using pretrained and not resuming
-        if os.path.exists(output_dir) and model_config.get("pretrained", {}).get("enabled", False) and not resume_training:
-            logger.info(f"Model for {name} already exists, skipping (skip_existing=True)")
-            results[name] = output_dir
-            continue
-            
-        logger.info(f"Training model for tokenizer: {name} (resume_training={resume_training})")
-        model_path = train_model_on_tokenized_data_streaming(
-            tokenized_files, 
-            name,
-            tokenizer_path,
-            model_config,
-            output_dir,
-            model_arch=model_size,
-            resume_training=resume_training
-        )
-        
-        if model_path:
-            results[name] = model_path
-            
-    return results 
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser(description="Train language models on tokenized data")

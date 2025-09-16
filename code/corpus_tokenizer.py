@@ -174,7 +174,7 @@ class CorpusTokenizer:
             unk_id = tok.get_vocab().get(unk_tok)
             logger.info(f"Unknown token: {unk_tok} with ID {unk_id}")
 
-            base_out = Path(self.output_dir) / tname
+            base_out = Path(cfg["tokenized_data_path"])
             base_out.mkdir(parents=True, exist_ok=True)
             self.tokenized_files[tname] = {}
 

@@ -13,7 +13,7 @@ from tokenizers.pre_tokenizers import Whitespace, ByteLevel
 
 from code.em_unigram_trainer import EMUnigramTrainer
 from code.standard_unigramlm import StandardUnigramLMTokenizer
-from code.utils import _build_hf_tokenizer_from_probs
+from code.utils import _build_hf_tokenizer_from_probs, _save_tokenizer_metadata, _create_base_metadata
 from code.constants import SPECIAL_TOKENS, MIN_TOKEN_LOG_PROB, MIN_TOKEN_PROB
 
 logger = logging.getLogger(__name__)
@@ -213,13 +213,43 @@ class LanguageSpecificUnigramLMTokenizer(StandardUnigramLMTokenizer):
             # ----------  HF tokenizer from these probabilities  ----------
             tok = _build_hf_tokenizer_with_new_probs(self.base_tokenizer, token_probs, self.unk_token)
             tok.save(str(tk_path))
+            
+            # Add metadata to language-specific tokenizer
+            lang_metadata = _create_base_metadata("LanguageSpecificUnigramLMTokenizer", "langspec")
+            lang_metadata["training_config"] = {
+                "vocab_size": self.vocab_size,
+                "reestimation_em_mode": self.reestimation_em_mode,
+                "byte_level": self.byte_level,
+                "language_code": lang_code,
+                "base_tokenizer_path": base_tokenizer_path,
+                "num_reestimation_iterations": self.num_reestimation_iterations
+            }
+            lang_metadata["corpus_info"] = {
+                "training_file": train_file,
+                "language_code": lang_code
+            }
+            
+            # Try to extract base tokenizer metadata
+            try:
+                with open(base_tokenizer_path, 'r') as f:
+                    base_data = json.load(f)
+                    if "tokenizer_metadata" in base_data:
+                        lang_metadata["base_tokenizer_metadata"] = base_data["tokenizer_metadata"]["training_config"]
+            except:
+                lang_metadata["base_tokenizer_metadata"] = {"em_mode": "unknown", "vocab_size": "unknown"}
+            
+            metadata_path = _save_tokenizer_metadata(str(tk_path), lang_metadata)
+            if metadata_path:
+                logger.debug(f"Saved language-specific metadata to {metadata_path}")
+            else:
+                logger.warning(f"Failed to save metadata for {tk_path}")
 
             self.language_info[lang_code] = {
                 "tokenizer": tok,
                 "scores": _extract_log_scores(tok),
                 "path": str(tk_path),
             }
-            logger.info(f"Saved tokenizer for {lang_code} to {tk_path}")
+            logger.info(f"Saved tokenizer with metadata for {lang_code} to {tk_path}")
         return {
             "base_path": base_tokenizer_path,
             "language_paths": {k: v['path'] for k, v in self.language_info.items()}

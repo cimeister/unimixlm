@@ -32,9 +32,10 @@ _LANG2TIER: Dict[str, str] = {
     "cy":"low","ga":"low","ku":"low","mg":"low","yo":"low","gn":"low",
 }
 
-_TIER_CAP_GB = {"high": 15, "med": 5, "low": None}   # None = keep all
-_VAL_FRAC  = 0.001
-_TEST_FRAC = 0.001
+#_TIER_CAP_GB = {"high": 15, "med": 5, "low": None}   # None = keep all
+_TIER_CAP_GB = {"high": 1, "med": .2, "low": .02}   # None = keep all
+_VAL_FRAC  = 0.005
+_TEST_FRAC = 0.005
 _RANDOM_SEED = 42
 
 # ---------------------------------------------------------------------------
@@ -68,10 +69,10 @@ def _write_splits(lang: str, out_dir: Path, cap: Optional[int]) -> None:
             break
 
         r = random.random()
-        if r < _VAL_FRAC and val_count <= MAX_VAL_TEST_SIZE:
+        if r < _VAL_FRAC and val_count < MAX_VAL_TEST_SIZE:
             f_val.write(line)
             val_count += 1
-        elif r < _VAL_FRAC + _TEST_FRAC and test_count <= MAX_VAL_TEST_SIZE:
+        elif r < _VAL_FRAC + _TEST_FRAC and test_count < MAX_VAL_TEST_SIZE:
             f_test.write(line)
             test_count += 1
         else:
