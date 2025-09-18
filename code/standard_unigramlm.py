@@ -420,10 +420,6 @@ class StandardUnigramLMTokenizer:
         tok.train(train_files, trainer)
         init_vocab = tok.get_vocab()
         logger.info(f"Initial vocabulary size: {len(init_vocab)}")
-        if self.byte_level:
-            # Get actual bytes from the vocabulary
-            byte_tokens = [k for k in init_vocab.keys() if any(ord(c) > 127 for c in k)]
-            logger.info(f"Byte-level tokens in vocabulary: {len(byte_tokens)}")
         
         return set(init_vocab.keys())
 

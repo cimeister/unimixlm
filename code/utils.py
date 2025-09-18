@@ -42,6 +42,11 @@ def mk_id(raw: str) -> str:
     return digest
 
 
+def get_baseline_bytes() -> Tuple[Set[str], Dict[str,int]]:
+    alphabet = ByteLevel.alphabet()
+    return set(alphabet), {c:1 for c in alphabet}
+
+    
 def get_baseline_characters(training_data_files, character_coverage=0.9995, min_occurence_threshold=constants.MIN_CHAR_OCCURENCE_THRESHOLD):
     """
     Get baseline characters from training data files, matching SentencePiece's approach.
@@ -548,10 +553,6 @@ def proportional_sample(train_files_by_lang: Dict[str, str],
                 tgt.write(line)
                 lines_written += 1
     return sampled_files
-
-def get_baseline_bytes() -> Tuple[Set[str], Dict[str,int]]:
-    alphabet = ByteLevel.alphabet()
-    return set(alphabet), {c:1 for c in alphabet}
 
 
 def _sample_lines_from_file(file_path: str, sample_proportion: float, seed: int) -> List[str]:
