@@ -322,7 +322,7 @@ def tokenize_corpora(config: Dict[str, Any], corpus_info: Dict[str, Any], tokeni
             logger.warning(f"No trained tokenizer found for {name}, skipping tokenization")
             continue
         tokenizer_configs[name] = tokenizer_paths[name]
-        tokenizer_configs[name]["tokenized_data_path"] = tokenizer_configs[name]["tokenized_data_path"]
+        tokenizer_configs[name]["tokenized_data_path"] = tokenizer_config["tokenized_data_path"]
     
     # Create corpus tokenizer
     max_lines = config["experiment"].get("max_samples_per_language")
