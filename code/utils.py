@@ -6,15 +6,14 @@ from typing import Dict, List, Tuple, Set, Any, Optional, Union
 
 from pathlib import Path
 import hashlib
-import time
 from datetime import datetime
 import platform
 import sys
 import code.constants as constants
+from code.tokenizer_formatting_utils import _build_hf_tokenizer_from_probs
 
 from tokenizers import Tokenizer
-from tokenizers.models import Unigram
-from tokenizers.pre_tokenizers import ByteLevel, Sequence
+from tokenizers.pre_tokenizers import ByteLevel
 from transformers import AutoTokenizer
 
 import logging
@@ -25,28 +24,11 @@ logging.basicConfig(
 logger = logging.getLogger(__name__)
 
 
-def _apply_pretok_mapping_hf(text: str, pretok: Any, whitespace_boundaries: bool = True) -> str:
-    
-    normalized = pretok.pre_tokenize_str(text)
-    pieces = [piece[0] for piece in normalized]
-    if whitespace_boundaries:
-        return pieces
-    return [''.join(pieces)]
-
-def mk_id(raw: str) -> str:
-    # 8-byte / 16-char hex digest, utf-8, replace errors
-    digest = hashlib.blake2s(
-        raw.encode("utf-8", "replace"),
-        digest_size=8                      # 64-bit
-    ).hexdigest()
-    return digest
-
-
 def get_baseline_bytes() -> Tuple[Set[str], Dict[str,int]]:
     alphabet = ByteLevel.alphabet()
     return set(alphabet), {c:1 for c in alphabet}
 
-    
+
 def get_baseline_characters(training_data_files, character_coverage=0.9995, min_occurence_threshold=constants.MIN_CHAR_OCCURENCE_THRESHOLD):
     """
     Get baseline characters from training data files, matching SentencePiece's approach.
@@ -150,75 +132,6 @@ def _count_worker(file_path):
         return file_path, Counter()
 
 
-def _detect_vocab_file_format(file_path: str) -> str:
-    """Automatically detect the format of a vocabulary file."""
-    if file_path.endswith('.json'):
-        try:
-            with open(file_path, 'r', encoding='utf-8') as f:
-                data = json.load(f)
-                # Check if it's HF tokenizer format
-                if isinstance(data, dict) and 'model' in data and 'vocab' in data.get('model', {}):
-                    return 'hf_tokenizer'
-                # Check if it's a simple JSON list
-                elif isinstance(data, list):
-                    return 'json_list'
-                else:
-                    raise ValueError(f"Unsupported JSON format in {file_path}")
-        except json.JSONDecodeError:
-            raise ValueError(f"Invalid JSON file: {file_path}")
-    else:
-        return 'text_file'
-
-def _load_vocab_from_text_file(file_path: str) -> List[str]:
-    """Load vocabulary from plain text file (one token per line)."""
-    tokens = []
-    with open(file_path, 'r', encoding='utf-8') as f:
-        for line_num, line in enumerate(f, 1):
-            token = line.rstrip('\n\r')
-            if token:  # Skip empty lines
-                tokens.append(token)
-            elif line.strip() == '':
-                logger.warning(f"Empty line {line_num} in vocab file {file_path}")
-    return tokens
-
-def _load_vocab_from_json_file(file_path: str) -> List[str]:
-    """Load vocabulary from JSON list file."""
-    with open(file_path, 'r', encoding='utf-8') as f:
-        data = json.load(f)
-    
-    if not isinstance(data, list):
-        raise ValueError(f"JSON file must contain a list of strings: {file_path}")
-    
-    tokens = []
-    for i, token in enumerate(data):
-        if not isinstance(token, str):
-            logger.warning(f"Non-string token at index {i} in {file_path}: {token}")
-            continue
-        if token:  # Skip empty strings
-            tokens.append(token)
-    
-    return tokens
-
-def _load_vocab_from_hf_tokenizer(file_path: str) -> List[str]:
-    """Load vocabulary from HuggingFace tokenizer JSON file."""
-    with open(file_path, 'r', encoding='utf-8') as f:
-        data = json.load(f)
-    
-    if 'model' not in data or 'vocab' not in data['model']:
-        raise ValueError(f"File does not appear to be a HuggingFace tokenizer: {file_path}")
-    
-    vocab_data = data['model']['vocab']
-    if isinstance(vocab_data, list):
-        # Format: [["token", score], ...]
-        tokens = [item[0] for item in vocab_data if isinstance(item, list) and len(item) >= 1]
-    elif isinstance(vocab_data, dict):
-        # Format: {"token": id, ...}
-        tokens = list(vocab_data.keys())
-    else:
-        raise ValueError(f"Unsupported vocab format in HF tokenizer file: {file_path}")
-    
-    return tokens
-
 def compute_intersection_pruning_tokens(
     per_lang_losses: Dict[str, List[Tuple[str, float]]],
     k_drop: int,
@@ -317,26 +230,6 @@ def compute_intersection_pruning_tokens(
     return selected_tokens
 
 
-def _load_custom_vocab_from_file(file_path: str) -> List[str]:
-    """Main method to load vocabulary from file, with automatic format detection."""
-    format_type = _detect_vocab_file_format(file_path)
-    
-    if format_type == 'text_file':
-        tokens = _load_vocab_from_text_file(file_path)
-    elif format_type == 'json_list':
-        tokens = _load_vocab_from_json_file(file_path)
-    elif format_type == 'hf_tokenizer':
-        tokens = _load_vocab_from_hf_tokenizer(file_path)
-    else:
-        raise ValueError(f"Unsupported vocabulary file format: {format_type}")
-    
-    if not tokens:
-        raise ValueError(f"No valid tokens found in vocabulary file: {file_path}")
-    
-    logger.info(f"Loaded {len(tokens)} tokens from {file_path} (format: {format_type})")
-    return tokens
-
-
 def _as_batch(txt):
     """Return (list version, was_single_flag)."""
     if isinstance(txt, (str, tuple)):
@@ -394,6 +287,16 @@ def _apply_trunc_pad(
         masks,
         out_offs if offs_batch is not None else None,
     )
+
+
+def mk_id(raw: str) -> str:
+    # 8-byte / 16-char hex digest, utf-8, replace errors
+    digest = hashlib.blake2s(
+        raw.encode("utf-8", "replace"),
+        digest_size=8                      # 64-bit
+    ).hexdigest()
+    return digest
+
 
 def encode_text(
     tokenizer: Any,
@@ -613,31 +516,9 @@ def np_logaddexp(x, y):
     return max(x, y) + math.log(1 + math.exp(-abs(x - y)))
 
 
-def set_special_tokens(tokenizer):
-    vocab = tokenizer.get_vocab()
-
-    for token_name, token in constants.SPECIAL_TOKENS.items():
-        if token in vocab:
-                # This sets the pad_token to <pad> if the user wants it recognized as special
-            setattr(tokenizer, token_name, token)
-            setattr(tokenizer, token_name + '_id', vocab[token])
-
 class SafeFormattingDict(dict):
     def __missing__(self, key):
         return "{" + key + "}"
-
-
-def load_tokenizer_with_mode(path: str):
-    tok = Tokenizer.from_file(path)
-    byte_level = isinstance(tok.pre_tokenizer, ByteLevel) or (isinstance(tok.pre_tokenizer, Sequence) and isinstance(tok.pre_tokenizer[1], ByteLevel))
-    try:
-        # sanity-check the model as well
-        byte_fallback = bool(tok.model.byte_fallback)
-    except AttributeError:
-        byte_fallback = False
-    if byte_level and not byte_fallback:
-        logger.warning(f"{path} looks byte-level but byte_fallback==False (currently known issue for HF Unigram Tokenizers).")
-    return tok, byte_level
 
 
 def load_tokenizer_from_config(config):
@@ -665,23 +546,6 @@ def load_tokenizer_from_config(config):
             logger.info(f"Tried to load tokenizer via default method and could not {e}")
             raise
     return tokenizer
-
-
-def _build_hf_tokenizer_from_probs(
-    probs_tuples: List[Tuple[str, float]],
-    unk_id: int,
-    pretokenizer: Any
-) -> Tokenizer:
-    """
-    Turn a plain probability dictionary into a HF Unigram tokenizer.
-    """
-    #TODO: Add byte_fallback=self.byte_level if/when feature becomes available
-    model = Unigram(probs_tuples, unk_id)
-    tok = Tokenizer(model)
-    if pretokenizer:
-        tok.pre_tokenizer = pretokenizer
-
-    return tok
 
 
 def tokmix_merge(

@@ -1,9 +1,8 @@
 from __future__ import annotations
 
-import re
+
 import json
 import logging
-import math
 import os
 from pathlib import Path
 from typing import Dict, List
@@ -14,8 +13,12 @@ from tokenizers.pre_tokenizers import Whitespace
 
 from code.em_unigram_trainer import EMUnigramTrainer
 from code.standard_unigramlm import StandardUnigramLMTokenizer
-from code.utils import _build_hf_tokenizer_from_probs, _save_tokenizer_metadata, _create_base_metadata, get_baseline_bytes
-from code.constants import SPECIAL_TOKENS, MIN_TOKEN_LOG_PROB, MIN_TOKEN_PROB
+from code.utils import _save_tokenizer_metadata, _create_base_metadata, get_baseline_bytes
+from code.tokenizer_formatting_utils import (
+    _build_hf_tokenizer_from_probs, _get_hf_unigram_tokenizer_vocab, _write_sp_seed_vocab_file,
+    sp_piece_to_hf
+)
+from code.constants import SPECIAL_TOKENS, MIN_TOKEN_LOG_PROB
 
 logger = logging.getLogger(__name__)
 
@@ -28,108 +31,23 @@ DEFAULT_BASE_NAME = "langspec_base_tokenizer.json"
 # ---------------------------------------------------------------------------
 # helpers
 # ---------------------------------------------------------------------------
-# Replace your _write_sp_vocab_file function with this one.
-def _write_sp_vocab_file(vocab_with_scores: list[tuple[str, float]], output_path: str):
-    """Saves vocabulary to a plain text file (one token per line)."""
-    with open(output_path, 'w', encoding='utf-8') as f:
-        for token, score in vocab_with_scores:
-            # We don't need to write special tokens like <s> or <unk>
-            # as they are handled by dedicated flags.
-            if token not in ('<s>', '</s>', '<pad>', '<unk>'):
-                f.write(token + '\n')
 
-_SP_BYTE_RE = re.compile(r"^<0x([0-9A-F]{2})>$")
+# assumes you already have these from your code
+# _UNI_TO_BYTE: dict[str(one-char) -> int]
+# SPECIAL_TOKENS: e.g. {"unk_token":"<unk>", "pad_token":"<pad>", ...}
 
-def _build_gpt2_byte_maps():
-    """
-    Standard GPT-2 byte<->unicode mapping used by HF ByteLevel.
-    Returns:
-        byte_to_unicode: dict[int -> str(one-char)]
-        unicode_to_byte: dict[str(one-char) -> int]
-    """
-    bs = list(range(33, 127)) + list(range(161, 173)) + list(range(174, 256))
-    cs = bs[:]
-    n = 0
-    for b in range(256):
-        if b not in bs:
-            bs.append(b)
-            cs.append(256 + n)
-            n += 1
-    byte_to_unicode = dict(zip(bs, [chr(c) for c in cs]))
-    unicode_to_byte = {u: b for b, u in byte_to_unicode.items()}
-    return byte_to_unicode, unicode_to_byte
-
-_BYTE_TO_UNI, _UNI_TO_BYTE = _build_gpt2_byte_maps()
-
-def _sp_byte_piece_to_hf(piece: str) -> str:
-    """Map SP byte piece '<0xXX>' -> HF single-char byte token."""
-    m = _SP_BYTE_RE.match(piece)
-    if not m:
-        return piece
-    b = int(m.group(1), 16)
-    return _BYTE_TO_UNI[b]
-
-
-def _get_hf_unigram_tokenizer_vocab(tokenizer):
-    state = tokenizer.model.__getstate__()
-    attributes = json.loads(state.decode("utf-8"))
-    vocab = attributes["vocab"]
-    if isinstance(vocab, dict):
-        return sorted(vocab.items(), key=lambda x: x[1])
-    return vocab
 
 def _extract_log_scores(tok: Tokenizer) -> Dict[str, float]:
     """
     Return dict {token -> log_score} from a HF Unigram tokenizer.
     """
     vocab_tuples = _get_hf_unigram_tokenizer_vocab(tok)
-    return {tok: score for tok, score in vocab_tuples}
-
-def _required_chars_from_tokens(tokens: list[str], include_tabs_newlines: bool = True) -> str:
-    """Collect unique codepoints used by tokens; drop U+0020 space (SP forbids it)."""
-    s = set()
-    for t in tokens:
-        # tokens can be multi-char; collect all chars
-        for ch in t:
-            s.add(ch)
-    # SP forbids space in required_chars
-    s.discard(' ')
-    if include_tabs_newlines:
-        s.update({'\t', '\r', '\n'})
-    # Deterministic order (not required, but nice for reproducibility)
-    return ''.join(sorted(s))
-
-
-def _ensure_full_byte_vocab(vocab_dict: Dict[str, int]) -> Dict[str, int]:
-        """
-        Ensure vocab_dict (HF format: token -> id) contains all 256 byte tokens
-        in GPT-2's byte-to-unicode scheme. If any are missing, append them
-        at the end with fresh ids.
-
-        Returns a new vocab_dict with all 256 bytes guaranteed.
-        """
-        new_vocab = dict(vocab_dict)  # copy
-        max_id = max(new_vocab.values()) if new_vocab else -1
-
-        missing_tokens = []
-        for b in range(256):
-            tok = _BYTE_TO_UNI[b]
-            if tok not in new_vocab:
-                max_id += 1
-                new_vocab[tok] = max_id
-                missing_tokens.append(tok)
-
-        if missing_tokens:
-            preview = "".join(missing_tokens[:8])
-            print(f"Added {len(missing_tokens)} missing byte tokens to vocab "
-                  f"(first few shown literally: {repr(preview)})")
-
-        return new_vocab
+    return {tok: score for tok, score in vocab_tuples }
 
 
 def _build_hf_tokenizer_with_new_probs(
     base_tokenizer,
-    probs: Dict[str, float],
+    log_probs: Dict[str, float],
     unk_token: str
 ) -> Tokenizer:
     """
@@ -137,7 +55,7 @@ def _build_hf_tokenizer_with_new_probs(
     """
     vocab_tuples = _get_hf_unigram_tokenizer_vocab(base_tokenizer)
     tuples = [
-        (t, math.log(max(probs[t], MIN_TOKEN_PROB))) for t, __ in vocab_tuples
+        (t, max(log_probs[t], MIN_TOKEN_LOG_PROB)) for t, __ in vocab_tuples
     ]
 
     unk_id = base_tokenizer.get_vocab()[unk_token]
@@ -157,11 +75,10 @@ def _build_hf_tokenizer_with_new_probs(
             logger.warning(f"Failed to set byte_fallback attribute: {e}")
     return tok
 
+
 # ---------------------------------------------------------------------------
 # main class
 # ---------------------------------------------------------------------------
-
-
 class LanguageSpecificUnigramLMTokenizer(StandardUnigramLMTokenizer):
     
     def __init__(
@@ -250,7 +167,7 @@ class LanguageSpecificUnigramLMTokenizer(StandardUnigramLMTokenizer):
             corpus_file: str,
             vocab_dict: Dict[str, int],
             num_iterations: int = 10
-        ) -> Dict[str, float]:
+        ) -> Dict[str, float]: 
             import tempfile
             import subprocess
             import shutil
@@ -266,12 +183,11 @@ class LanguageSpecificUnigramLMTokenizer(StandardUnigramLMTokenizer):
 
                 # 1. Prepare the vocabulary file
                 base_vocab_with_scores = _get_hf_unigram_tokenizer_vocab(self.base_tokenizer)
-                _write_sp_vocab_file(base_vocab_with_scores, vocab_path)
+                token_count = _write_sp_seed_vocab_file(base_vocab_with_scores, vocab_path, self.unk_token)
                 
                 # The exact vocab size must account for meta pieces
-                # <unk> is one. <s> and </s> are not used by default.
-                # If byte_fallback is on, 256 byte pieces are added.
-                expected_vocab_size = len(base_vocab_with_scores)
+                # <unk>, <s> and </s> 
+                expected_vocab_size = token_count + 3
                 
                 # 2. Construct the spm_train command
                 command = [
@@ -279,48 +195,64 @@ class LanguageSpecificUnigramLMTokenizer(StandardUnigramLMTokenizer):
                     f"--input={corpus_file}",
                     f"--model_prefix={out_prefix}",
                     "--model_type=unigram",
+                    "--normalization_rule_name=identity",
                     
-                    # --- CORRECTED FLAGS ---
-                    f"--user_defined_symbols_file={vocab_path}", # Use the correct flag
+                    f"--seed_sentencepieces_file={vocab_path}",
                     f"--vocab_size={expected_vocab_size}",
-                    "--hard_vocab_limit=true",
                     # -----------------------
 
                     f"--num_sub_iterations={max(1, min(int(num_iterations), 10))}",
-                    f"--byte_fallback={'true' if self.byte_level else 'false'}",
                     f"--unk_piece={self.unk_token}",
-                    "--character_coverage=1.0",
+                    f"--unk_id=0",
                     "--num_threads=16",
                 ]
 
                 # 3. Execute the command
                 print(f"Running SentencePiece CLI command:\n{' '.join(command)}")
-                result = subprocess.run(command, check=True, capture_output=True, text=True, encoding='utf-8')
+                subprocess.run(command, check=True, capture_output=True, text=True, encoding='utf-8')
                 print("SentencePiece training successful.")
-                print("STDOUT:", result.stdout)
 
                 # 4. Load the resulting model and extract probabilities
                 sp = spm.SentencePieceProcessor()
                 sp.load(out_prefix + ".model")
-                
-                token_probs = {}
+
+                # 1) Collect raw log-scores (SentencePiece scores are already log-scale).
+                token_logps = {}
+                additional_tokens = set()
                 for i in range(sp.get_piece_size()):
                     p = sp.id_to_piece(i)
-                    p_hf = _sp_byte_piece_to_hf(p)
-                    logp = sp.get_score(i)
-                    token_probs[p_hf] = float(np.exp(logp))
+                    p_hf = sp_piece_to_hf(p)
+                    if p_hf not in vocab_dict:
+                        additional_tokens.add(p_hf)
+                    if p_hf in SPECIAL_TOKENS.values():
+                        logp = float(vocab_dict[p_hf])
+                    else:
+                        logp = float(sp.get_score(i))  # SP log-score
+                    token_logps[p_hf] = logp
+                if additional_tokens:
+                    logger.warning(f"unknown tokens: {additional_tokens}")
+                # 2) Ensure every base token is present; default to base log-prob if missing.
+                missing_tokens = set()
+                for t in vocab_dict.keys():
 
-                # Your normalization logic here...
-                MINP = max(MIN_TOKEN_PROB, 1e-12)
-                all_tokens = list(vocab_dict.keys())
-                for t in all_tokens:
-                     if t not in {self.unk_token, "<pad>", "<s>", "</s>"}:
-                        token_probs.setdefault(t, MINP)
-                Z = sum(token_probs.values())
-                if Z > 0:
-                    token_probs = {k: v / Z for k, v in token_probs.items()}
+                    if t not in token_logps:
+                        missing_tokens.add(t)
+                        token_logps[t] = float(vocab_dict[t])
+                if missing_tokens:
+                    logger.warning(f"Tokens {missing_tokens} not in sentencepiece model; defaulting to base "
+                                   f"tokenizer log-prob {vocab_dict[t]:.5f}")
+                # 3) Normalize in log-space: log p_i := log p_i - logsumexp(log p)
+                logvals = np.fromiter(token_logps.values(), dtype=np.float64)
+                m = np.max(logvals)
+                # guard against pathological all -inf (unlikely); fallback to uniform
+                if not np.isfinite(m):
+                    uniform = -np.log(len(token_logps))
+                    token_logps = {k: uniform for k in token_logps.keys()}
+                else:
+                    logZ = m + np.log(np.sum(np.exp(logvals - m)))
+                    token_logps = {k: float(v - logZ) for k, v in token_logps.items()}
 
-                return token_probs
+                return token_logps  # normalized log-probabilities
 
     def train(
         self,
@@ -330,7 +262,7 @@ class LanguageSpecificUnigramLMTokenizer(StandardUnigramLMTokenizer):
         tokenizer_path_format: str | None = None,
         load_base_if_exists: bool = True,
         load_tokenizers_if_exists: bool = True,
-        use_sentencepiece: bool = False
+        use_sentencepiece: bool = True
     ):
         """
         Build / load the *shared* base tokenizer via the parent class,
@@ -380,28 +312,29 @@ class LanguageSpecificUnigramLMTokenizer(StandardUnigramLMTokenizer):
                     em_mode=self.reestimation_em_mode, lang_code=lang_code
                 )
             )
-
             if load_tokenizers_if_exists and tk_path.is_file():
                 tok = Tokenizer.from_file(str(tk_path))
                 self.language_info[lang_code] = {
                     "tokenizer": tok,
-                    "scores": _extract_log_scores(tok),
+                    "scores":  _extract_log_scores(tok),
                     "path": str(tk_path),
                 }
                 logger.info(f"Loaded tokenizer for {lang_code} from {tk_path}")
                 continue
 
+            vocab_score_dict = _extract_log_scores(self.base_tokenizer)
+
             if use_sentencepiece:
                 # Use fast sentencepiece EM implementation
-                token_probs = self.train_with_sentencepiece_direct(
+                token_log_probs = self.train_with_sentencepiece_direct(
                         corpus_file=train_file,
-                        vocab_dict=self.base_tokenizer.get_vocab(),
+                        vocab_dict=vocab_score_dict,
                         num_iterations=self.num_reestimation_iterations
                 )
             else:
             # ----------  EM training on the language corpus  ----------
                 em_trainer = EMUnigramTrainer(
-                    vocab=self.base_tokenizer.get_vocab(),
+                    vocab=vocab_score_dict,
                     unk_token=self.unk_token,
                     special_tokens=self.special_tokens,
                     em_mode=self.reestimation_em_mode,
@@ -412,9 +345,10 @@ class LanguageSpecificUnigramLMTokenizer(StandardUnigramLMTokenizer):
                     byte_level=self.byte_level
                 )
                 token_probs = em_trainer.train(train_file)  # token -> prob
+                token_log_probs = {tk: np.log(p) for tk, p in token_probs.items()}
 
             # ----------  HF tokenizer from these probabilities  ----------
-            tok = _build_hf_tokenizer_with_new_probs(self.base_tokenizer, token_probs, self.unk_token)
+            tok = _build_hf_tokenizer_with_new_probs(self.base_tokenizer, token_log_probs, self.unk_token)
             tok.save(str(tk_path))
             
             # Add metadata to language-specific tokenizer
