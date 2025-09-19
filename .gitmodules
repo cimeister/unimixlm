@@ -1,0 +1,4 @@
+[submodule "sentencepiece"]
+	path = sentencepiece
+	url = https://github.com/cimeister/sentencepiece.git
+	branch = fixed-vocab-em

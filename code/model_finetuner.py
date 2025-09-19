@@ -2,7 +2,8 @@ import argparse, os, json, logging, random
 from pathlib import Path
 from typing import List, Dict, Any, Optional, Union
 from types import SimpleNamespace
-from code.utils import set_special_tokens, encode_text, load_tokenizer_from_config
+from code.tokenizer_formatting_utils import set_special_tokens, load_tokenizer_from_config
+from code.utils import encode_text
 from tqdm import tqdm
 
 import numpy as np

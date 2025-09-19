@@ -19,7 +19,7 @@ from transformers import (
     set_seed
 )
 from datasets import Dataset, interleave_datasets, load_dataset
-from code.utils import set_special_tokens
+from code.tokenizer_formatting_utils import set_special_tokens
 from code.constants import SPECIAL_TOKENS
 from torch.utils.data import IterableDataset, DataLoader
 

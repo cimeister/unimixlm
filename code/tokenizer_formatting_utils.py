@@ -1,0 +1,272 @@
+import re
+import json
+import math
+
+from tokenizers import Tokenizer
+from tokenizers.models import Unigram
+from tokenizers.pre_tokenizers import ByteLevel, Sequence
+from typing import List, Tuple, Any
+import code.constants as constants
+
+
+import logging
+logging.basicConfig(
+    level=logging.INFO,
+    format='%(asctime)s - %(name)s - %(levelname)s - %(message)s'
+)
+logger = logging.getLogger(__name__)
+
+
+# ---------------------------------------------------------------------------
+# HF helpers
+# ---------------------------------------------------------------------------
+
+def _apply_pretok_mapping_hf(text: str, pretok: Any, whitespace_boundaries: bool = True) -> str:
+    
+    normalized = pretok.pre_tokenize_str(text)
+    pieces = [piece[0] for piece in normalized]
+    if whitespace_boundaries:
+        return pieces
+    return [''.join(pieces)]
+
+
+def _hf_to_sp_piece(token: str) -> str:
+    """
+    HF ByteLevel -> SentencePiece seed text:
+      - GPT-2 space marker (byte 0x20) -> '▁'
+      - printable bytes -> literal char
+      - other bytes -> '<0xXX>'
+    """
+    out = []
+    for ch in token:
+        b = _UNI_TO_BYTE.get(ch)  # GPT-2 byte-unicode -> raw byte (0..255) or None
+        if b is None:
+            out.append("\u2581" if ch == " " else ch)
+            continue
+        if b == 0x20:
+            out.append("\u2581")
+        elif 33 <= b <= 126 or 161 <= b <= 172 or 174 <= b <= 255:
+            out.append(chr(b))
+        else:
+            out.append(f"<0x{b:02X}>")
+    return "".join(out)
+
+
+def set_special_tokens(tokenizer):
+    vocab = tokenizer.get_vocab()
+
+    for token_name, token in constants.SPECIAL_TOKENS.items():
+        if token in vocab:
+                # This sets the pad_token to <pad> if the user wants it recognized as special
+            setattr(tokenizer, token_name, token)
+            setattr(tokenizer, token_name + '_id', vocab[token])
+
+
+def _load_vocab_from_hf_tokenizer(file_path: str) -> List[str]:
+    """Load vocabulary from HuggingFace tokenizer JSON file."""
+    with open(file_path, 'r', encoding='utf-8') as f:
+        data = json.load(f)
+    
+    if 'model' not in data or 'vocab' not in data['model']:
+        raise ValueError(f"File does not appear to be a HuggingFace tokenizer: {file_path}")
+    
+    vocab_data = data['model']['vocab']
+    if isinstance(vocab_data, list):
+        # Format: [["token", score], ...]
+        tokens = [item[0] for item in vocab_data if isinstance(item, list) and len(item) >= 1]
+    elif isinstance(vocab_data, dict):
+        # Format: {"token": id, ...}
+        tokens = list(vocab_data.keys())
+    else:
+        raise ValueError(f"Unsupported vocab format in HF tokenizer file: {file_path}")
+    
+    return tokens
+
+
+def _get_hf_unigram_tokenizer_vocab(tokenizer):
+    state = tokenizer.model.__getstate__()
+    attributes = json.loads(state.decode("utf-8"))
+    vocab = attributes["vocab"]
+    if isinstance(vocab, dict):
+        # This is the format the BPE vocab comes in
+        tuples = sorted(vocab.items(), key=lambda x: x[1])
+        return [(tk, constants.MIN_TOKEN_LOG_PROB) for tk, idx in tuples]
+    return vocab
+
+
+# ---------------------------------------------------------------------------
+# SentencePiece helpers
+# ---------------------------------------------------------------------------
+def _write_sp_seed_vocab_file(
+    vocab_with_scores: list[tuple[str, float]],
+    output_path: str,
+    unk_token: str,
+) -> int:
+    """
+    Write TSV for --seed_sentencepieces_file with *trainable* pieces only.
+    UNK/BOS/EOS/<pad> are excluded (SP will add meta if enabled).
+    Writes raw 'piece<TAB>log_score' lines (no CSV quoting/escaping).
+    """
+    specials = set(constants.SPECIAL_TOKENS.values()) | {unk_token}
+    num_pieces = len([t for t, _ in vocab_with_scores if t not in specials])
+    initial_log_score = math.log(1.0 / num_pieces) if num_pieces > 0 else -10.0
+
+    count = 0
+    with open(output_path, "w", encoding="utf-8", newline="") as f:
+        for token, _ in vocab_with_scores:
+            if token in specials:
+                continue
+            sp_piece = _hf_to_sp_piece(token)
+
+            # sanity: SP seed must not contain tab/newline
+            if ("\t" in sp_piece) or ("\n" in sp_piece) or ("\r" in sp_piece):
+                # You can choose to replace with a safe printable surrogate or error out.
+                raise ValueError(f"Token contains tab/newline: {repr(token)} -> {repr(sp_piece)}")
+
+            f.write(f"{sp_piece}\t{initial_log_score:.6f}\n")
+            count += 1
+    return count
+
+
+def _build_gpt2_byte_maps():
+    """
+    Standard GPT-2 byte<->unicode mapping used by HF ByteLevel.
+    Returns:
+        byte_to_unicode: dict[int -> str(one-char)]
+        unicode_to_byte: dict[str(one-char) -> int]
+    """
+    bs = list(range(33, 127)) + list(range(161, 173)) + list(range(174, 256))
+    cs = bs[:]
+    n = 0
+    for b in range(256):
+        if b not in bs:
+            bs.append(b)
+            cs.append(256 + n)
+            n += 1
+    byte_to_unicode = dict(zip(bs, [chr(c) for c in cs]))
+    unicode_to_byte = {u: b for b, u in byte_to_unicode.items()}
+    return byte_to_unicode, unicode_to_byte
+
+
+_BYTE_TO_UNI, _UNI_TO_BYTE = _build_gpt2_byte_maps()
+_SP_BYTE_ANY_RE = re.compile(r"<0x([0-9A-F]{2})>")
+SPACE_HF = _BYTE_TO_UNI[32]  # typically "Ġ"
+
+
+def sp_piece_to_hf(piece: str) -> str:
+    """Map an SP piece to the HF ByteLevel representation."""
+    # 1) Map every embedded <0xXX> to the GPT-2 unicode char
+    def _byte_repl(m):
+        b = int(m.group(1), 16)
+        return _BYTE_TO_UNI[b]
+    piece = _SP_BYTE_ANY_RE.sub(_byte_repl, piece)
+
+    # 2) Map SP's whitespace marker to HF's space token char
+    #    (SP uses '▁' to mark a preceding space; HF uses the GPT-2 'Ġ' char)
+    piece = piece.replace("\u2581", SPACE_HF)
+
+    return piece
+
+
+def load_tokenizer_with_mode(path: str):
+    tok = Tokenizer.from_file(path)
+    byte_level = isinstance(tok.pre_tokenizer, ByteLevel) or (isinstance(tok.pre_tokenizer, Sequence) and isinstance(tok.pre_tokenizer[1], ByteLevel))
+    try:
+        # sanity-check the model as well
+        byte_fallback = bool(tok.model.byte_fallback)
+    except AttributeError:
+        byte_fallback = False
+    if byte_level and not byte_fallback:
+        logger.warning(f"{path} looks byte-level but byte_fallback==False (currently known issue for HF Unigram Tokenizers).")
+    return tok, byte_level
+
+
+def _build_hf_tokenizer_from_probs(
+    probs_tuples: List[Tuple[str, float]],
+    unk_id: int,
+    pretokenizer: Any
+) -> Tokenizer:
+    """
+    Turn a plain probability dictionary into a HF Unigram tokenizer.
+    """
+    #TODO: Add byte_fallback=self.byte_level if/when feature becomes available
+    model = Unigram(probs_tuples, unk_id)
+    tok = Tokenizer(model)
+    if pretokenizer:
+        tok.pre_tokenizer = pretokenizer
+
+    return tok
+# ---------------------------------------------------------------------------
+# SentencePiece helpers
+# ---------------------------------------------------------------------------
+
+def _detect_vocab_file_format(file_path: str) -> str:
+    """Automatically detect the format of a vocabulary file."""
+    if file_path.endswith('.json'):
+        try:
+            with open(file_path, 'r', encoding='utf-8') as f:
+                data = json.load(f)
+                # Check if it's HF tokenizer format
+                if isinstance(data, dict) and 'model' in data and 'vocab' in data.get('model', {}):
+                    return 'hf_tokenizer'
+                # Check if it's a simple JSON list
+                elif isinstance(data, list):
+                    return 'json_list'
+                else:
+                    raise ValueError(f"Unsupported JSON format in {file_path}")
+        except json.JSONDecodeError:
+            raise ValueError(f"Invalid JSON file: {file_path}")
+    else:
+        return 'text_file'
+
+
+def _load_vocab_from_text_file(file_path: str) -> List[str]:
+    """Load vocabulary from plain text file (one token per line)."""
+    tokens = []
+    with open(file_path, 'r', encoding='utf-8') as f:
+        for line_num, line in enumerate(f, 1):
+            token = line.rstrip('\n\r')
+            if token:  # Skip empty lines
+                tokens.append(token)
+            elif line.strip() == '':
+                logger.warning(f"Empty line {line_num} in vocab file {file_path}")
+    return tokens
+
+
+def _load_vocab_from_json_file(file_path: str) -> List[str]:
+    """Load vocabulary from JSON list file."""
+    with open(file_path, 'r', encoding='utf-8') as f:
+        data = json.load(f)
+    
+    if not isinstance(data, list):
+        raise ValueError(f"JSON file must contain a list of strings: {file_path}")
+    
+    tokens = []
+    for i, token in enumerate(data):
+        if not isinstance(token, str):
+            logger.warning(f"Non-string token at index {i} in {file_path}: {token}")
+            continue
+        if token:  # Skip empty strings
+            tokens.append(token)
+    
+    return tokens
+
+
+def _load_custom_vocab_from_file(file_path: str) -> List[str]:
+    """Main method to load vocabulary from file, with automatic format detection."""
+    format_type = _detect_vocab_file_format(file_path)
+    
+    if format_type == 'text_file':
+        tokens = _load_vocab_from_text_file(file_path)
+    elif format_type == 'json_list':
+        tokens = _load_vocab_from_json_file(file_path)
+    elif format_type == 'hf_tokenizer':
+        tokens = _load_vocab_from_hf_tokenizer(file_path)
+    else:
+        raise ValueError(f"Unsupported vocabulary file format: {format_type}")
+    
+    if not tokens:
+        raise ValueError(f"No valid tokens found in vocabulary file: {file_path}")
+    
+    logger.info(f"Loaded {len(tokens)} tokens from {file_path} (format: {format_type})")
+    return tokens

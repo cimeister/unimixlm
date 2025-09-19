@@ -24,9 +24,12 @@ from tokenizers.pre_tokenizers import ByteLevel, Whitespace, Sequence
 from code.utils import (
     get_baseline_characters,
     get_baseline_bytes,
+    tokmix_merge
+)
+
+from code.tokenizer_formatting_utils import (
     load_tokenizer_with_mode,
     _build_hf_tokenizer_from_probs,
-    tokmix_merge,
     _load_custom_vocab_from_file
 )
 
