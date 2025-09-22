@@ -634,9 +634,10 @@ def _accumulate_usage(train_file,
         # 1) read entire file's lines into memory (if feasible)
         lines = []
         logger.info(f"Reading lines from {train_file}...")
+        #TODO: understand whether it should be  errors="strict" or  errors="replace"
         with open(train_file, 'r', encoding='utf-8', errors="replace") as fin:
             for line in fin:
-                line = line.strip()
+                line = line.rstrip("\n")
                 if line:
                     lines.append(line)
 

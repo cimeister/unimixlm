@@ -20,14 +20,14 @@ logger = logging.getLogger(__name__)
 # ---------------------------------------------------------------------------
 # HF helpers
 # ---------------------------------------------------------------------------
-
+# TODO: get rid of whitespace_boundaries arg
 def _apply_pretok_mapping_hf(text: str, pretok: Any, whitespace_boundaries: bool = True) -> str:
     
     normalized = pretok.pre_tokenize_str(text)
     pieces = [piece[0] for piece in normalized]
     if whitespace_boundaries:
         return pieces
-    return [''.join(pieces)]
+    return ["".join(pieces)]
 
 
 def _hf_to_sp_piece(token: str) -> str:
@@ -94,10 +94,22 @@ def _get_hf_unigram_tokenizer_vocab(tokenizer):
     return vocab
 
 
+def write_hf_bytelevel_corpus(in_path: str, out_path: str, pretok: Any):
+    """Convert raw UTF-8 text to HF-style text (e.g., with 'Ġ' markers)."""
+
+    with open(in_path, "r", encoding="utf-8", errors="strict") as fin, \
+         open(out_path, "w", encoding="utf-8", newline="") as fout:
+        for line in fin:
+            line = line.rstrip("\n")
+            # Pre-tokenize to HF pieces, then concatenate the HF strings.
+            pieces = _apply_pretok_mapping_hf(line, pretok, whitespace_boundaries=True)
+            # The pieces already contain 'Ġ' where spaces were in the *raw* text
+            fout.write("".join(pieces) + "\n")
+
 # ---------------------------------------------------------------------------
 # SentencePiece helpers
 # ---------------------------------------------------------------------------
-def _write_sp_seed_vocab_file(
+def _write_sp_seed_vocab_file_with_conversion(
     vocab_with_scores: list[tuple[str, float]],
     output_path: str,
     unk_token: str,
@@ -124,6 +136,24 @@ def _write_sp_seed_vocab_file(
                 raise ValueError(f"Token contains tab/newline: {repr(token)} -> {repr(sp_piece)}")
 
             f.write(f"{sp_piece}\t{initial_log_score:.6f}\n")
+            count += 1
+    return count
+
+
+def _write_sp_seed_vocab_file(vocab_with_scores: list[tuple[str, float]], out_path: str, unk_token: str):
+    """One token per line: token<TAB>log_score (uniform log prob)."""
+    specials = set(constants.SPECIAL_TOKENS.values()) | {unk_token}
+    num_pieces = len([t for t, _ in vocab_with_scores if t not in specials]) # exclude <unk>, <s>, </s>, <pad>, etc.
+    initial_log_score = math.log(1.0 / num_pieces) if num_pieces > 0 else -10.0 
+
+    count = 0
+    with open(out_path, "w", encoding="utf-8", newline="") as f:
+        for t, _ in vocab_with_scores:
+            if t in specials:
+                continue
+            if ("\t" in t) or ("\n" in t) or ("\r" in t):
+                raise ValueError(f"Token contains tab/newline: {repr(t)}")
+            f.write(f"{t}\t{initial_log_score:.6f}\n")
             count += 1
     return count
 

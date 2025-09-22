@@ -13,8 +13,8 @@ class EMUnigramTrainer:
     """
 
     def __init__(self, vocab, unk_token="<unk>", special_tokens=None,
-                 max_iterations=20, em_mode="hard", convergence_threshold=1e-7, 
-                 unk_prior=MIN_TOKEN_PROB, whitespace_token_boundaries=True, 
+                 max_iterations=20, em_mode="hard", convergence_threshold=1e-6, 
+                 whitespace_token_boundaries=True, 
                  pretokenizer=None, byte_level=False):
         """
         Args:
@@ -31,7 +31,6 @@ class EMUnigramTrainer:
         self.max_iterations = max_iterations
         self.em_mode = em_mode
         self.convergence_threshold = convergence_threshold
-        self.unk_prior = unk_prior
         self.whitespace_token_boundaries = whitespace_token_boundaries
         self.pretokenizer = pretokenizer
         self.byte_level = byte_level
@@ -99,15 +98,13 @@ class EMUnigramTrainer:
             # Update counts
             usage_counts.update(c_dict)
             unk_occ = usage_counts[self.unk_token]
+            unk_percent = unk_occ/total_subwords
+            logger.info(f"{unk_occ} UNK counts out of {total_subwords} total subwords ({unk_percent:.5f}%)")
             
             # M-step: Update token probabilities based on counts
             if total_subwords > 0:
-                scale = 1.0 - self.unk_prior
                 for tk in p_token:
-                    if tk == self.unk_token:
-                        p_token[tk] = self.unk_prior
-                    else:
-                        p_token[tk] = usage_counts[tk] / (total_subwords - unk_occ) * scale
+                    p_token[tk] = usage_counts[tk] / total_subwords 
             else:
                 logger.warning("No usage => fallback to uniform distribution.")
                 for tk in self.vocab:
@@ -123,11 +120,9 @@ class EMUnigramTrainer:
                     logger.info(f"Converged at iteration {iteration+1}, total_diff={total_diff:.8g}")
                     break
 
-        del p_token[self.unk_token] # don't include UNK prob in counts   
-        total_prob = sum(p_token.values()) + self.unk_prior
+        total_prob = sum(p_token.values()) 
         if total_prob > 0:
             p_token = {tk: prob/total_prob for tk, prob in p_token.items()}
-        p_token[self.unk_token] = self.unk_prior
 
         # Keep probabilities positive
         for tk in self.vocab:
