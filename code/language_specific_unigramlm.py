@@ -16,7 +16,7 @@ from code.standard_unigramlm import StandardUnigramLMTokenizer
 from code.utils import _save_tokenizer_metadata, _create_base_metadata, get_baseline_bytes
 from code.tokenizer_formatting_utils import (
     _build_hf_tokenizer_from_probs, _get_hf_unigram_tokenizer_vocab, _write_sp_seed_vocab_file,
-    sp_piece_to_hf
+    write_hf_bytelevel_corpus
 )
 from code.constants import SPECIAL_TOKENS, MIN_TOKEN_LOG_PROB
 
@@ -142,9 +142,6 @@ class LanguageSpecificUnigramLMTokenizer(StandardUnigramLMTokenizer):
         """
         Verify that a vocabulary contains all necessary byte-level tokens.
         """
-        if not self.byte_level:
-            return True
-        
         # Check if vocabulary contains byte tokens
         # Depending on your byte encoding scheme, this might be:
         # - Raw bytes: '\x00' through '\xff' 
@@ -156,7 +153,7 @@ class LanguageSpecificUnigramLMTokenizer(StandardUnigramLMTokenizer):
         byte_tokens = get_baseline_bytes()[0]
         not_present = [b for b in byte_tokens if b not in tokens]
         if len(not_present) > 0:
-            logger.warning(f"Byte-level vocabulary may be incomplete: only {len(byte_tokens) - len(not_present)} byte tokens found")
+            logger.warning(f"Byte-level vocabulary may be incomplete: only {len(byte_tokens) - len(not_present)} byte tokens found (showing top 10): {not_present[:10]}")
             return False
         
         return True
@@ -180,6 +177,8 @@ class LanguageSpecificUnigramLMTokenizer(StandardUnigramLMTokenizer):
             with tempfile.TemporaryDirectory() as tmpdir:
                 out_prefix = os.path.join(tmpdir, "model")
                 vocab_path = os.path.join(tmpdir, "vocab.tsv")
+                hf_processed_text_path = os.path.join(tmpdir, "hf_text.txt")
+                write_hf_bytelevel_corpus(corpus_file, hf_processed_text_path, self._get_pretokenizer())
 
                 # 1. Prepare the vocabulary file
                 base_vocab_with_scores = _get_hf_unigram_tokenizer_vocab(self.base_tokenizer)
@@ -192,7 +191,7 @@ class LanguageSpecificUnigramLMTokenizer(StandardUnigramLMTokenizer):
                 # 2. Construct the spm_train command
                 command = [
                     "spm_train",
-                    f"--input={corpus_file}",
+                    f"--input={hf_processed_text_path}",
                     f"--model_prefix={out_prefix}",
                     "--model_type=unigram",
                     "--normalization_rule_name=identity",
@@ -201,16 +200,21 @@ class LanguageSpecificUnigramLMTokenizer(StandardUnigramLMTokenizer):
                     f"--vocab_size={expected_vocab_size}",
                     # -----------------------
 
-                    f"--num_sub_iterations={max(1, min(int(num_iterations), 10))}",
+                    f"--num_sub_iterations={max(1, min(int(num_iterations), 20))}",
                     f"--unk_piece={self.unk_token}",
-                    f"--unk_id=0",
+                    "--unk_id=0",
+                    "--split_by_whitespace=false",  # handled by write_hf_bytelevel_corpus 
                     "--num_threads=16",
                 ]
+                # if self.whitespace_token_boundaries:
+                #     command.append("--split_by_whitespace=true")
 
                 # 3. Execute the command
-                print(f"Running SentencePiece CLI command:\n{' '.join(command)}")
-                subprocess.run(command, check=True, capture_output=True, text=True, encoding='utf-8')
-                print("SentencePiece training successful.")
+                logger.info(f"Running SentencePiece CLI command:\n{' '.join(command)}")
+                output = subprocess.run(command, check=True, capture_output=True, text=True, encoding='utf-8')
+                logger.info("SentencePiece training successful.")
+                logger.info(f"SentencePiece STDOUT: {output.stdout}")
+                logger.info(f"SentencePiece STDERR (logs + errors): : {output.stderr}")
 
                 # 4. Load the resulting model and extract probabilities
                 sp = spm.SentencePieceProcessor()
@@ -221,10 +225,10 @@ class LanguageSpecificUnigramLMTokenizer(StandardUnigramLMTokenizer):
                 additional_tokens = set()
                 for i in range(sp.get_piece_size()):
                     p = sp.id_to_piece(i)
-                    p_hf = sp_piece_to_hf(p)
+                    p_hf = p  # sp_piece_to_hf(p)
                     if p_hf not in vocab_dict:
                         additional_tokens.add(p_hf)
-                    if p_hf in SPECIAL_TOKENS.values():
+                    if p_hf in set(SPECIAL_TOKENS.values()) | {self.unk_token}:
                         logp = float(vocab_dict[p_hf])
                     else:
                         logp = float(sp.get_score(i))  # SP log-score
@@ -312,7 +316,7 @@ class LanguageSpecificUnigramLMTokenizer(StandardUnigramLMTokenizer):
                     em_mode=self.reestimation_em_mode, lang_code=lang_code
                 )
             )
-            if load_tokenizers_if_exists and tk_path.is_file():
+            if load_tokenizers_if_exists and tk_path.is_file() and False:
                 tok = Tokenizer.from_file(str(tk_path))
                 self.language_info[lang_code] = {
                     "tokenizer": tok,
@@ -339,13 +343,25 @@ class LanguageSpecificUnigramLMTokenizer(StandardUnigramLMTokenizer):
                     special_tokens=self.special_tokens,
                     em_mode=self.reestimation_em_mode,
                     max_iterations=self.num_reestimation_iterations,
-                    unk_prior=self.unk_prior,
                     whitespace_token_boundaries=self.whitespace_token_boundaries,
                     pretokenizer=self._get_pretokenizer(),
                     byte_level=self.byte_level
                 )
                 token_probs = em_trainer.train(train_file)  # token -> prob
                 token_log_probs = {tk: np.log(p) for tk, p in token_probs.items()}
+
+            # ---------------------------------------------------------------------------
+            # DEBUGGERS
+            # ---------------------------------------------------------------------------
+
+            # common_keys = token_log_probs1.keys() & token_log_probs.keys()
+            # diffs = {k: abs(token_log_probs1[k] - token_log_probs[k]) for k in common_keys}
+            # top10 = sorted(diffs.items(), key=lambda x: x[1], reverse=True)[:20]
+            # for k, v in top10:
+            #     print(f"{k}: {token_log_probs1[k]} vs {token_log_probs[k]} (diff={v})")
+            # x = 0
+            # x += abs(np.exp(token_log_probs1[k]) - np.exp(token_log_probs[k]))
+            # print("TVD: ", x)
 
             # ----------  HF tokenizer from these probabilities  ----------
             tok = _build_hf_tokenizer_with_new_probs(self.base_tokenizer, token_log_probs, self.unk_token)

@@ -7,6 +7,13 @@ import torch
 import logging
 from typing import Dict, List, Tuple, Set, Optional, Any
 from dataclasses import dataclass
+import tempfile
+import csv
+import re
+try:
+    import sentencepiece as spm
+except Exception:
+    spm = None
 import numpy as np
 import pickle
 import hashlib
@@ -30,7 +37,10 @@ from code.utils import (
 from code.tokenizer_formatting_utils import (
     load_tokenizer_with_mode,
     _build_hf_tokenizer_from_probs,
-    _load_custom_vocab_from_file
+    _load_custom_vocab_from_file,
+     _get_hf_unigram_tokenizer_vocab, 
+     _write_sp_seed_vocab_file,
+    sp_piece_to_hf
 )
 
 from code.em_utils import (
@@ -89,7 +99,9 @@ class StandardUnigramLMTokenizer:
         dataset_size_normalization: bool = True,
         use_intersection_pruning: bool = True,
         initial_vocab_tokens: Optional[str] = None,  # Path to file containing tokens
-        pruning_criterion: str = "exact_loss"  # "exact_loss", "approx_loss", "probability"
+        pruning_criterion: str = "exact_loss",  # "exact_loss", "approx_loss", "probability"
+        use_sp_seed_vocab: bool = False,
+        use_sp_em: bool = False,
     ) -> None:
         """
         Initialize StandardUnigramLMTokenizer.
@@ -122,7 +134,6 @@ class StandardUnigramLMTokenizer:
 
         self.vocab_size = vocab_size
         self.unk_token = unk_token
-        self.unk_prior = 1.0 / (32 * vocab_size)  # SentencePiece default
         self.special_tokens = special_tokens or list(SPECIAL_TOKENS.values())
         self.byte_level = byte_level
         self.whitespace_token_boundaries = whitespace_token_boundaries
@@ -139,6 +150,9 @@ class StandardUnigramLMTokenizer:
         self.use_intersection_pruning = use_intersection_pruning
         self.initial_vocab_tokens = initial_vocab_tokens
         self.pruning_criterion = pruning_criterion
+        self.use_sp_seed_vocab = use_sp_seed_vocab
+        self.use_sp_em = use_sp_em
+
 
         # Validate parameters
         if self.initial_vocab_tokens and not os.path.exists(self.initial_vocab_tokens):
@@ -400,9 +414,56 @@ class StandardUnigramLMTokenizer:
             
             logger.info(f"Custom vocabulary prepared: {len(vocab)} tokens (target: {seed_vocab_size})")
             return vocab
+
+        elif self.use_sp_seed_vocab:
+            logger.info("Using SentencePiece suffix-array seeding for initial vocabulary...")
+            vocab = self._sp_seed_vocab(train_files)
+            # ensure specials are present
+            vocab.update(self.special_tokens)
+            logger.info(f"SP-seeded initial vocabulary size: {len(vocab)}")
+            return vocab
         else:
             # Use existing HF-based approach  
             return self._initial_vocab_hf(train_files)
+
+    def _sp_seed_vocab(self, train_files: List[str]) -> Set[str]:
+        """
+        Use patched SP (num_sub_iterations=0, no seed file) to extract a seed vocabulary
+        via suffix-array seeding. Returns a set of token strings (HF-style).
+        """
+        if spm is None:
+            raise RuntimeError("sentencepiece is not installed but use_sp_seed_vocab=True")
+
+        with tempfile.TemporaryDirectory() as td:
+            model_prefix = os.path.join(td, "seed")
+            input_arg = ",".join(train_files)
+            # Target a larger seed to prune later (like HF path does)
+            seed_vocab_size = self.vocab_size * INITIAL_VOCAB_MULT_FACTOR
+
+            spm.SentencePieceTrainer.Train(
+                input=input_arg,
+                model_prefix=model_prefix,
+                model_type="unigram",
+                vocab_size=seed_vocab_size,
+                # seed-only mode in your patched SP: num_sub_iterations = 0
+                num_sub_iterations=0,
+                normalization_rule_name="identity",
+                split_by_whitespace=self.whitespace_token_boundaries,
+                character_coverage=1.0,  # non-byte level; keep default alphabet
+                unk_id=0,
+                unk_piece=self.unk_token,
+            )
+
+            sp = spm.SentencePieceProcessor()
+            sp.load(model_prefix + ".model")
+
+            vocab = set()
+            for i in range(sp.get_piece_size()):
+                p = sp.id_to_piece(i)
+                if p in ("<s>", "</s>", "<pad>", self.unk_token):
+                    continue
+                vocab.add(_sp_piece_to_hf(p, self.byte_level))
+            return vocab
     
     def _initial_vocab_hf(self, train_files: List[str]) -> Set[str]:
         """Original HF trainer to bootstrap an initial token set."""
@@ -537,7 +598,7 @@ class StandardUnigramLMTokenizer:
         }
 
     @staticmethod
-    def _normalize(counts: Dict[str, float], unk_token: str, unk_prior: float) -> Dict[str, float]:
+    def _normalize_unk_special(counts: Dict[str, float], unk_token: str, unk_prior: float) -> Dict[str, float]:
         """Convert raw counts to a prob dist with frozen unk_prior."""
         total = sum(counts.values()) - counts.get(unk_token, 0.0)
         if total <= 0:
@@ -553,6 +614,15 @@ class StandardUnigramLMTokenizer:
         }
 
     @staticmethod
+    def _normalize(counts: Dict[str, float]) -> Dict[str, float]:
+        """Convert raw counts to a prob dist with frozen unk_prior."""
+        total = sum(counts.values())
+        if total <= 0:
+            uniform = 1.0 / max(1, len(counts))
+            return {t: uniform for t in counts}
+        return {t: counts[t] / total for t in counts}
+
+    @staticmethod
     def _tokens_to_remove(token_loss: List[Tuple[str, float]], k_drop: int):
         if k_drop <= 0:
             return set()
@@ -564,14 +634,9 @@ class StandardUnigramLMTokenizer:
     def _build_final_vocab(
         self, p_token: Dict[str, float]
     ) -> Tuple[List[Tuple[str, float]], int]:
-        del p_token[self.unk_token]
-        sorted_items = sorted(p_token.items(), key=lambda x: x[1], reverse=True)[:self.vocab_size]
-        remaining_prob = sum([pr for _, pr in sorted_items]) + self.unk_prior
-        sorted_items = [
-            (self.unk_token, self.unk_prior)
-        ] + [
-            (tk, pr / remaining_prob) for tk, pr in sorted_items
-        ]
+        sorted_items = sorted(p_token.items(), key=lambda x: x[1], reverse=True)
+        total_prob = sum([pr for _, pr in sorted_items]) 
+        sorted_items = [(tk, pr / total_prob) for tk, pr in sorted_items]
         vocab_list = []
         special = []
         for tk, pr in sorted_items:
@@ -613,39 +678,62 @@ class StandardUnigramLMTokenizer:
         
         for it in range(self.num_iterations):
             logger.info("EM %d/%d – starting | vocab=%d | to trim=%d | Pruning criterion: %s", 
-                       it + 1, self.num_iterations, len(state.all_tokens), state.k_total, self.pruning_criterion)            
-            if state.per_lang:
-                lang_counts = {lc: {tk: 0.0 for tk in state.all_tokens} for lc in state.lang_codes}
-                unk_count = 0
-                total_counts = 0
-                for lc, file in zip(state.lang_codes, state.corpus_files):
-                    c_dict, _ = _accumulate_usage(file, 
-                                                  self.per_lang_probs[lc], 
-                                                  self.unk_token, 
-                                                  mode=self.em_mode, 
-                                                  whitespace_boundaries=self.whitespace_token_boundaries,
-                                                  pretokenizer=self._get_pretokenizer())
-                    for tk, v in c_dict.items():
-                        lang_counts[lc][tk] += v
-                    unk_count += lang_counts[lc][self.unk_token]
-                    total_counts += sum(lang_counts[lc].values())
-                observed_tokens = set([k for lang_probs in lang_counts.values() for k in lang_probs])
-                for lc in state.lang_codes:
-                    self.per_lang_probs[lc] = self._normalize(lang_counts[lc], self.unk_token, self.unk_prior)
-                state.p_token = {tk: sum(self.mixture_weights[lc] * self.per_lang_probs[lc][tk] for lc in state.lang_codes) for tk in state.all_tokens}
-            else:
-                counts = {tk: 0.0 for tk in state.all_tokens}
-                for file in state.corpus_files:
-                    c_dict, _ = _accumulate_usage(file, state.p_token, self.unk_token, 
-                                                  mode=self.em_mode, 
-                                                  whitespace_boundaries=self.whitespace_token_boundaries, 
-                                                  pretokenizer=self._get_pretokenizer())
-                    for tk, v in c_dict.items():
-                        counts[tk] += v
-                unk_count = counts[self.unk_token]
-                total_counts = sum(counts.values())
-                observed_tokens = counts.keys()
-                state.p_token = self._normalize(counts, self.unk_token, self.unk_prior)
+                       it + 1, self.num_iterations, len(state.all_tokens), state.k_total, self.pruning_criterion)  
+
+            if self.use_sp_em:
+                if state.per_lang:
+                    # per-language re-estimation, then mix
+                    lang_probs = {}
+                    for lc, f in zip(state.lang_codes, state.corpus_files):
+                        lang_probs[lc] = self._sp_fixed_em_once([f], state.all_tokens)
+                    self.per_lang_probs = lang_probs
+                    state.p_token = {
+                        tk: sum(self.mixture_weights[lc] * self.per_lang_probs[lc].get(tk, 0.0)
+                                for lc in state.lang_codes)
+                        for tk in state.all_tokens
+                    }
+                    observed_tokens = set(state.all_tokens)
+                    unk_count = sum(self.per_lang_probs[lc].get(self.unk_token, 0.0) for lc in state.lang_codes)
+                    total_counts = 1.0  # probabilities-as-counts (constant factor)
+                else:
+                    # single-corpus re-estimation
+                    state.p_token = self._sp_fixed_em_once(state.corpus_files, state.all_tokens)
+                    observed_tokens = set(state.all_tokens)
+                    unk_count = state.p_token.get(self.unk_token, 0.0)
+                    total_counts = 1.0  # probabilities-as-counts    
+            else:      
+                if state.per_lang:
+                    lang_counts = {lc: {tk: 0.0 for tk in state.all_tokens} for lc in state.lang_codes}
+                    unk_count = 0
+                    total_counts = 0
+                    for lc, file in zip(state.lang_codes, state.corpus_files):
+                        c_dict, _ = _accumulate_usage(file, 
+                                                      self.per_lang_probs[lc], 
+                                                      self.unk_token, 
+                                                      mode=self.em_mode, 
+                                                      whitespace_boundaries=self.whitespace_token_boundaries,
+                                                      pretokenizer=self._get_pretokenizer())
+                        for tk, v in c_dict.items():
+                            lang_counts[lc][tk] += v
+                        unk_count += lang_counts[lc][self.unk_token]
+                        total_counts += sum(lang_counts[lc].values())
+                    observed_tokens = set([k for lang_probs in lang_counts.values() for k in lang_probs])
+                    for lc in state.lang_codes:
+                        self.per_lang_probs[lc] = self._normalize(lang_counts[lc])
+                    state.p_token = {tk: sum(self.mixture_weights[lc] * self.per_lang_probs[lc][tk] for lc in state.lang_codes) for tk in state.all_tokens}
+                else:
+                    counts = {tk: 0.0 for tk in state.all_tokens}
+                    for file in state.corpus_files:
+                        c_dict, _ = _accumulate_usage(file, state.p_token, self.unk_token, 
+                                                      mode=self.em_mode, 
+                                                      whitespace_boundaries=self.whitespace_token_boundaries, 
+                                                      pretokenizer=self._get_pretokenizer())
+                        for tk, v in c_dict.items():
+                            counts[tk] += v
+                    unk_count = counts[self.unk_token]
+                    total_counts = sum(counts.values())
+                    observed_tokens = counts.keys()
+                    state.p_token = self._normalize(counts)
 
             # Use extracted diagnostics method
             self._log_iteration_diagnostics(it, state, observed_tokens, unk_count, total_counts)
@@ -742,11 +830,11 @@ class StandardUnigramLMTokenizer:
                 if state.per_lang:
                     for lc in state.lang_codes:
                         self.per_lang_probs[lc] = {tk: self.per_lang_probs[lc].get(tk, 0.0) for tk in state.all_tokens}
-                        self.per_lang_probs[lc] = self._normalize(self.per_lang_probs[lc], self.unk_token, self.unk_prior)
+                        self.per_lang_probs[lc] = self._normalize(self.per_lang_probs[lc])
                         state.prev_lang_probs[lc] = self.per_lang_probs[lc].copy()
                         
                 state.p_token = {tk: state.p_token[tk] for tk in state.all_tokens}
-                state.p_token = self._normalize(state.p_token, self.unk_token, self.unk_prior)
+                state.p_token = self._normalize(state.p_token)
                 for tk, new_prob in state.p_token.items():
                     logging_dict[tk]["post-pruning-prob"] = new_prob
                 if logging_path is not None:
@@ -1040,8 +1128,7 @@ class StandardUnigramLMTokenizer:
             "dataset_size_normalization": self.dataset_size_normalization,
             "use_intersection_pruning": self.use_intersection_pruning,
             "pruning_criterion": self.pruning_criterion,
-            "special_tokens": list(self.special_tokens),
-            "unk_prior": self.unk_prior,
+            "special_tokens": list(self.special_tokens)
         }
         
         # Add custom vocabulary info if used

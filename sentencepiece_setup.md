@@ -5,6 +5,7 @@
 `git submodule update --init --recursive`
 
 # Create SentencePiece build and install Python package
+For loading the model later:
 `pip install sentencepiece`
 
 
