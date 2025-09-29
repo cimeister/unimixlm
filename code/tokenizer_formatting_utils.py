@@ -1,4 +1,5 @@
 import re
+import os
 import json
 import math
 
@@ -96,7 +97,7 @@ def _get_hf_unigram_tokenizer_vocab(tokenizer):
 
 def write_hf_bytelevel_corpus(in_path: str, out_path: str, pretok: Any):
     """Convert raw UTF-8 text to HF-style text (e.g., with 'Ġ' markers)."""
-
+    # TODO: make sure this works for larger corpora
     with open(in_path, "r", encoding="utf-8", errors="strict") as fin, \
          open(out_path, "w", encoding="utf-8", newline="") as fout:
         for line in fin:
@@ -106,9 +107,80 @@ def write_hf_bytelevel_corpus(in_path: str, out_path: str, pretok: Any):
             # The pieces already contain 'Ġ' where spaces were in the *raw* text
             fout.write("".join(pieces) + "\n")
 
+def write_hf_bytelevel_corpus_optimized(in_path: str, out_path: str, pretok: Any, chunk_size_bytes: int = 1024 * 1024):
+    """
+    An optimized version of the corpus writing function that reads and writes
+    in larger chunks to reduce I/O overhead.
+
+    Args:
+        in_path (str): Path to the input corpus file.
+        out_path (str): Path to write the processed output file.
+        pretok (Any): A HuggingFace pre-tokenizer object.
+        chunk_size_bytes (int): The approximate size of chunks (in bytes) to
+                                read from the input file at a time.
+    """
+    print(f"Processing {os.path.basename(in_path)} -> {os.path.basename(out_path)}")
+    with open(in_path, "r", encoding="utf-8", errors="strict") as fin, \
+         open(out_path, "w", encoding="utf-8") as fout:
+        while True:
+            # fin.readlines(hint) reads an approximate number of bytes,
+            # but will always read until the end of a line.
+            lines = fin.readlines(chunk_size_bytes)
+            if not lines:
+                break
+            
+            # Use a generator expression for memory efficiency. It processes
+            # one line and passes it to writelines, avoiding storing all
+            # processed lines in memory at once.
+            processed_lines_generator = (
+                "".join(_apply_pretok_mapping_hf(line.rstrip("\n"), pretok, whitespace_boundaries=True)) + "\n"
+                for line in lines
+            )
+            
+            fout.writelines(processed_lines_generator)
+    print(f"Finished processing {os.path.basename(in_path)}")
+
+def _process_file_worker(args: Tuple[str, str, Any]) -> str:
+    """
+    Helper function for multiprocessing.Pool. It unpacks arguments to call
+    the optimized processing function. This function must be at the top level
+    of the module so it can be pickled.
+    """
+    train_file, output_dir, pretok, i = args
+    base_name = os.path.basename(train_file)
+    output_file_path = os.path.join(output_dir, f"processed_{i}_{base_name}")
+    write_hf_bytelevel_corpus_optimized(train_file, output_file_path, pretok)
+    return output_file_path
 # ---------------------------------------------------------------------------
 # SentencePiece helpers
 # ---------------------------------------------------------------------------
+def _build_gpt2_byte_maps():
+    """
+    Standard GPT-2 byte<->unicode mapping used by HF ByteLevel.
+    Returns:
+        byte_to_unicode: dict[int -> str(one-char)]
+        unicode_to_byte: dict[str(one-char) -> int]
+    """
+    bs = list(range(33, 127)) + list(range(161, 173)) + list(range(174, 256))
+    cs = bs[:]
+    n = 0
+    for b in range(256):
+        if b not in bs:
+            bs.append(b)
+            cs.append(256 + n)
+            n += 1
+    byte_to_unicode = dict(zip(bs, [chr(c) for c in cs]))
+    unicode_to_byte = {u: b for b, u in byte_to_unicode.items()}
+    return byte_to_unicode, unicode_to_byte
+
+
+_BYTE_TO_UNI, _UNI_TO_BYTE = _build_gpt2_byte_maps()
+_SP_BYTE_ANY_RE = re.compile(r"<0x([0-9A-F]{2})>")
+SPACE_HF = _BYTE_TO_UNI[32]  # typically "Ġ"
+_SP_BYTE_ANY_RE = re.compile(r"<0x([0-9A-F]{2})>")
+_SP_SPACE = "▁"
+
+
 def _write_sp_seed_vocab_file_with_conversion(
     vocab_with_scores: list[tuple[str, float]],
     output_path: str,
@@ -143,44 +215,16 @@ def _write_sp_seed_vocab_file_with_conversion(
 def _write_sp_seed_vocab_file(vocab_with_scores: list[tuple[str, float]], out_path: str, unk_token: str):
     """One token per line: token<TAB>log_score (uniform log prob)."""
     specials = set(constants.SPECIAL_TOKENS.values()) | {unk_token}
-    num_pieces = len([t for t, _ in vocab_with_scores if t not in specials]) # exclude <unk>, <s>, </s>, <pad>, etc.
-    initial_log_score = math.log(1.0 / num_pieces) if num_pieces > 0 else -10.0 
-
     count = 0
     with open(out_path, "w", encoding="utf-8", newline="") as f:
-        for t, _ in vocab_with_scores:
+        for t, score in vocab_with_scores:
             if t in specials:
                 continue
             if ("\t" in t) or ("\n" in t) or ("\r" in t):
                 raise ValueError(f"Token contains tab/newline: {repr(t)}")
-            f.write(f"{t}\t{initial_log_score:.6f}\n")
+            f.write(f"{t}\t{score}\n")
             count += 1
     return count
-
-
-def _build_gpt2_byte_maps():
-    """
-    Standard GPT-2 byte<->unicode mapping used by HF ByteLevel.
-    Returns:
-        byte_to_unicode: dict[int -> str(one-char)]
-        unicode_to_byte: dict[str(one-char) -> int]
-    """
-    bs = list(range(33, 127)) + list(range(161, 173)) + list(range(174, 256))
-    cs = bs[:]
-    n = 0
-    for b in range(256):
-        if b not in bs:
-            bs.append(b)
-            cs.append(256 + n)
-            n += 1
-    byte_to_unicode = dict(zip(bs, [chr(c) for c in cs]))
-    unicode_to_byte = {u: b for b, u in byte_to_unicode.items()}
-    return byte_to_unicode, unicode_to_byte
-
-
-_BYTE_TO_UNI, _UNI_TO_BYTE = _build_gpt2_byte_maps()
-_SP_BYTE_ANY_RE = re.compile(r"<0x([0-9A-F]{2})>")
-SPACE_HF = _BYTE_TO_UNI[32]  # typically "Ġ"
 
 
 def sp_piece_to_hf(piece: str) -> str:
@@ -196,6 +240,34 @@ def sp_piece_to_hf(piece: str) -> str:
     piece = piece.replace("\u2581", SPACE_HF)
 
     return piece
+
+def sp_piece_to_hf(piece: str, SPACE_HF: str, BYTE_TO_UNI: dict[int, str]) -> str:
+    # 1) Replace leading ▁… with Ġ… (keep count)
+    i = 0
+    n = len(piece)
+    while i < n and piece[i] == _SP_SPACE:
+        i += 1
+    prefix = SPACE_HF * i
+    rest = piece[i:]
+
+    # 2) Walk the remainder, expanding <0xNN> and mapping other literals via UTF-8 -> ByteLevel
+    out = [prefix]
+    pos = 0
+    for m in _SP_BYTE_ANY_RE.finditer(rest):
+        # map literal region before the match
+        lit = rest[pos:m.start()]
+        if lit:
+            b = lit.encode("utf-8", errors="strict")
+            out.append("".join(BYTE_TO_UNI[x] for x in b))
+        # map the byte token
+        out.append(BYTE_TO_UNI[int(m.group(1), 16)])
+        pos = m.end()
+    # tail literal
+    tail = rest[pos:]
+    if tail:
+        b = tail.encode("utf-8", errors="strict")
+        out.append("".join(BYTE_TO_UNI[x] for x in b))
+    return "".join(out)
 
 
 def load_tokenizer_with_mode(path: str):

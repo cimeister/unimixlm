@@ -5,11 +5,15 @@ import os
 import json
 import torch
 import logging
-from typing import Dict, List, Tuple, Set, Optional, Any
+from typing import Dict, List, Tuple, Set, Optional, Union
 from dataclasses import dataclass
+import random
 import tempfile
-import csv
-import re
+import subprocess
+import shutil
+import atexit
+
+
 try:
     import sentencepiece as spm
 except Exception:
@@ -40,7 +44,9 @@ from code.tokenizer_formatting_utils import (
     _load_custom_vocab_from_file,
      _get_hf_unigram_tokenizer_vocab, 
      _write_sp_seed_vocab_file,
-    sp_piece_to_hf
+    sp_piece_to_hf,
+    write_hf_bytelevel_corpus_optimized,
+    _process_file_worker
 )
 
 from code.em_utils import (
@@ -100,8 +106,8 @@ class StandardUnigramLMTokenizer:
         use_intersection_pruning: bool = True,
         initial_vocab_tokens: Optional[str] = None,  # Path to file containing tokens
         pruning_criterion: str = "exact_loss",  # "exact_loss", "approx_loss", "probability"
-        use_sp_seed_vocab: bool = False,
-        use_sp_em: bool = False,
+        use_sp_seed_vocab: bool = True,
+        use_sp_em: bool = True,
     ) -> None:
         """
         Initialize StandardUnigramLMTokenizer.
@@ -121,7 +127,7 @@ class StandardUnigramLMTokenizer:
                 When True, prevents bias toward larger datasets during pruning. Recommended for
                 multilingual scenarios with imbalanced dataset sizes.
             use_intersection_pruning: Whether to use intersection-based pruning in multigram mode.
-                When True, only prunes tokens that are consistently low-loss across ALL languages.
+                When True, only prunes tokens that are consistently unimportant (low loss/prob) across ALL languages.
                 When False, uses traditional average-loss pruning.
             initial_vocab_tokens: Path to file containing custom initial vocabulary tokens.
                 Supported formats: plain text (one token per line), JSON list, or HF tokenizer JSON.
@@ -152,7 +158,6 @@ class StandardUnigramLMTokenizer:
         self.pruning_criterion = pruning_criterion
         self.use_sp_seed_vocab = use_sp_seed_vocab
         self.use_sp_em = use_sp_em
-
 
         # Validate parameters
         if self.initial_vocab_tokens and not os.path.exists(self.initial_vocab_tokens):
@@ -349,13 +354,99 @@ class StandardUnigramLMTokenizer:
 
         return batch
 
-    def _baseline_tokens(self, files: List[str]) -> Set[str]:
-        return (
-            get_baseline_bytes()[0]
-            if self.byte_level
-            else set(get_baseline_characters(files, min_occurence_threshold=self.min_char_occurence_threshold)[0])
+    def load(self, base_path):
+        """
+        Load a saved tokenizer
+        
+        Args:
+            base_path: Path to the tokenizer file
+        """
+        self.base_tokenizer, self.byte_level = load_tokenizer_with_mode(base_path)
+        self.vocab_size = len(self.base_tokenizer.get_vocab())
+        with open(base_path, encoding="utf-8") as fh:
+            data = json.load(fh)
+    
+        # 3) recover unigram scores --------------------------------------
+        if data.get("model", {}).get("type") == "Unigram":
+            vocab_pairs = data["model"]["vocab"]      # list [piece, score]
+            # scores are log‑probs (SentencePiece convention)
+            tokens, log_scores = zip(*vocab_pairs)
+            probs = [math.exp(s) for s in log_scores]
+            Z = sum(probs)
+            self.global_probs = {t: p / Z for t, p in zip(tokens, probs)}
+        else:
+            logger.warning(f"No global probs for tokenizer at {base_path} found")
+
+    def encode(self, text, add_special_tokens=False):
+        """
+        Encode text using the tokenizer.
+        
+        Args:
+            text: Text to encode
+            
+        Returns:
+            List of token IDs
+        """
+        if not self.base_tokenizer:
+            raise ValueError("No base tokenizer loaded or trained.")
+        return self.base_tokenizer.encode(text, add_special_tokens=add_special_tokens).ids
+
+    def encode_batch(self, texts, *, add_special_tokens: bool = False):
+        """
+        Vectorised encoding that returns *Encoding* objects, identical to the
+        HuggingFace `tokenizers.Tokenizer.encode_batch`.
+        """
+        if self.base_tokenizer is None:
+            raise ValueError("Tokenizer not yet loaded or trained.")
+        return self.base_tokenizer.encode_batch(
+            texts, add_special_tokens=add_special_tokens
         )
 
+    def decode(self, ids):
+        """
+        Decode token IDs back to text.
+        
+        Args:
+            ids: List of token IDs
+            
+        Returns:
+            Decoded text
+        """
+        if not self.base_tokenizer:
+            raise ValueError("No base_tokenizer loaded or trained.")
+        return self.base_tokenizer.decode(ids)
+
+    def get_vocab(self):
+        """
+        Get the vocabulary as a dict mapping tokens to IDs.
+        
+        Returns:
+            Dict mapping tokens to IDs
+        """
+        if not self.base_tokenizer:
+            raise ValueError("No base_tokenizer.")
+        return self.base_tokenizer.get_vocab()
+
+    def get_vocab_size(self):
+        """
+        Get the vocabulary size.
+        
+        Returns:
+            Vocabulary size
+        """
+        if not self.base_tokenizer:
+            return 0
+        return len(self.base_tokenizer.get_vocab())
+
+    def _get_tokenizer_type(self):
+        """Determine tokenizer type string"""
+        if self.em_mode == "bpe":
+            return "bpe"
+        elif self.multigram:
+            return "multigram" 
+        else:
+            return "standard"
+            
     def _get_pretokenizer(self):
         if self.base_tokenizer:
             return self.base_tokenizer.pre_tokenizer
@@ -367,297 +458,138 @@ class StandardUnigramLMTokenizer:
 
         if components:
             return components[0] if len(components) == 1 else Sequence(components)
-    
-    def _prepare_custom_vocab(self, custom_tokens: List[str], target_size: int) -> Set[str]:
-        """Prepare custom vocabulary with automatic size handling."""
-        # Remove duplicates while preserving order
-        seen = set()
-        unique_tokens = []
-        for token in custom_tokens:
-            if token not in seen:
-                unique_tokens.append(token)
-                seen.add(token)
-        
-        # Ensure special tokens are included
-        special_set = set(self.special_tokens)
-        non_special = [t for t in unique_tokens if t not in special_set]
-        
-        # Add all special tokens first
-        final_tokens = list(self.special_tokens)
-        
-        if len(unique_tokens) <= target_size:
-            # Use all tokens - no trimming needed
-            final_tokens.extend(non_special)
-            logger.info(f"Using all {len(unique_tokens)} custom tokens (target: {target_size})")
-        else:
-            # Trim to fit target size, keeping special tokens
-            keep_count = target_size - len(self.special_tokens)
-            if keep_count < 0:
-                logger.warning(f"Target size {target_size} is smaller than number of special tokens {len(self.special_tokens)}")
-                keep_count = 0
-            
-            final_tokens.extend(non_special[:keep_count])
-            logger.info(f"Trimmed custom vocabulary from {len(unique_tokens)} to {len(final_tokens)} tokens")
-        
-        return set(final_tokens)
-    
-    def _initial_vocab(self, train_files: List[str]) -> Set[str]:
-        """Bootstrap an initial token set - either from custom vocab file or HF trainer."""
-        if self.initial_vocab_tokens:
-            # Use custom vocabulary from file
-            logger.info(f"Loading custom initial vocabulary from {self.initial_vocab_tokens}")
-            custom_tokens = _load_custom_vocab_from_file(self.initial_vocab_tokens)
-            
-            # Prepare vocabulary with automatic size adjustment
-            seed_vocab_size = self.vocab_size * INITIAL_VOCAB_MULT_FACTOR
-            vocab = self._prepare_custom_vocab(custom_tokens, seed_vocab_size)
-            
-            logger.info(f"Custom vocabulary prepared: {len(vocab)} tokens (target: {seed_vocab_size})")
-            return vocab
 
-        elif self.use_sp_seed_vocab:
-            logger.info("Using SentencePiece suffix-array seeding for initial vocabulary...")
-            vocab = self._sp_seed_vocab(train_files)
-            # ensure specials are present
-            vocab.update(self.special_tokens)
-            logger.info(f"SP-seeded initial vocabulary size: {len(vocab)}")
-            return vocab
-        else:
-            # Use existing HF-based approach  
-            return self._initial_vocab_hf(train_files)
+    # ------------------------------------------------------------------
+    # thin wrappers that call _run_em then build the HF tokenizer
+    # ------------------------------------------------------------------
+    def _train_custom_em(self, corpus_files: List[str], output_path=None):
+        logging_path = output_path.split('.')[0] if output_path else None
+        self._run_em(corpus_files, per_lang=False, logging_path=logging_path)
+        return self._build_tokenizer(self.global_probs, output_path)
 
-    def _sp_seed_vocab(self, train_files: List[str]) -> Set[str]:
+    def _train_multigram(self, corpus_info: Dict[str, str], output_path=None):
+        logging_path = output_path.split('.')[0] if output_path else None
+        self._run_em(None, per_lang=True, corpus_info=corpus_info, logging_path=logging_path)
+        return self._build_tokenizer(self.global_probs, output_path)
+
+    def _train_hf(self, corpus_files, output_path=None):
         """
-        Use patched SP (num_sub_iterations=0, no seed file) to extract a seed vocabulary
-        via suffix-array seeding. Returns a set of token strings (HF-style).
+        Train using the HuggingFace UnigramTrainer.
         """
-        if spm is None:
-            raise RuntimeError("sentencepiece is not installed but use_sp_seed_vocab=True")
-
-        with tempfile.TemporaryDirectory() as td:
-            model_prefix = os.path.join(td, "seed")
-            input_arg = ",".join(train_files)
-            # Target a larger seed to prune later (like HF path does)
-            seed_vocab_size = self.vocab_size * INITIAL_VOCAB_MULT_FACTOR
-
-            spm.SentencePieceTrainer.Train(
-                input=input_arg,
-                model_prefix=model_prefix,
-                model_type="unigram",
-                vocab_size=seed_vocab_size,
-                # seed-only mode in your patched SP: num_sub_iterations = 0
-                num_sub_iterations=0,
-                normalization_rule_name="identity",
-                split_by_whitespace=self.whitespace_token_boundaries,
-                character_coverage=1.0,  # non-byte level; keep default alphabet
-                unk_id=0,
-                unk_piece=self.unk_token,
-            )
-
-            sp = spm.SentencePieceProcessor()
-            sp.load(model_prefix + ".model")
-
-            vocab = set()
-            for i in range(sp.get_piece_size()):
-                p = sp.id_to_piece(i)
-                if p in ("<s>", "</s>", "<pad>", self.unk_token):
-                    continue
-                vocab.add(_sp_piece_to_hf(p, self.byte_level))
-            return vocab
-    
-    def _initial_vocab_hf(self, train_files: List[str]) -> Set[str]:
-        """Original HF trainer to bootstrap an initial token set."""
+        logger.info("Using HuggingFace UnigramTrainer for standard Unigram.")
         tok = Tokenizer(Unigram())
         pretokenizer = self._get_pretokenizer()
         if pretokenizer:
             tok.pre_tokenizer = pretokenizer
-        seed_vocab_size = self.vocab_size * INITIAL_VOCAB_MULT_FACTOR
-        logger.info(f"Attempting to find seed vocab of size {seed_vocab_size}...")
+
+        #TODO: Add byte_fallback=self.byte_level when feature becomes available
         trainer = UnigramTrainer(
-            vocab_size=seed_vocab_size,
+            vocab_size=self.vocab_size,
             special_tokens=self.special_tokens,
-            unk_token=self.unk_token,
-            max_piece_length=MAX_BYTE_TOKEN_LEN if self.byte_level else MAX_CHAR_TOKEN_LEN,
-            # not strictly necessary since these will be added back later
+            unk_token=self.unk_token
+        )
+        tok.train(corpus_files, trainer)
+        self.base_tokenizer = tok
+
+        if output_path:
+            self.base_tokenizer.save(output_path)
+            
+            # Add metadata to the saved JSON
+            self._add_metadata_to_saved_tokenizer(output_path)
+            
+            logger.info(f"Saved HF-based standard tokenizer with metadata to {output_path}")
+        return self.base_tokenizer
+
+    def _train_bpe(self, corpus_files: List[str], output_path=None):
+        """Plain HF BPE trainer; shares most hyper‑params with EM modes."""
+        logger.info("Using HuggingFace BPETrainer.")
+        tok = Tokenizer(BPE(unk_token=self.unk_token))
+        pretokenizer = self._get_pretokenizer()
+        if pretokenizer:
+            tok.pre_tokenizer = pretokenizer
+
+        trainer = BpeTrainer(
+            vocab_size=self.vocab_size,
+            min_frequency=2,
+            special_tokens=self.special_tokens,
             initial_alphabet=ByteLevel.alphabet() if self.byte_level else [],
         )
-        tok.train(train_files, trainer)
-        init_vocab = tok.get_vocab()
-        logger.info(f"Initial vocabulary size: {len(init_vocab)}")
-        
-        return set(init_vocab.keys())
-
-    def _compute_token_loss(
-        self,
-        token: str,
-        counts_dict: Dict[str, float],
-        prob_dict: Dict[str, float], 
-        alternatives_dict: Optional[Dict] = None
-    ) -> float:
-        """
-        Compute loss for a single token using the configured pruning criterion.
-        
-        Args:
-            token: Token to compute loss for
-            counts_dict: Count dictionary for this token's context
-            prob_dict: Probability dictionary for this token's context  
-            alternatives_dict: Alternative sequences dictionary (for exact loss only)
-        
-        Returns:
-            Loss value for the token
-        """
-        if self.pruning_criterion == "probability":
-            return prob_dict[token]
-        elif self.pruning_criterion == "approx_loss":
-            return counts_dict[token] * math.log(max(prob_dict[token], 1e-30))
-        else:  # exact_loss
-            return _compute_loss_with_alternative_sequences(
-                token, counts_dict, alternatives_dict, prob_dict, self.unk_token
-            )
-
-    def _compute_standard_pruning_scores(
-        self,
-        state: EMState,
-        counts: Dict[str, float],
-        alternative_sequences: Optional[Dict] = None
-    ) -> List[Tuple[str, float]]:
-        """
-        Compute pruning scores for standard (non-multigram) case.
-        Returns list of (token, score) tuples ready for _tokens_to_remove.
-        """
-        under_consideration = state.all_tokens - state.pinned
-        return [
-            (tk, self._compute_token_loss(tk, counts, state.p_token, alternative_sequences))
-            for tk in under_consideration
-        ]
-
-    def _compute_multigram_pruning_scores(
-        self,
-        state: EMState,
-        per_lang_losses: Dict[str, List[Tuple[str, float]]],
-        dataset_sizes: Optional[Dict[str, float]] = None
-    ) -> List[Tuple[str, float]]:
-        """
-        Compute aggregated pruning scores from pre-computed per-language losses.
-        
-        Args:
-            state: EM state containing language codes and mixture weights
-            per_lang_losses: Dict[lang_code, List[Tuple[token, loss]]] from _compute_per_language_losses
-            dataset_sizes: Optional dataset sizes for normalization
-        
-        Returns:
-            List[Tuple[token, aggregated_loss]] ready for _tokens_to_remove
-        """
-        # Convert per-language losses to a more efficient lookup structure
-        per_lang_loss_dict = {
-            lc: {token: loss for token, loss in losses} 
-            for lc, losses in per_lang_losses.items()
-        }
-        
-        # Get tokens to consider (assuming all languages have same token set)
-        under_consideration = set(per_lang_loss_dict[state.lang_codes[0]].keys())
-        
-        # Aggregate losses across languages
-        aggregated_losses = []
-        for tk in under_consideration:
-            total_loss = 0.0
-            for lc in state.lang_codes:
-                lang_loss = per_lang_loss_dict[lc][tk]
-                
-                # Apply dataset size normalization if enabled
-                if self.dataset_size_normalization and dataset_sizes and dataset_sizes.get(lc, 0) > 0:
-                    normalized_lang_loss = lang_loss / dataset_sizes[lc]
-                else:
-                    normalized_lang_loss = lang_loss
-                    
-                total_loss += self.mixture_weights[lc] * normalized_lang_loss
+        tok.train(corpus_files, trainer)
+        self.base_tokenizer = tok
+        if output_path:
+            tok.save(output_path)
             
-            aggregated_losses.append((tk, total_loss))
+            # Add metadata to the saved JSON
+            self._add_metadata_to_saved_tokenizer(output_path)
+            
+            logger.info("Saved BPE tokenizer with metadata to %s", output_path)
+        return tok
+
+    def train(self, corpus_files, output_path=None, load_if_exists=False, corpus_info=None):
+        """
+        Train a Unigram tokenizer using the specified approach.
         
-        return aggregated_losses
-
-    def _compute_per_language_losses(
-        self,
-        under_consideration: Set[str],
-        lang_counts: Dict[str, Dict[str, float]],
-        lang_alternative_sequences: Optional[Dict[str, Dict]] = None
-    ) -> Dict[str, List[Tuple[str, float]]]:
+        Args:
+            corpus_files: List of corpus files to train on
+            output_path: Path to save the tokenizer
+            load_if_exists: Whether to load existing files if present
+            corpus_info: Dict mapping language codes to corpus info (required for multigram)
+            
+        Returns:
+            The trained tokenizer
         """
-        Compute raw per-language losses without aggregation for intersection pruning.
-        Returns Dict[lang_code, List[Tuple[token, loss]]]
-        """
-        return {
-            lc: [
-                (tk, self._compute_token_loss(
-                    tk, lang_counts[lc], self.per_lang_probs[lc],
-                    lang_alternative_sequences[lc] if lang_alternative_sequences else None
-                ))
-                for tk in under_consideration
-            ]
-            for lc in self.lang_codes
-        }
+        if load_if_exists and output_path and os.path.isfile(output_path):
+            logger.info(f"Loading existing tokenizer from {output_path}")
+            self.base_tokenizer = Tokenizer.from_file(output_path)
+                        
+            return self.base_tokenizer
 
-    @staticmethod
-    def _normalize_unk_special(counts: Dict[str, float], unk_token: str, unk_prior: float) -> Dict[str, float]:
-        """Convert raw counts to a prob dist with frozen unk_prior."""
-        total = sum(counts.values()) - counts.get(unk_token, 0.0)
-        if total <= 0:
-            uniform = 1.0 / max(1, len(counts) - 1)
-            return {
-                t: (unk_prior if t == unk_token else uniform * (1 - unk_prior))
-                for t in counts
-            }
-        scale = 1.0 - unk_prior
-        return {
-            t: (unk_prior if t == unk_token else counts[t] / total * scale)
-            for t in counts
-        }
-
-    @staticmethod
-    def _normalize(counts: Dict[str, float]) -> Dict[str, float]:
-        """Convert raw counts to a prob dist with frozen unk_prior."""
-        total = sum(counts.values())
-        if total <= 0:
-            uniform = 1.0 / max(1, len(counts))
-            return {t: uniform for t in counts}
-        return {t: counts[t] / total for t in counts}
-
-    @staticmethod
-    def _tokens_to_remove(token_loss: List[Tuple[str, float]], k_drop: int):
-        if k_drop <= 0:
-            return set()
-        
-        token_loss.sort(key=lambda x: x[1])
-        to_remove = {tk for tk, _ in token_loss[:k_drop]}
-        return to_remove
-
-    def _build_final_vocab(
-        self, p_token: Dict[str, float]
-    ) -> Tuple[List[Tuple[str, float]], int]:
-        sorted_items = sorted(p_token.items(), key=lambda x: x[1], reverse=True)
-        total_prob = sum([pr for _, pr in sorted_items]) 
-        sorted_items = [(tk, pr / total_prob) for tk, pr in sorted_items]
-        vocab_list = []
-        special = []
-        for tk, pr in sorted_items:
-            log_sc = math.log(max(pr, MIN_TOKEN_PROB))
-            if tk in self.special_tokens:
-                special.append((tk, log_sc))
-            else:
-                vocab_list.append((tk, log_sc))
-        vocab_list = special + vocab_list
-        unk_id = next(i for i, (tk, _) in enumerate(vocab_list) if tk == self.unk_token)
-        return vocab_list, unk_id
-
-    def _compute_intersection_pruning_tokens(self, under_consideration, per_lang_losses, k_drop):
-        """
-        Find tokens to prune using rank-based intersection approach.
-        Uses shared logic from utils.compute_intersection_pruning_tokens.
-        """
-        from code.utils import compute_intersection_pruning_tokens
-        return compute_intersection_pruning_tokens(
-            per_lang_losses, k_drop, self.lang_codes, under_consideration
+        # Collect initial metadata
+        self._training_metadata.update(
+            self._collect_training_metadata(corpus_files, corpus_info)
         )
+        self._training_metadata["start_time"] = time.time()
+        
+        # Track training metrics
+        self._training_metadata["training_metrics"] = {
+            "initial_vocab_size": None,
+            "pruned_per_iteration": [],
+            "convergence": {"l1_deltas": [], "unk_probs": []},
+            "training_time": None,
+            "final_loss": None,
+            "pruning_criterion": self.pruning_criterion
+        }
+
+        token_level = "byte" if self.byte_level else "character"
+        logger.info(f"Training new tokenizer with EM mode: {self.em_mode} at {token_level}-level")
+        
+        # Different training approaches
+        if self.em_mode == "bpe":
+            result = self._train_bpe(corpus_files, output_path)
+
+        elif self.em_mode == "hf" and not self.multigram:
+            # ============= HF Approach =============
+            result = self._train_hf(corpus_files, output_path)
+            
+        elif self.multigram:
+            # ============= Multigram Approach =============
+            if not corpus_info:
+                raise ValueError("corpus_info is required for multigram training")
+            result = self._train_multigram(corpus_info, output_path)
+            
+        elif self.em_mode in ["hard", "soft"]:
+            # ============= Custom EM Approach (hard/soft) =============
+            result = self._train_custom_em(corpus_files, output_path)
+        else:
+            raise ValueError("Invalid settings for StandardUnigramLMTokenizer: no EM mode specified")
+        
+        # Finalize metadata
+        if self._training_metadata["start_time"]:
+            self._training_metadata["training_metrics"]["training_time"] = time.time() - self._training_metadata["start_time"]
+        
+        self._update_training_results(self._training_metadata["training_metrics"])
+        
+        return result
 
     # ------------------------------------------------------------------
     # main EM routine (shared by standard & multigram)
@@ -675,33 +607,43 @@ class StandardUnigramLMTokenizer:
         # Store initial vocab size in metadata
         if hasattr(self, '_training_metadata') and "training_metrics" in self._training_metadata:
             self._training_metadata["training_metrics"]["initial_vocab_size"] = len(state.all_tokens)
+
+        if self.use_sp_em:
+            self._temp_dir = tempfile.mkdtemp()
+            # Register a cleanup function to remove the directory when the program exits.
+            atexit.register(shutil.rmtree, self._temp_dir, ignore_errors=True)
         
+        processed_file_paths = None
         for it in range(self.num_iterations):
             logger.info("EM %d/%d – starting | vocab=%d | to trim=%d | Pruning criterion: %s", 
                        it + 1, self.num_iterations, len(state.all_tokens), state.k_total, self.pruning_criterion)  
 
             if self.use_sp_em:
+                logger.info("Using SentencePiece for EM computation...")
                 if state.per_lang:
                     # per-language re-estimation, then mix
                     lang_probs = {}
                     for lc, f in zip(state.lang_codes, state.corpus_files):
-                        lang_probs[lc] = self._sp_fixed_em_once([f], state.all_tokens)
-                    self.per_lang_probs = lang_probs
+                        lang_probs[lc], processed_file_paths = self._sp_em(f, self.per_lang_probs[lc], processed_file_paths)
                     state.p_token = {
                         tk: sum(self.mixture_weights[lc] * self.per_lang_probs[lc].get(tk, 0.0)
                                 for lc in state.lang_codes)
                         for tk in state.all_tokens
                     }
                     observed_tokens = set(state.all_tokens)
+                    lang_counts = lang_probs
                     unk_count = sum(self.per_lang_probs[lc].get(self.unk_token, 0.0) for lc in state.lang_codes)
                     total_counts = 1.0  # probabilities-as-counts (constant factor)
                 else:
                     # single-corpus re-estimation
-                    state.p_token = self._sp_fixed_em_once(state.corpus_files, state.all_tokens)
+                    state.p_token, processed_file_paths = self._sp_em(state.corpus_files, state.p_token, processed_file_paths)
+                    counts = state.p_token
                     observed_tokens = set(state.all_tokens)
                     unk_count = state.p_token.get(self.unk_token, 0.0)
                     total_counts = 1.0  # probabilities-as-counts    
-            else:      
+            else:   
+                logger.info("Using custom implementation for EM computation...")
+   
                 if state.per_lang:
                     lang_counts = {lc: {tk: 0.0 for tk in state.all_tokens} for lc in state.lang_codes}
                     unk_count = 0
@@ -911,6 +853,414 @@ class StandardUnigramLMTokenizer:
             k_step=k_step
         )
 
+    def _baseline_tokens(self, files: List[str]) -> Set[str]:
+        return (
+            get_baseline_bytes()[0]
+            if self.byte_level
+            else set(get_baseline_characters(files, min_occurence_threshold=self.min_char_occurence_threshold)[0])
+        )
+    
+    def _prepare_custom_vocab(self, custom_tokens: List[str], target_size: int) -> Set[str]:
+        """Prepare custom vocabulary with automatic size handling."""
+        # Remove duplicates while preserving order
+        seen = set()
+        unique_tokens = []
+        for token in custom_tokens:
+            if token not in seen:
+                unique_tokens.append(token)
+                seen.add(token)
+        
+        # Ensure special tokens are included
+        special_set = set(self.special_tokens)
+        non_special = [t for t in unique_tokens if t not in special_set]
+        
+        # Add all special tokens first
+        final_tokens = list(self.special_tokens)
+        
+        if len(unique_tokens) <= target_size:
+            # Use all tokens - no trimming needed
+            final_tokens.extend(non_special)
+            logger.info(f"Using all {len(unique_tokens)} custom tokens (target: {target_size})")
+        else:
+            # Trim to fit target size, keeping special tokens
+            keep_count = target_size - len(self.special_tokens)
+            if keep_count < 0:
+                logger.warning(f"Target size {target_size} is smaller than number of special tokens {len(self.special_tokens)}")
+                keep_count = 0
+            
+            final_tokens.extend(non_special[:keep_count])
+            logger.info(f"Trimmed custom vocabulary from {len(unique_tokens)} to {len(final_tokens)} tokens")
+        
+        return set(final_tokens)
+    
+    def _initial_vocab(self, train_files: List[str]) -> Set[str]:
+        """Bootstrap an initial token set - either from custom vocab file or HF trainer."""
+        if self.initial_vocab_tokens:
+            # Use custom vocabulary from file
+            logger.info(f"Loading custom initial vocabulary from {self.initial_vocab_tokens}")
+            custom_tokens = _load_custom_vocab_from_file(self.initial_vocab_tokens)
+            
+            # Prepare vocabulary with automatic size adjustment
+            seed_vocab_size = self.vocab_size * INITIAL_VOCAB_MULT_FACTOR
+            vocab = self._prepare_custom_vocab(custom_tokens, seed_vocab_size)
+            
+            logger.info(f"Custom vocabulary prepared: {len(vocab)} tokens (target: {seed_vocab_size})")
+            return vocab
+
+        elif self.use_sp_seed_vocab:
+            logger.info("Using SentencePiece suffix-array seeding for initial vocabulary...")
+            vocab = self._sp_seed_vocab(train_files)
+            # ensure specials are present
+            vocab.update(self.special_tokens)
+            logger.info(f"SP-seeded initial vocabulary size: {len(vocab)}")
+            return vocab
+        else:
+            # Use existing HF-based approach  
+            return self._initial_vocab_hf(train_files)
+
+    def _sp_seed_vocab(self, train_files: List[str]) -> Set[str]:
+        """
+        Use patched SP (num_sub_iterations=0, no seed file) to extract a seed vocabulary
+        via suffix-array seeding. Returns a set of token strings (HF-style).
+        """
+        
+        if spm is None:
+            raise RuntimeError("sentencepiece is not installed but use_sp_seed_vocab=True")
+
+        seed_vocab_size = self.vocab_size * INITIAL_VOCAB_MULT_FACTOR
+
+        with tempfile.TemporaryDirectory() as tmpdir:
+            out_prefix = os.path.join(tmpdir, "model")
+
+            # 2. Construct the spm_train command
+            command = [
+                "spm_train",
+                f"--input={','.join(train_files)}",
+                f"--model_prefix={out_prefix}",
+                "--model_type=unigram",
+                "--normalization_rule_name=identity",
+                
+                f"--vocab_size={seed_vocab_size}",
+                f"--seed_sentencepiece_size={seed_vocab_size}",
+                f"--max_sentencepiece_length={MAX_BYTE_TOKEN_LEN if self.byte_level else MAX_CHAR_TOKEN_LEN}",
+                "--split_by_whitespace=true",  
+                # -----------------------
+
+                f"--num_sub_iterations=0",
+                f"--unk_piece={self.unk_token}",
+                "--unk_id=0",
+                "--num_threads=16",
+            ]
+
+            # 3. Execute the command
+            logger.info(f"Running SentencePiece CLI command:\n{' '.join(command)}")
+            output = subprocess.run(command, check=True, capture_output=True, text=True, encoding='utf-8')
+            logger.info("SentencePiece seed creation successful.")
+            logger.info(f"SentencePiece STDOUT: {output.stdout}")
+            logger.info(f"SentencePiece STDERR (logs + errors): : {output.stderr}")
+
+            sp = spm.SentencePieceProcessor()
+            sp.load(out_prefix + ".model")
+
+            vocab = set()
+            for i in range(sp.get_piece_size()):
+                p = sp.id_to_piece(i)
+                vocab.add(sp_piece_to_hf(p))
+            logger.info(f"Seed vocab sample: {random.sample(vocab, 50)}")
+            return vocab
+    
+    def _initial_vocab_hf(self, train_files: List[str]) -> Set[str]:
+        """Original HF trainer to bootstrap an initial token set."""
+        tok = Tokenizer(Unigram())
+        pretokenizer = self._get_pretokenizer()
+        if pretokenizer:
+            tok.pre_tokenizer = pretokenizer
+        seed_vocab_size = self.vocab_size * INITIAL_VOCAB_MULT_FACTOR
+        logger.info(f"Attempting to find seed vocab of size {seed_vocab_size}...")
+        trainer = UnigramTrainer(
+            vocab_size=seed_vocab_size,
+            special_tokens=self.special_tokens,
+            unk_token=self.unk_token,
+            max_piece_length=MAX_BYTE_TOKEN_LEN if self.byte_level else MAX_CHAR_TOKEN_LEN,
+            # not strictly necessary since these will be added back later
+            initial_alphabet=ByteLevel.alphabet() if self.byte_level else [],
+        )
+        tok.train(train_files, trainer)
+        init_vocab = tok.get_vocab()
+        logger.info(f"Initial vocabulary size: {len(init_vocab)}")
+        
+        return set(init_vocab.keys())
+
+    def _sp_em(
+            self,
+            corpus_file: Union[str, List[str]],
+            vocab_dict: List[Tuple[str, int]],
+            processed_file_paths: List[str]
+        ) -> Dict[str, float]:       
+            # Check if spm_train is available
+            if spm is None:
+                raise RuntimeError("spm_train executable not found. Make sure sentencepiece is installed and in your PATH.")
+
+            tmpdir = self._temp_dir
+            out_prefix = os.path.join(tmpdir, "model")
+            vocab_path = os.path.join(tmpdir, "vocab.tsv")
+            # 1. Prepare the vocabulary file
+            token_count = _write_sp_seed_vocab_file([(t, np.log(p)) for t,p in vocab_dict.items()], vocab_path, self.unk_token)
+            
+            # FIX Remove!
+            corpus_file = corpus_file[:2]
+            if not processed_file_paths:
+                if isinstance(corpus_file, str):
+                    logger.info("Processing a single file in the main thread.")
+                    hf_processed_text_path = os.path.join(tmpdir, f"processed_{os.path.basename(corpus_file)}")
+                    write_hf_bytelevel_corpus_optimized(corpus_file, hf_processed_text_path, self._get_pretokenizer())
+
+                    processed_file_paths = [hf_processed_text_path]
+                else:
+                    num_workers = min(min(os.cpu_count() or 1, 20), len(corpus_file))
+                    print(f"Using {num_workers} worker processes.")
+
+                    # Prepare arguments for each worker
+                    worker_args = [(path, tmpdir, self._get_pretokenizer(), i) for i, path in enumerate(corpus_file)]
+
+                    with multiprocessing.Pool(processes=num_workers) as pool:
+                        processed_file_paths = pool.map(_process_file_worker, worker_args)
+ 
+            hf_processed_text_path = ','.join(processed_file_paths)
+
+            # The exact vocab size must account for meta pieces
+            # <unk>, <s> and </s> 
+            expected_vocab_size = token_count + 3
+            
+            # 2. Construct the spm_train command
+            command = [
+                "spm_train",
+                f"--input={hf_processed_text_path}",
+                f"--model_prefix={out_prefix}",
+                "--model_type=unigram",
+                "--normalization_rule_name=identity",
+                
+                f"--seed_sentencepieces_file={vocab_path}",
+                f"--vocab_size={expected_vocab_size}",
+                # -----------------------
+
+                f"--num_sub_iterations=1",
+                f"--unk_piece={self.unk_token}",
+                "--unk_id=0",
+                "--split_by_whitespace=false",  # handled by write_hf_bytelevel_corpus 
+                "--num_threads=16",
+            ]
+            # if self.whitespace_token_boundaries:
+            #     command.append("--split_by_whitespace=true")
+
+            # 3. Execute the command
+            logger.info(f"Running SentencePiece CLI command:\n{' '.join(command)}")
+            output = subprocess.run(command, check=True, capture_output=True, text=True, encoding='utf-8')
+            logger.info("SentencePiece training successful.")
+            logger.info(f"SentencePiece STDOUT: {output.stdout}")
+            logger.info(f"SentencePiece STDERR (logs + errors): : {output.stderr}")
+
+            # 4. Load the resulting model and extract probabilities
+            sp = spm.SentencePieceProcessor()
+            sp.load(out_prefix + ".model")
+
+            # 1) Collect raw log-scores (SentencePiece scores are already log-scale).
+            token_logps = {}
+            additional_tokens = set()
+            for i in range(sp.get_piece_size()):
+                p = sp.id_to_piece(i)
+                p_hf = p  # sp_piece_to_hf(p)
+                if p_hf not in vocab_dict:
+                    additional_tokens.add(p_hf)
+                if p_hf in set(SPECIAL_TOKENS.values()) | {self.unk_token}:
+                    logp = float(vocab_dict[p_hf])
+                else:
+                    logp = float(sp.get_score(i))  # SP log-score
+                token_logps[p_hf] = logp
+            if additional_tokens:
+                logger.warning(f"unknown tokens: {additional_tokens}")
+            # 2) Ensure every base token is present; default to base log-prob if missing.
+            missing_tokens = set()
+            for t in vocab_dict.keys():
+
+                if t not in token_logps:
+                    missing_tokens.add(t)
+                    token_logps[t] = float(vocab_dict[t])
+            if missing_tokens:
+                logger.warning(f"Tokens {missing_tokens} not in sentencepiece model; defaulting to base "
+                               f"tokenizer log-prob {vocab_dict[t]:.5f}")
+            # 3) Normalize in log-space: log p_i := log p_i - logsumexp(log p)
+            logvals = np.fromiter(token_logps.values(), dtype=np.float64)
+            m = np.max(logvals)
+            # guard against pathological all -inf (unlikely); fallback to uniform
+            if not np.isfinite(m):
+                uniform = -np.log(len(token_logps))
+                token_logps = {k: uniform for k in token_logps.keys()}
+            else:
+                logZ = m + np.log(np.sum(np.exp(logvals - m)))
+                token_logps = {k: float(v - logZ) for k, v in token_logps.items()}
+
+            return {t: np.exp(lp) for t, lp in token_logps.items()}, processed_file_paths  # normalized log-probabilities
+
+    def _compute_intersection_pruning_tokens(self, under_consideration, per_lang_losses, k_drop):
+        """
+        Find tokens to prune using rank-based intersection approach.
+        Uses shared logic from utils.compute_intersection_pruning_tokens.
+        """
+        from code.utils import compute_intersection_pruning_tokens
+        return compute_intersection_pruning_tokens(
+            per_lang_losses, k_drop, self.lang_codes, under_consideration
+        )
+
+    def _compute_token_loss(
+        self,
+        token: str,
+        counts_dict: Dict[str, float],
+        prob_dict: Dict[str, float], 
+        alternatives_dict: Optional[Dict] = None
+    ) -> float:
+        """
+        Compute loss for a single token using the configured pruning criterion.
+        
+        Args:
+            token: Token to compute loss for
+            counts_dict: Count dictionary for this token's context
+            prob_dict: Probability dictionary for this token's context  
+            alternatives_dict: Alternative sequences dictionary (for exact loss only)
+        
+        Returns:
+            Loss value for the token
+        """
+        if self.pruning_criterion == "probability":
+            return prob_dict[token]
+        elif self.pruning_criterion == "approx_loss":
+            return counts_dict[token] * math.log(max(prob_dict[token], 1e-30))
+        else:  # exact_loss
+            return _compute_loss_with_alternative_sequences(
+                token, counts_dict, alternatives_dict, prob_dict, self.unk_token
+            )
+
+    def _compute_standard_pruning_scores(
+        self,
+        state: EMState,
+        counts: Dict[str, float],
+        alternative_sequences: Optional[Dict] = None
+    ) -> List[Tuple[str, float]]:
+        """
+        Compute pruning scores for standard (non-multigram) case.
+        Returns list of (token, score) tuples ready for _tokens_to_remove.
+        """
+        under_consideration = state.all_tokens - state.pinned
+        return [
+            (tk, self._compute_token_loss(tk, counts, state.p_token, alternative_sequences))
+            for tk in under_consideration
+        ]
+
+    def _compute_multigram_pruning_scores(
+        self,
+        state: EMState,
+        per_lang_losses: Dict[str, List[Tuple[str, float]]],
+        dataset_sizes: Optional[Dict[str, float]] = None
+    ) -> List[Tuple[str, float]]:
+        """
+        Compute aggregated pruning scores from pre-computed per-language losses.
+        
+        Args:
+            state: EM state containing language codes and mixture weights
+            per_lang_losses: Dict[lang_code, List[Tuple[token, loss]]] from _compute_per_language_losses
+            dataset_sizes: Optional dataset sizes for normalization
+        
+        Returns:
+            List[Tuple[token, aggregated_loss]] ready for _tokens_to_remove
+        """
+        # Convert per-language losses to a more efficient lookup structure
+        per_lang_loss_dict = {
+            lc: {token: loss for token, loss in losses} 
+            for lc, losses in per_lang_losses.items()
+        }
+        
+        # Get tokens to consider (assuming all languages have same token set)
+        under_consideration = set(per_lang_loss_dict[state.lang_codes[0]].keys())
+        
+        # Aggregate losses across languages
+        aggregated_losses = []
+        for tk in under_consideration:
+            total_loss = 0.0
+            for lc in state.lang_codes:
+                lang_loss = per_lang_loss_dict[lc][tk]
+                
+                # Apply dataset size normalization if enabled
+                if self.dataset_size_normalization and dataset_sizes and dataset_sizes.get(lc, 0) > 0:
+                    normalized_lang_loss = lang_loss / dataset_sizes[lc]
+                else:
+                    normalized_lang_loss = lang_loss
+                    
+                total_loss += self.mixture_weights[lc] * normalized_lang_loss
+            
+            aggregated_losses.append((tk, total_loss))
+        
+        return aggregated_losses
+
+    def _compute_per_language_losses(
+        self,
+        under_consideration: Set[str],
+        lang_counts: Dict[str, Dict[str, float]],
+        lang_alternative_sequences: Optional[Dict[str, Dict]] = None
+    ) -> Dict[str, List[Tuple[str, float]]]:
+        """
+        Compute raw per-language losses without aggregation for intersection pruning.
+        Returns Dict[lang_code, List[Tuple[token, loss]]]
+        """
+        return {
+            lc: [
+                (tk, self._compute_token_loss(
+                    tk, lang_counts[lc], self.per_lang_probs[lc],
+                    lang_alternative_sequences[lc] if lang_alternative_sequences else None
+                ))
+                for tk in under_consideration
+            ]
+            for lc in self.lang_codes
+        }
+
+    def _build_final_vocab(
+        self, p_token: Dict[str, float]
+    ) -> Tuple[List[Tuple[str, float]], int]:
+        sorted_items = sorted(p_token.items(), key=lambda x: x[1], reverse=True)
+        total_prob = sum([pr for _, pr in sorted_items]) 
+        sorted_items = [(tk, pr / total_prob) for tk, pr in sorted_items]
+        vocab_list = []
+        special = []
+        for tk, pr in sorted_items:
+            log_sc = math.log(max(pr, MIN_TOKEN_PROB))
+            if tk in self.special_tokens:
+                special.append((tk, log_sc))
+            else:
+                vocab_list.append((tk, log_sc))
+        vocab_list = special + vocab_list
+        unk_id = next(i for i, (tk, _) in enumerate(vocab_list) if tk == self.unk_token)
+        return vocab_list, unk_id
+
+    # ------------------------------------------------------------------
+    # helper to create the final HF tokenizer & save it
+    # ------------------------------------------------------------------
+    def _build_tokenizer(self, probs: Dict[str, float], output_path):
+        vocab_list, unk_id = self._build_final_vocab(probs)
+        tok = _build_hf_tokenizer_from_probs(
+            vocab_list,
+            unk_id,
+            pretokenizer=self._get_pretokenizer()
+        )
+        self.base_tokenizer = tok
+        if output_path:
+            Path(output_path).parent.mkdir(parents=True, exist_ok=True)
+            tok.save(output_path)
+            
+            # Add metadata to the saved JSON
+            self._add_metadata_to_saved_tokenizer(output_path)
+            
+            logger.info("Tokenizer with metadata saved to %s", output_path)
+        return tok
+
     def _log_iteration_diagnostics(
         self,
         iteration: int,
@@ -940,159 +1290,6 @@ class StandardUnigramLMTokenizer:
                 d = 0.5 * sum(abs(self.per_lang_probs[lc].get(tk, 0) - state.prev_lang_probs[lc].get(tk, 0)) 
                              for tk in state.all_tokens)
                 logger.info("      [%s] UNK=%.8g | Δ‑dist=%.3e", lc, up, d)
-
-    # ------------------------------------------------------------------
-    # thin wrappers that call _run_em then build the HF tokenizer
-    # ------------------------------------------------------------------
-    def _train_custom_em(self, corpus_files: List[str], output_path=None):
-        logging_path = output_path.split('.')[0] if output_path else None
-        self._run_em(corpus_files, per_lang=False, logging_path=logging_path)
-        return self._build_tokenizer(self.global_probs, output_path)
-
-    def _train_multigram(self, corpus_info: Dict[str, str], output_path=None):
-        logging_path = output_path.split('.')[0] if output_path else None
-        self._run_em(None, per_lang=True, corpus_info=corpus_info, logging_path=logging_path)
-        return self._build_tokenizer(self.global_probs, output_path)
-
-    def _train_hf(self, corpus_files, output_path=None):
-        """
-        Train using the HuggingFace UnigramTrainer.
-        """
-        logger.info("Using HuggingFace UnigramTrainer for standard Unigram.")
-        tok = Tokenizer(Unigram())
-        pretokenizer = self._get_pretokenizer()
-        if pretokenizer:
-            tok.pre_tokenizer = pretokenizer
-
-        #TODO: Add byte_fallback=self.byte_level when feature becomes available
-        trainer = UnigramTrainer(
-            vocab_size=self.vocab_size,
-            special_tokens=self.special_tokens,
-            unk_token=self.unk_token
-        )
-        tok.train(corpus_files, trainer)
-        self.base_tokenizer = tok
-
-        if output_path:
-            self.base_tokenizer.save(output_path)
-            
-            # Add metadata to the saved JSON
-            self._add_metadata_to_saved_tokenizer(output_path)
-            
-            logger.info(f"Saved HF-based standard tokenizer with metadata to {output_path}")
-        return self.base_tokenizer
-
-    def _train_bpe(self, corpus_files: List[str], output_path=None):
-        """Plain HF BPE trainer; shares most hyper‑params with EM modes."""
-        logger.info("Using HuggingFace BPETrainer.")
-        tok = Tokenizer(BPE(unk_token=self.unk_token))
-        pretokenizer = self._get_pretokenizer()
-        if pretokenizer:
-            tok.pre_tokenizer = pretokenizer
-
-        trainer = BpeTrainer(
-            vocab_size=self.vocab_size,
-            min_frequency=2,
-            special_tokens=self.special_tokens,
-            initial_alphabet=ByteLevel.alphabet() if self.byte_level else [],
-        )
-        tok.train(corpus_files, trainer)
-        self.base_tokenizer = tok
-        if output_path:
-            tok.save(output_path)
-            
-            # Add metadata to the saved JSON
-            self._add_metadata_to_saved_tokenizer(output_path)
-            
-            logger.info("Saved BPE tokenizer with metadata to %s", output_path)
-        return tok
-
-    def train(self, corpus_files, output_path=None, load_if_exists=False, corpus_info=None):
-        """
-        Train a Unigram tokenizer using the specified approach.
-        
-        Args:
-            corpus_files: List of corpus files to train on
-            output_path: Path to save the tokenizer
-            load_if_exists: Whether to load existing files if present
-            corpus_info: Dict mapping language codes to corpus info (required for multigram)
-            
-        Returns:
-            The trained tokenizer
-        """
-        if load_if_exists and output_path and os.path.isfile(output_path):
-            logger.info(f"Loading existing tokenizer from {output_path}")
-            self.base_tokenizer = Tokenizer.from_file(output_path)
-                        
-            return self.base_tokenizer
-
-        # Collect initial metadata
-        self._training_metadata.update(
-            self._collect_training_metadata(corpus_files, corpus_info)
-        )
-        self._training_metadata["start_time"] = time.time()
-        
-        # Track training metrics
-        self._training_metadata["training_metrics"] = {
-            "initial_vocab_size": None,
-            "pruned_per_iteration": [],
-            "convergence": {"l1_deltas": [], "unk_probs": []},
-            "training_time": None,
-            "final_loss": None,
-            "pruning_criterion": self.pruning_criterion
-        }
-
-        token_level = "byte" if self.byte_level else "character"
-        logger.info(f"Training new tokenizer with EM mode: {self.em_mode} at {token_level}-level")
-        
-        # Different training approaches
-        if self.em_mode == "bpe":
-            result = self._train_bpe(corpus_files, output_path)
-
-        elif self.em_mode == "hf" and not self.multigram:
-            # ============= HF Approach =============
-            result = self._train_hf(corpus_files, output_path)
-            
-        elif self.multigram:
-            # ============= Multigram Approach =============
-            if not corpus_info:
-                raise ValueError("corpus_info is required for multigram training")
-            result = self._train_multigram(corpus_info, output_path)
-            
-        elif self.em_mode in ["hard", "soft"]:
-            # ============= Custom EM Approach (hard/soft) =============
-            result = self._train_custom_em(corpus_files, output_path)
-        else:
-            raise ValueError("Invalid settings for StandardUnigramLMTokenizer: no EM mode specified")
-        
-        # Finalize metadata
-        if self._training_metadata["start_time"]:
-            self._training_metadata["training_metrics"]["training_time"] = time.time() - self._training_metadata["start_time"]
-        
-        self._update_training_results(self._training_metadata["training_metrics"])
-        
-        return result
-
-    # ------------------------------------------------------------------
-    # helper to create the final HF tokenizer & save it
-    # ------------------------------------------------------------------
-    def _build_tokenizer(self, probs: Dict[str, float], output_path):
-        vocab_list, unk_id = self._build_final_vocab(probs)
-        tok = _build_hf_tokenizer_from_probs(
-            vocab_list,
-            unk_id,
-            pretokenizer=self._get_pretokenizer()
-        )
-        self.base_tokenizer = tok
-        if output_path:
-            Path(output_path).parent.mkdir(parents=True, exist_ok=True)
-            tok.save(output_path)
-            
-            # Add metadata to the saved JSON
-            self._add_metadata_to_saved_tokenizer(output_path)
-            
-            logger.info("Tokenizer with metadata saved to %s", output_path)
-        return tok
     
     def _add_metadata_to_saved_tokenizer(self, output_path):
         """Save metadata to a separate .metadata.json file alongside the tokenizer"""
@@ -1194,15 +1391,7 @@ class StandardUnigramLMTokenizer:
         corpus_metadata["total_lines"] = total_lines
         
         return corpus_metadata
-    
-    def _get_tokenizer_type(self):
-        """Determine tokenizer type string"""
-        if self.em_mode == "bpe":
-            return "bpe"
-        elif self.multigram:
-            return "multigram" 
-        else:
-            return "standard"
+
     
     def _update_training_results(self, training_metrics):
         """Update training results in metadata"""
@@ -1230,89 +1419,40 @@ class StandardUnigramLMTokenizer:
             return {lc: uniform for lc in lang_codes}
         return {lc: w / s for lc, w in weights.items()}
 
-    def load(self, base_path):
-        """
-        Load a saved tokenizer
-        
-        Args:
-            base_path: Path to the tokenizer file
-        """
-        self.base_tokenizer, self.byte_level = load_tokenizer_with_mode(base_path)
-        self.vocab_size = len(self.base_tokenizer.get_vocab())
-        with open(base_path, encoding="utf-8") as fh:
-            data = json.load(fh)
-    
-        # 3) recover unigram scores --------------------------------------
-        if data.get("model", {}).get("type") == "Unigram":
-            vocab_pairs = data["model"]["vocab"]      # list [piece, score]
-            # scores are log‑probs (SentencePiece convention)
-            tokens, log_scores = zip(*vocab_pairs)
-            probs = [math.exp(s) for s in log_scores]
-            Z = sum(probs)
-            self.global_probs = {t: p / Z for t, p in zip(tokens, probs)}
-        else:
-            logger.warning(f"No global probs for tokenizer at {base_path} found")
+    @staticmethod
+    def _normalize_unk_special(counts: Dict[str, float], unk_token: str, unk_prior: float) -> Dict[str, float]:
+        """Convert raw counts to a prob dist with frozen unk_prior."""
+        total = sum(counts.values()) - counts.get(unk_token, 0.0)
+        if total <= 0:
+            uniform = 1.0 / max(1, len(counts) - 1)
+            return {
+                t: (unk_prior if t == unk_token else uniform * (1 - unk_prior))
+                for t in counts
+            }
+        scale = 1.0 - unk_prior
+        return {
+            t: (unk_prior if t == unk_token else counts[t] / total * scale)
+            for t in counts
+        }
 
-    def encode(self, text, add_special_tokens=False):
-        """
-        Encode text using the tokenizer.
-        
-        Args:
-            text: Text to encode
-            
-        Returns:
-            List of token IDs
-        """
-        if not self.base_tokenizer:
-            raise ValueError("No base tokenizer loaded or trained.")
-        return self.base_tokenizer.encode(text, add_special_tokens=add_special_tokens).ids
+    @staticmethod
+    def _normalize(counts: Dict[str, float]) -> Dict[str, float]:
+        """Convert raw counts to a prob dist with frozen unk_prior."""
+        total = sum(counts.values())
+        if total <= 0:
+            uniform = 1.0 / max(1, len(counts))
+            return {t: uniform for t in counts}
+        return {t: counts[t] / total for t in counts}
 
-    def encode_batch(self, texts, *, add_special_tokens: bool = False):
-        """
-        Vectorised encoding that returns *Encoding* objects, identical to the
-        HuggingFace `tokenizers.Tokenizer.encode_batch`.
-        """
-        if self.base_tokenizer is None:
-            raise ValueError("Tokenizer not yet loaded or trained.")
-        return self.base_tokenizer.encode_batch(
-            texts, add_special_tokens=add_special_tokens
-        )
-
-    def decode(self, ids):
-        """
-        Decode token IDs back to text.
+    @staticmethod
+    def _tokens_to_remove(token_loss: List[Tuple[str, float]], k_drop: int):
+        if k_drop <= 0:
+            return set()
         
-        Args:
-            ids: List of token IDs
-            
-        Returns:
-            Decoded text
-        """
-        if not self.base_tokenizer:
-            raise ValueError("No base_tokenizer loaded or trained.")
-        return self.base_tokenizer.decode(ids)
+        token_loss.sort(key=lambda x: x[1])
+        to_remove = {tk for tk, _ in token_loss[:k_drop]}
+        return to_remove
 
-    def get_vocab(self):
-        """
-        Get the vocabulary as a dict mapping tokens to IDs.
-        
-        Returns:
-            Dict mapping tokens to IDs
-        """
-        if not self.base_tokenizer:
-            raise ValueError("No base_tokenizer.")
-        return self.base_tokenizer.get_vocab()
-
-    def get_vocab_size(self):
-        """
-        Get the vocabulary size.
-        
-        Returns:
-            Vocabulary size
-        """
-        if not self.base_tokenizer:
-            return 0
-        return len(self.base_tokenizer.get_vocab())
 
 def train_lang_tokenizers(corpus_info: Dict[str, Dict[str, str]],
                           out_dir: str,
