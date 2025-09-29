@@ -177,13 +177,16 @@ class LanguageSpecificUnigramLMTokenizer(StandardUnigramLMTokenizer):
             with tempfile.TemporaryDirectory() as tmpdir:
                 out_prefix = os.path.join(tmpdir, "model")
                 vocab_path = os.path.join(tmpdir, "vocab.tsv")
+                # 1. Prepare the vocabulary file
+                base_vocab_with_scores = _get_hf_unigram_tokenizer_vocab(self.base_tokenizer)
+                num_pieces = len([t for t, _ in base_vocab_with_scores if t not in self.special_tokens | {self.unk_token}]) # exclude <unk>, <s>, </s>, <pad>, etc.
+                initial_log_score = np.log(1.0 / num_pieces) if num_pieces > 0 else -10.0 
+
+                token_count = _write_sp_seed_vocab_file([(t, initial_log_score) for t, _ in base_vocab_with_scores], vocab_path, self.unk_token)
+
                 hf_processed_text_path = os.path.join(tmpdir, "hf_text.txt")
                 write_hf_bytelevel_corpus(corpus_file, hf_processed_text_path, self._get_pretokenizer())
 
-                # 1. Prepare the vocabulary file
-                base_vocab_with_scores = _get_hf_unigram_tokenizer_vocab(self.base_tokenizer)
-                token_count = _write_sp_seed_vocab_file(base_vocab_with_scores, vocab_path, self.unk_token)
-                
                 # The exact vocab size must account for meta pieces
                 # <unk>, <s> and </s> 
                 expected_vocab_size = token_count + 3
