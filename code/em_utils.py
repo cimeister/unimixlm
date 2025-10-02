@@ -614,7 +614,7 @@ def _accumulate_usage_worker_hard(args):
 
 
 def _accumulate_usage(train_file,
-                      p_lang,
+                      log_plang,
                       unk_token,
                       num_processes=None,
                       mode='soft',
@@ -623,7 +623,7 @@ def _accumulate_usage(train_file,
                       byte_level=False):
         """
         For a single language's corpus:
-          - segment each line with distribution p_lang
+          - segment each line with distribution log_plang
           - collect usage counts c(token), total usage
         We'll do it in parallel to speed up big corpora.
         """
@@ -654,7 +654,6 @@ def _accumulate_usage(train_file,
             idx += chunk_size
             chunks.append(chunk)
         
-        log_plang = {tk: math.log(p if p else MIN_TOKEN_PROB) for tk, p in p_lang.items()}
         max_token_len = MAX_BYTE_TOKEN_LEN if byte_level else MAX_CHAR_TOKEN_LEN
         # 3) Build worker args
         # we pass p_lang + unk_token for the segmentation
@@ -714,7 +713,6 @@ def _accumulate_usage_dummy(
 
     counts = {tk: p * tot_subwords for tk, p in zip(p_token.keys(), probs)}
 
-    # ---------- enforce fixed UNK prior ----------
     counts[unk_token] = p_token[unk_token] * tot_subwords
 
     return counts, float(tot_subwords)
@@ -775,25 +773,24 @@ def _compute_loss_with_alternatives(token_to_remove: str, counts: Dict[str, floa
 
 
 def _compute_alternatives_direct(
-    token_probs: dict, 
+    token_log_probs: dict, 
     unk_token: str, 
     byte_level: bool = False
 ) -> Dict[str, List[Tuple[List[str], float]]]:
     """
     Compute alternatives directly for each token without corpus iteration.
     """
-    token_log_probs = {}
-    for token, p in token_probs.items():
-        token_log_probs[token] = math.log(max(p, MIN_TOKEN_PROB))  # Use MIN_TOKEN_PROB since that's what will be set at end
     alternatives = {}
     
-    for token in token_probs:
+    all_tokens = list(token_log_probs.keys())
+    for token in all_tokens:
         if token == unk_token or token in SPECIAL_TOKENS:
             continue
             
         # Get the string representation of the token
         token_string = token  # assuming token is already the string
         
+        orig_len = len(token_log_probs)
         # Get alternative segmentation
         alt_sequence = _get_segmentation_excluding_token(
             token_string, 
@@ -802,7 +799,7 @@ def _compute_alternatives_direct(
             token, 
             max_token_len=MAX_BYTE_TOKEN_LEN if byte_level else MAX_CHAR_TOKEN_LEN
         )
-        
+        assert len(token_log_probs) == orig_len
         # Since we're using only second best seg, all weight is on the single alternative
         alternatives[token] = [(alt_sequence, 1.0)]
     
@@ -830,7 +827,7 @@ def _compute_loss_with_alternative_sequences(
     token_to_remove: str, 
     counts: Dict[str, float], 
     alternative_sequences: Dict[str, List[Tuple[List[str], float]]], 
-    p_token: Dict[str, float],
+    lp_token: Dict[str, float],
     unk_token: str
 ) -> float:
     """
@@ -840,23 +837,20 @@ def _compute_loss_with_alternative_sequences(
     if token_to_remove not in counts or counts[token_to_remove] == 0:
         return 0.0
     
-    if token_to_remove not in p_token or p_token[token_to_remove] <= 0:
+    if token_to_remove not in lp_token:
         return 0.0
     
     removed_count = counts[token_to_remove]
-    current_nll = -removed_count * math.log(p_token[token_to_remove])
+    current_nll = -removed_count * lp_token[token_to_remove]
 
-    unk_logp = math.log(p_token[unk_token])
+    unk_logp = lp_token[unk_token]
     
     # Get alternative sequences
     weighted_sequences = alternative_sequences.get(token_to_remove, [])
     
     if not weighted_sequences:
         # Default: token becomes single UNK
-        if unk_token in p_token and p_token[unk_token] > 0:
-            new_nll = -removed_count * unk_logp
-        else:
-            new_nll = float('inf')
+        new_nll = -removed_count * unk_logp
     else:
         if not np.isclose(sum([tup[1] for tup in weighted_sequences]), 1.0, atol=1e-5):
             logger.error("Alternative seq weights not adding to 1")
@@ -872,8 +866,8 @@ def _compute_loss_with_alternative_sequences(
             valid_sequence = True
             
             for token in alt_sequence:
-                if token in p_token and p_token[token] > 0:
-                    seq_log_prob += math.log(p_token[token])
+                if token in lp_token:
+                    seq_log_prob += lp_token[token]
                 else:
                     valid_sequence = False
                     break
@@ -883,14 +877,10 @@ def _compute_loss_with_alternative_sequences(
                 seq_count = removed_count * weight
                 new_nll += -seq_count * seq_log_prob
             else:
-                # Invalid sequence - use UNK fallback
-                if unk_token in p_token and p_token[unk_token] > 0:
-                    # Sequence length matters for UNK tokens
-                    seq_count = removed_count * weight
-                    new_nll += -seq_count * len(alt_sequence) * unk_logp
-                else:
-                    new_nll = float('inf')
-                    break
+                # Sequence length matters for UNK tokens
+                seq_count = removed_count * weight
+                new_nll += -seq_count * len(alt_sequence) * unk_logp
+                
     # Loss is the change in NLL
     loss = new_nll - current_nll
     

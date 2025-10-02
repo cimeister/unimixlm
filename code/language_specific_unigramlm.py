@@ -15,7 +15,7 @@ from code.em_unigram_trainer import EMUnigramTrainer
 from code.standard_unigramlm import StandardUnigramLMTokenizer
 from code.utils import _save_tokenizer_metadata, _create_base_metadata, get_baseline_bytes
 from code.tokenizer_formatting_utils import (
-    _build_hf_tokenizer_from_probs, _get_hf_unigram_tokenizer_vocab, _write_sp_seed_vocab_file,
+    _build_hf_tokenizer_from_lprobs, _get_hf_unigram_tokenizer_vocab, _write_sp_seed_vocab_file,
     write_hf_bytelevel_corpus
 )
 from code.constants import SPECIAL_TOKENS, MIN_TOKEN_LOG_PROB
@@ -45,7 +45,7 @@ def _extract_log_scores(tok: Tokenizer) -> Dict[str, float]:
     return {tok: score for tok, score in vocab_tuples }
 
 
-def _build_hf_tokenizer_with_new_probs(
+def _build_hf_tokenizer_with_new_lprobs(
     base_tokenizer,
     log_probs: Dict[str, float],
     unk_token: str
@@ -59,7 +59,7 @@ def _build_hf_tokenizer_with_new_probs(
     ]
 
     unk_id = base_tokenizer.get_vocab()[unk_token]
-    tok = _build_hf_tokenizer_from_probs(tuples, unk_id, base_tokenizer.pre_tokenizer)
+    tok = _build_hf_tokenizer_from_lprobs(tuples, unk_id, base_tokenizer.pre_tokenizer)
     if not tok.pre_tokenizer:
         logger.warning("No pretokenizer set for new HF tokenizer. Defaulting to whitespace")
         tok.pre_tokenizer = Whitespace()
@@ -104,7 +104,7 @@ class LanguageSpecificUnigramLMTokenizer(StandardUnigramLMTokenizer):
         self.reestimation_em_mode = reestimation_em_mode
         self.num_reestimation_iterations = num_iterations
         # lang_code -> {"tokenizer": HF Tokenizer, "scores": {tok->log_p}, "path": str}
-        self.language_info: Dict[str, dict] = {}
+        self.per_lang_tok: Dict[str, dict] = {}
 
     def load(self, base_path, language_paths=None):
         """
@@ -122,7 +122,7 @@ class LanguageSpecificUnigramLMTokenizer(StandardUnigramLMTokenizer):
         base_vocab_order = [i for i, j in vocab_tuples]
         
         # Initialize language info
-        self.language_info = {}
+        self.per_lang_tok = {}
 
         # Load language-specific probability distributions
         if language_paths:
@@ -130,7 +130,7 @@ class LanguageSpecificUnigramLMTokenizer(StandardUnigramLMTokenizer):
                 tok = Tokenizer.from_file(lang_tok_path)
                 vocab_order_per_lang = _get_hf_unigram_tokenizer_vocab(tok)
                 assert [i for i, j in vocab_order_per_lang] == base_vocab_order
-                self.language_info[lang_code] = {
+                self.per_lang_tok[lang_code] = {
                     "tokenizer": tok,
                     "scores": _extract_log_scores(tok),
                     "path": lang_tok_path,
@@ -241,24 +241,15 @@ class LanguageSpecificUnigramLMTokenizer(StandardUnigramLMTokenizer):
                 # 2) Ensure every base token is present; default to base log-prob if missing.
                 missing_tokens = set()
                 for t in vocab_dict.keys():
-
                     if t not in token_logps:
                         missing_tokens.add(t)
                         token_logps[t] = float(vocab_dict[t])
                 if missing_tokens:
                     logger.warning(f"Tokens {missing_tokens} not in sentencepiece model; defaulting to base "
                                    f"tokenizer log-prob {vocab_dict[t]:.5f}")
-                # 3) Normalize in log-space: log p_i := log p_i - logsumexp(log p)
-                logvals = np.fromiter(token_logps.values(), dtype=np.float64)
-                m = np.max(logvals)
-                # guard against pathological all -inf (unlikely); fallback to uniform
-                if not np.isfinite(m):
-                    uniform = -np.log(len(token_logps))
-                    token_logps = {k: uniform for k in token_logps.keys()}
-                else:
-                    logZ = m + np.log(np.sum(np.exp(logvals - m)))
-                    token_logps = {k: float(v - logZ) for k, v in token_logps.items()}
-
+                # 3) Normalize in log-space
+                token_logps = self._log_normalize(token_logps)
+                
                 return token_logps  # normalized log-probabilities
 
     def train(
@@ -321,7 +312,7 @@ class LanguageSpecificUnigramLMTokenizer(StandardUnigramLMTokenizer):
             )
             if load_tokenizers_if_exists and tk_path.is_file() and False:
                 tok = Tokenizer.from_file(str(tk_path))
-                self.language_info[lang_code] = {
+                self.per_lang_tok[lang_code] = {
                     "tokenizer": tok,
                     "scores":  _extract_log_scores(tok),
                     "path": str(tk_path),
@@ -367,7 +358,7 @@ class LanguageSpecificUnigramLMTokenizer(StandardUnigramLMTokenizer):
             # print("TVD: ", x)
 
             # ----------  HF tokenizer from these probabilities  ----------
-            tok = _build_hf_tokenizer_with_new_probs(self.base_tokenizer, token_log_probs, self.unk_token)
+            tok = _build_hf_tokenizer_with_new_lprobs(self.base_tokenizer, token_log_probs, self.unk_token)
             tok.save(str(tk_path))
             
             # Add metadata to language-specific tokenizer
@@ -400,7 +391,7 @@ class LanguageSpecificUnigramLMTokenizer(StandardUnigramLMTokenizer):
             else:
                 logger.warning(f"Failed to save metadata for {tk_path}")
 
-            self.language_info[lang_code] = {
+            self.per_lang_tok[lang_code] = {
                 "tokenizer": tok,
                 "scores": _extract_log_scores(tok),
                 "path": str(tk_path),
@@ -408,20 +399,20 @@ class LanguageSpecificUnigramLMTokenizer(StandardUnigramLMTokenizer):
             logger.info(f"Saved tokenizer with metadata for {lang_code} to {tk_path}")
         return {
             "base_path": base_tokenizer_path,
-            "language_paths": {k: v['path'] for k, v in self.language_info.items()}
+            "language_paths": {k: v['path'] for k, v in self.per_lang_tok.items()}
         }
 
     # ---------------------------------------------------------------- encode / decode helpers
 
     def encode_lang(self, text: str, lang_code: str):
-        if lang_code not in self.language_info:
+        if lang_code not in self.per_lang_tok:
             raise ValueError(f"No tokenizer for language '{lang_code}'.")
-        return self.language_info[lang_code]["tokenizer"].encode(text)
+        return self.per_lang_tok[lang_code]["tokenizer"].encode(text)
 
     def decode_lang(self, ids: List[int], lang_code: str):
-        if lang_code not in self.language_info:
+        if lang_code not in self.per_lang_tok:
             raise ValueError(f"No tokenizer for language '{lang_code}'.")
-        return self.language_info[lang_code]["tokenizer"].decode(ids)
+        return self.per_lang_tok[lang_code]["tokenizer"].decode(ids)
 
 
     def best_language_encode(self, text: str):
@@ -435,7 +426,7 @@ class LanguageSpecificUnigramLMTokenizer(StandardUnigramLMTokenizer):
         """
         best_lang, best_tokens, best_logp = None, [], float("-inf")
 
-        for lang_code, info in self.language_info.items():
+        for lang_code, info in self.per_lang_tok.items():
             enc = info["tokenizer"].encode(text)
             toks = enc.tokens
             logp = sum(info["scores"].get(t, MIN_TOKEN_LOG_PROB) for t in toks)
@@ -451,7 +442,7 @@ class LanguageSpecificUnigramLMTokenizer(StandardUnigramLMTokenizer):
             best_lang, Encoding           # Encoding from HF tokenizers lib
         This avoids re-encoding after we have already picked the language.
         """
-        if not self.language_info:
+        if not self.per_lang_tok:
             raise ValueError("No per-language tokenizers loaded.")
 
         # First pass: encode each text with EVERY language and keep the log-prob
@@ -459,7 +450,7 @@ class LanguageSpecificUnigramLMTokenizer(StandardUnigramLMTokenizer):
         best_scores = [float("-inf")] * len(texts)
         best_encs   = [None] * len(texts)
 
-        for lang_code, info in self.language_info.items():
+        for lang_code, info in self.per_lang_tok.items():
             encs = info["tokenizer"].encode_batch(texts)
             for i, enc in enumerate(encs):
                 score = sum(info["scores"].get(t, MIN_TOKEN_LOG_PROB) for t in enc.tokens)

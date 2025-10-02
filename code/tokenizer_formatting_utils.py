@@ -176,9 +176,8 @@ def _build_gpt2_byte_maps():
 
 _BYTE_TO_UNI, _UNI_TO_BYTE = _build_gpt2_byte_maps()
 _SP_BYTE_ANY_RE = re.compile(r"<0x([0-9A-F]{2})>")
-SPACE_HF = _BYTE_TO_UNI[32]  # typically "Ġ"
-_SP_BYTE_ANY_RE = re.compile(r"<0x([0-9A-F]{2})>")
 _SP_SPACE = "▁"
+_HF_SPACE = _BYTE_TO_UNI[32]  # typically "Ġ"
 
 
 def _write_sp_seed_vocab_file_with_conversion(
@@ -227,7 +226,7 @@ def _write_sp_seed_vocab_file(vocab_with_scores: list[tuple[str, float]], out_pa
     return count
 
 
-def sp_piece_to_hf(piece: str) -> str:
+def sp_piece_to_hf_basic(piece: str) -> str:
     """Map an SP piece to the HF ByteLevel representation."""
     # 1) Map every embedded <0xXX> to the GPT-2 unicode char
     def _byte_repl(m):
@@ -237,17 +236,17 @@ def sp_piece_to_hf(piece: str) -> str:
 
     # 2) Map SP's whitespace marker to HF's space token char
     #    (SP uses '▁' to mark a preceding space; HF uses the GPT-2 'Ġ' char)
-    piece = piece.replace("\u2581", SPACE_HF)
+    piece = piece.replace("\u2581", _HF_SPACE)
 
     return piece
 
-def sp_piece_to_hf(piece: str, SPACE_HF: str, BYTE_TO_UNI: dict[int, str]) -> str:
+def sp_piece_to_hf(piece: str) -> str:
     # 1) Replace leading ▁… with Ġ… (keep count)
     i = 0
     n = len(piece)
     while i < n and piece[i] == _SP_SPACE:
         i += 1
-    prefix = SPACE_HF * i
+    prefix = _HF_SPACE * i
     rest = piece[i:]
 
     # 2) Walk the remainder, expanding <0xNN> and mapping other literals via UTF-8 -> ByteLevel
@@ -258,15 +257,15 @@ def sp_piece_to_hf(piece: str, SPACE_HF: str, BYTE_TO_UNI: dict[int, str]) -> st
         lit = rest[pos:m.start()]
         if lit:
             b = lit.encode("utf-8", errors="strict")
-            out.append("".join(BYTE_TO_UNI[x] for x in b))
+            out.append("".join(_BYTE_TO_UNI[x] for x in b))
         # map the byte token
-        out.append(BYTE_TO_UNI[int(m.group(1), 16)])
+        out.append(_BYTE_TO_UNI[int(m.group(1), 16)])
         pos = m.end()
     # tail literal
     tail = rest[pos:]
     if tail:
         b = tail.encode("utf-8", errors="strict")
-        out.append("".join(BYTE_TO_UNI[x] for x in b))
+        out.append("".join(_BYTE_TO_UNI[x] for x in b))
     return "".join(out)
 
 
@@ -283,24 +282,22 @@ def load_tokenizer_with_mode(path: str):
     return tok, byte_level
 
 
-def _build_hf_tokenizer_from_probs(
-    probs_tuples: List[Tuple[str, float]],
+def _build_hf_tokenizer_from_lprobs(
+    lprobs_tuples: List[Tuple[str, float]],
     unk_id: int,
     pretokenizer: Any
 ) -> Tokenizer:
     """
-    Turn a plain probability dictionary into a HF Unigram tokenizer.
+    Turn a plain log probability dictionary into a HF Unigram tokenizer.
     """
     #TODO: Add byte_fallback=self.byte_level if/when feature becomes available
-    model = Unigram(probs_tuples, unk_id)
+    model = Unigram(lprobs_tuples, unk_id)
     tok = Tokenizer(model)
     if pretokenizer:
         tok.pre_tokenizer = pretokenizer
 
     return tok
-# ---------------------------------------------------------------------------
-# SentencePiece helpers
-# ---------------------------------------------------------------------------
+
 
 def _detect_vocab_file_format(file_path: str) -> str:
     """Automatically detect the format of a vocabulary file."""

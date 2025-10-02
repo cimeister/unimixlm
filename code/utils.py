@@ -10,7 +10,7 @@ from datetime import datetime
 import platform
 import sys
 import code.constants as constants
-from code.tokenizer_formatting_utils import _build_hf_tokenizer_from_probs
+from code.tokenizer_formatting_utils import _build_hf_tokenizer_from_lprobs
 
 from tokenizers import Tokenizer
 from tokenizers.pre_tokenizers import ByteLevel
@@ -697,7 +697,7 @@ def tokmix_merge(
     
     # Normalize probabilities
     Z = sum(avg_prob[t] for t in kept_tokens if t not in pinned)
-    probs_tuples = []
+    lprobs_tuples = []
     for token in kept_tokens:
         if token in pinned:
             # Special tokens keep their averaged probability  
@@ -705,11 +705,11 @@ def tokmix_merge(
         else:
             # Regular tokens get renormalized
             p = avg_prob[token] / Z if Z > 0 else constants.MIN_TOKEN_PROB
-        probs_tuples.append((token, math.log(max(p, constants.MIN_TOKEN_PROB))))
+        lprobs_tuples.append((token, math.log(max(p, constants.MIN_TOKEN_PROB))))
     
     # Build HF tokenizer
     unk_id = kept_tokens.index(unk_token)
-    return _build_hf_tokenizer_from_probs(probs_tuples, unk_id, pretokenizer)
+    return _build_hf_tokenizer_from_lprobs(lprobs_tuples, unk_id, pretokenizer)
 
 
 def _get_metadata_path(tokenizer_path: str) -> str:
