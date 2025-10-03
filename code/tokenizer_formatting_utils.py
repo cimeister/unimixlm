@@ -37,7 +37,7 @@ def _hf_to_sp_piece(token: str) -> str:
       - GPT-2 space marker (byte 0x20) -> '▁'
       - printable bytes -> literal char
       - other bytes -> '<0xXX>'
-    """
+    """ 
     out = []
     for ch in token:
         b = _UNI_TO_BYTE.get(ch)  # GPT-2 byte-unicode -> raw byte (0..255) or None
