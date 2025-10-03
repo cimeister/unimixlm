@@ -105,7 +105,7 @@ class StandardUnigramLMTokenizer:
         initial_vocab_tokens: Optional[str] = None,  # Path to file containing tokens
         pruning_criterion: str = "exact_loss",  # "exact_loss", "approx_loss", "probability"
         use_sp_seed_vocab: bool = True,
-        use_sp_em: bool = True,
+        use_sp_em: bool = False,
     ) -> None:
         """
         Initialize StandardUnigramLMTokenizer.
@@ -443,14 +443,12 @@ class StandardUnigramLMTokenizer:
     def _get_pretokenizer(self):
         if self.base_tokenizer:
             return self.base_tokenizer.pre_tokenizer
-        components = []
-        if self.whitespace_token_boundaries:
-            components.append(Whitespace())
         if self.byte_level:
-            components.append(ByteLevel(add_prefix_space=True))
-
-        if components:
-            return components[0] if len(components) == 1 else Sequence(components)
+            return ByteLevel(add_prefix_space=True, use_regex=self.whitespace_token_boundaries)
+        elif self.whitespace_token_boundaries:
+            return Whitespace()
+        else:
+            return None
 
     # ------------------------------------------------------------------
     # thin wrappers that call _run_em then build the HF tokenizer
@@ -471,9 +469,7 @@ class StandardUnigramLMTokenizer:
         """
         logger.info("Using HuggingFace UnigramTrainer for standard Unigram.")
         tok = Tokenizer(Unigram())
-        pretokenizer = self._get_pretokenizer()
-        if pretokenizer:
-            tok.pre_tokenizer = pretokenizer
+        tok.pre_tokenizer = self._get_pretokenizer()
 
         #TODO: Add byte_fallback=self.byte_level when feature becomes available
         trainer = UnigramTrainer(
@@ -599,11 +595,11 @@ class StandardUnigramLMTokenizer:
         if self.use_sp_em:
             self._temp_dir = tempfile.mkdtemp()
             processed_file_paths = None
-            # Register a cleanup function to remove the directory when the program exits.
+            # Register a cleanup function to remove the dirpectory when the program exits.
             atexit.register(shutil.rmtree, self._temp_dir, ignore_errors=True)
 
             num_workers = min(min(os.cpu_count() or 1, 20), len(corpus_files))
-            print(f"Using {num_workers} worker processes.")
+            logger.info(f"Using {num_workers} worker processes.")
 
             # Prepare arguments for each worker
             worker_args = [(path, self._temp_dir, self._get_pretokenizer(), i) for i, path in enumerate(corpus_files)]
@@ -792,6 +788,7 @@ class StandardUnigramLMTokenizer:
 
             logger.info(f"Total probability mass: {sum([np.exp(x) for x in state.global_lprobs.values()])}")
             assert all(x in state.global_lprobs for x in state.pinned)
+        return state.global_lprobs
 
 
     def _initialize_em_state(
@@ -868,6 +865,13 @@ class StandardUnigramLMTokenizer:
             
             vocab = set(custom_tokens)
             vocab.update(self.special_tokens)
+            ws_count, ws_in_word_count = 0, 0
+            for tk in vocab:
+                if 'Ġ' in tk:
+                    ws_count += 1
+                    if 'Ġ' in tk[1:-1]:
+                        ws_in_word_count += 1
+            logger.info(f"{ws_count} tokens with whitespace characters ({ws_in_word_count} where whitespace is within token)")
             logger.info(f"Custom vocabulary prepared: {len(vocab)} tokens")
 
         elif self.use_sp_seed_vocab:
@@ -907,7 +911,8 @@ class StandardUnigramLMTokenizer:
                 f"--vocab_size={seed_vocab_size}",
                 f"--seed_sentencepiece_size={seed_vocab_size}",
                 f"--max_sentencepiece_length={MAX_BYTE_TOKEN_LEN if self.byte_level else MAX_CHAR_TOKEN_LEN}",
-                "--split_by_whitespace=true",  
+                f"--split_by_whitespace={'true' if self.whitespace_token_boundaries else 'false'}",  
+                "--remove_extra_whitespaces=false",
                 "--treat_whitespace_as_suffix=false",
                 # -----------------------
 
@@ -928,13 +933,15 @@ class StandardUnigramLMTokenizer:
             sp.load(out_prefix + ".model")
 
             vocab = set()
-            ws_count = 0
+            ws_count, ws_in_word_count = 0, 0
             for i in range(sp.get_piece_size()):
                 p = sp.id_to_piece(i)
                 vocab.add(sp_piece_to_hf(p) if p not in self.special_tokens else p)
                 if 'Ġ' in sp_piece_to_hf(p):
                     ws_count += 1
-            logger.info(f"{ws_count} tokens with whitespace characters")
+                    if 'Ġ' in sp_piece_to_hf(p)[1:]:
+                        ws_in_word_count += 1
+            logger.info(f"{ws_count} tokens with whitespace characters ({ws_in_word_count} where whitespace is within token)")
             logger.info(f"Seed vocab sample: {random.sample(vocab, 50)}")
             return vocab
     
@@ -955,10 +962,19 @@ class StandardUnigramLMTokenizer:
             initial_alphabet=ByteLevel.alphabet() if self.byte_level else [],
         )
         tok.train(train_files, trainer)
-        init_vocab = tok.get_vocab()
-        logger.info(f"Initial vocabulary size: {len(init_vocab)}")
+        vocab = tok.get_vocab()
+
+        ws_in_word_count, ws_count = 0, 0
+        for tk in vocab:
+            if 'Ġ' in tk:
+                ws_count += 1
+                if 'Ġ' in tk[1:]:
+                    ws_in_word_count += 1
+        logger.info(f"{ws_count} tokens with whitespace characters ({ws_in_word_count} where whitespace is within token)")
+        logger.info(f"Initial vocabulary size: {len(vocab)}")
+        logger.info(f"Seed vocab sample: {random.sample(vocab.keys(), 50)}")
         
-        return set(init_vocab.keys())
+        return set(vocab.keys())
 
     def _sp_em(
             self,
@@ -997,8 +1013,6 @@ class StandardUnigramLMTokenizer:
                 "--split_by_whitespace=false",  # handled by write_hf_bytelevel_corpus 
                 "--num_threads=16",
             ]
-            # if self.whitespace_token_boundaries:
-            #     command.append("--split_by_whitespace=true")
 
             # 3. Execute the command
             logger.info(f"Running SentencePiece CLI command:\n{' '.join(command)}")
@@ -1037,16 +1051,7 @@ class StandardUnigramLMTokenizer:
                 logger.warning(f"Tokens {missing_tokens} not in sentencepiece model; defaulting to base "
                                f"tokenizer log-prob {vocab_dict[t]:.5f}")
             # 3) Normalize in log-space: log p_i := log p_i - logsumexp(log p)
-            logvals = np.fromiter(token_logps.values(), dtype=np.float64)
-            m = np.max(logvals)
-            # guard against pathological all -inf (unlikely); fallback to uniform
-            if not np.isfinite(m):
-                uniform = -np.log(len(token_logps))
-                return {k: uniform for k in token_logps.keys()}
-            else:
-                logZ = m + np.log(np.sum(np.exp(logvals - m)))
-                return {k: float(v - logZ) for k, v in token_logps.items()}
-
+            token_logps = self._log_normalize(token_logps)
             return token_logps
 
     def _compute_intersection_pruning_tokens(self, under_consideration, per_lang_losses, k_drop):
@@ -1587,7 +1592,6 @@ def train_standard_tokenizer(corpus_info,
         em_mode=em_mode, 
         multigram=multigram, 
         byte_level=byte_level,
-        whitespace_token_boundaries=not byte_level,
         dataset_size_normalization=dataset_size_normalization,
         use_intersection_pruning=use_intersection_pruning,
         pruning_criterion=pruning_criterion,

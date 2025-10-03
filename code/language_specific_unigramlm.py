@@ -9,7 +9,6 @@ from typing import Dict, List
 import numpy as np
 
 from tokenizers import Tokenizer
-from tokenizers.pre_tokenizers import Whitespace
 
 from code.em_unigram_trainer import EMUnigramTrainer
 from code.standard_unigramlm import StandardUnigramLMTokenizer
@@ -61,8 +60,8 @@ def _build_hf_tokenizer_with_new_lprobs(
     unk_id = base_tokenizer.get_vocab()[unk_token]
     tok = _build_hf_tokenizer_from_lprobs(tuples, unk_id, base_tokenizer.pre_tokenizer)
     if not tok.pre_tokenizer:
-        logger.warning("No pretokenizer set for new HF tokenizer. Defaulting to whitespace")
-        tok.pre_tokenizer = Whitespace()
+        logger.warning("No pretokenizer set for new HF tokenizer")
+        tok.pre_tokenizer = None
 
     if hasattr(base_tokenizer, 'post_processor'):
         tok.post_processor = base_tokenizer.post_processor
@@ -89,7 +88,7 @@ class LanguageSpecificUnigramLMTokenizer(StandardUnigramLMTokenizer):
         reestimation_em_mode: str = "soft",
         num_iterations: int = 20,
         byte_level: bool = False,
-        whitespace_token_boundaries: bool = True
+        whitespace_token_boundaries: bool = False
     ):
         super().__init__(
             vocab_size=vocab_size,
@@ -179,7 +178,7 @@ class LanguageSpecificUnigramLMTokenizer(StandardUnigramLMTokenizer):
                 vocab_path = os.path.join(tmpdir, "vocab.tsv")
                 # 1. Prepare the vocabulary file
                 base_vocab_with_scores = _get_hf_unigram_tokenizer_vocab(self.base_tokenizer)
-                num_pieces = len([t for t, _ in base_vocab_with_scores if t not in self.special_tokens | {self.unk_token}]) # exclude <unk>, <s>, </s>, <pad>, etc.
+                num_pieces = len([t for t, _ in base_vocab_with_scores if t not in set(self.special_tokens) | {self.unk_token}]) # exclude <unk>, <s>, </s>, <pad>, etc.
                 initial_log_score = np.log(1.0 / num_pieces) if num_pieces > 0 else -10.0 
 
                 token_count = _write_sp_seed_vocab_file([(t, initial_log_score) for t, _ in base_vocab_with_scores], vocab_path, self.unk_token)

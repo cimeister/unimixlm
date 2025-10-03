@@ -58,7 +58,7 @@ def segment_text_viterbi(text,
     # Here we process the whole batch of words together
     for word in text:
         # 2) For each word, run Viterbi
-        sub_tokens = _segment_word_viterbi(word, token_log_probs, unk_token, max_sub_len, beam_width)
+        sub_tokens = _segment_word_viterbi_sp(word, token_log_probs, unk_token, max_sub_len, beam_width)
         all_tokens.extend(sub_tokens)
 
     return all_tokens
