@@ -285,7 +285,6 @@ def forward_backward_unigram_log_space(
     Returns:
         dict {token: expected_count} (fractional EM counts)
     """
-    LOG_NEG_INF = -np.inf
 
     texts = _apply_pretok_mapping_hf(text, pretok, whitespace_boundaries)#.rstrip("\n")
 
@@ -300,18 +299,16 @@ def forward_backward_unigram_log_space(
     token_cache = {}
     def get_token_log_prob(token):
         if token not in token_cache:
-            if token in real_vocab:
-                token_cache[token] = log_p_lang[token]
-            else:
-                token_cache[token] = LOG_NEG_INF
+            token_cache[token] = log_p_lang[token]
         return token_cache[token]
 
     # --- Pre-pass: where can a real token start
-    total_counts = {}
+    log_total_counts = {}
     # Helper to accumulate in linear space without instability
     def add_count(tok, log_count):
         if np.isfinite(log_count):
-            total_counts[tok] = total_counts.get(tok, 0.0) + float(np.exp(log_count))
+            current_log_total = log_total_counts.get(tok, -np.inf)
+            log_total_counts[tok] = np.logaddexp(current_log_total, log_count)
 
     for text in texts:
         text = text.rstrip("\n")
@@ -333,11 +330,11 @@ def forward_backward_unigram_log_space(
             requires_unk[i + 1] = not can_start[i]
 
         # --- Forward pass (log-space)
-        log_alpha = np.full(n + 1, LOG_NEG_INF)
+        log_alpha = np.full(n + 1, -np.inf)
         log_alpha[0] = 0.0  # log(1)
 
         for i in range(n):
-            if log_alpha[i] == LOG_NEG_INF:
+            if log_alpha[i] == -np.inf:
                 continue
 
             # UNK transition (length-1) only where required
@@ -359,7 +356,7 @@ def forward_backward_unigram_log_space(
             )
 
         # --- Backward pass (log-space)
-        log_beta = np.full(n + 1, LOG_NEG_INF)
+        log_beta = np.full(n + 1, -np.inf)
         log_beta[n] = 0.0  # log(1)
 
         for i in range(n - 1, -1, -1):
@@ -379,21 +376,25 @@ def forward_backward_unigram_log_space(
             logger.warning("Large floating point errors...")
 
         for i in range(n):
-            if log_alpha[i] == LOG_NEG_INF:
+            if log_alpha[i] == -np.inf:
                 continue
 
             # UNK at i -> i+1 (only where required)
-            if requires_unk[i + 1] and log_beta[i + 1] != LOG_NEG_INF:
+            if requires_unk[i + 1] and log_beta[i + 1] != -np.inf:
                 add_count(unk_token, log_alpha[i] + log_p_unk + log_beta[i + 1] - log_Z)
 
             # Real tokens
             end = min(n, i + max_sub_len)
             for j in range(i + 1, end + 1):
                 sub = text[i:j]
-                if sub in real_vocab and log_beta[j] != LOG_NEG_INF:
+                if sub in real_vocab and log_beta[j] != -np.inf:
                     add_count(sub, log_alpha[i] + log_p_lang[sub] + log_beta[j] - log_Z)
+    final_counts = {
+        token: np.exp(log_total) 
+        for token, log_total in log_total_counts.items()
+    }
 
-    return total_counts
+    return final_counts
 
 
 def forward_backward_unigram(text, 

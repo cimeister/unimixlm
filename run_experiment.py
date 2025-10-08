@@ -11,7 +11,7 @@ from code.environment_setup import setup_environment
 setup_environment()
 from code.utils import SafeFormattingDict, proportional_sample
 from code.corpus_downloader import download_corpus
-from code.standard_unigramlm import train_standard_tokenizer, train_lang_tokenizers, train_tokmix
+from code.standard_unigramlm import train_standard_tokenizer, train_lang_tokenizers, train_tokmix, StandardUnigramLMTokenizer
 from code.language_specific_unigramlm import train_language_specific_tokenizer
 from code.corpus_tokenizer import CorpusTokenizer
 from code.model_trainer import train_models_from_config
@@ -100,6 +100,16 @@ def train_tokenizers(config: Dict[str, Any], corpus_info: Dict[str, Any]) -> Dic
         pruning_criterion_str = pruning_criterion.replace('_', '-')
         pruning_strategy = "intersection" if use_intersection_pruning else "average"
         multigram = tokenizer_config.get("multigram", False)
+        initial_vocab_tokens = tokenizer_config.get("initial_vocab_tokens", None)
+        init_str = "sp_init"
+        shared_seed_vocab = tokenizer_config.get("shared_seed_vocab", False)
+        shared_seed_str = "_shared_seed" if shared_seed_vocab else ''
+
+        if initial_vocab_tokens:
+            if "bpe" in initial_vocab_tokens:
+                init_str = "bpe_init"
+            else:
+                init_str = "pretrainedtok_init"
 
         logger.info(f"Processing tokenizer: {tokenizer_name} (type: {tokenizer_type} at {'byte' if byte_level else 'char'}-level)")
         
@@ -138,7 +148,10 @@ def train_tokenizers(config: Dict[str, Any], corpus_info: Dict[str, Any]) -> Dic
                     SafeFormattingDict(tokenizers_dir=tokenizers_dir, 
                                        em_mode=em_mode,
                                        pruning_criterion_str=pruning_criterion_str,
-                                       pruning_strategy=pruning_strategy))
+                                       pruning_strategy=pruning_strategy, 
+                                       init_str=init_str,
+                                       shared_seed_vocab=shared_seed_str
+                                       ))
                 if os.path.exists(pretrained_path):
                     tokenizer_paths[tokenizer_name] = {
                         "path": pretrained_path,
@@ -183,15 +196,22 @@ def train_tokenizers(config: Dict[str, Any], corpus_info: Dict[str, Any]) -> Dic
         elif tokenizer_type == "tokmix":
             # Get unified parameters matching standard tokenizer
             
+            
             output_file = tokenizer_config["path"].format_map(
                 SafeFormattingDict(tokenizers_dir=tokenizers_dir, 
                                  pruning_criterion_str=pruning_criterion_str,
-                                 pruning_strategy=pruning_strategy))
+                                 pruning_strategy=pruning_strategy, 
+                                 shared_seed_vocab=shared_seed_str
+                                 ))
 
             # Train individual language tokenizers first
             paths = train_lang_tokenizers(tokenizer_training_files, tokenizers_dir,
                                           vocab_size=vocab_size, 
-                                          byte_level=byte_level)
+                                          byte_level=byte_level,
+                                          shared_seed_vocab=shared_seed_vocab)
+
+            baseline_tokens = StandardUnigramLMTokenizer.baseline_tokens(
+                tokenizer_training_files.values(), byte_level)
 
             # Train TokMix with unified parameters
             tokmix_path = train_tokmix(paths,
@@ -199,7 +219,8 @@ def train_tokenizers(config: Dict[str, Any], corpus_info: Dict[str, Any]) -> Dic
                                        output_path=output_file,
                                        byte_level=byte_level,
                                        pruning_criterion=pruning_criterion,
-                                       use_intersection_pruning=use_intersection_pruning)
+                                       use_intersection_pruning=use_intersection_pruning,
+                                       baseline_tokens=baseline_tokens)
 
             tokenizer_paths[tokenizer_name] = {"path": tokmix_path,
                                                "class": "standard",
@@ -207,13 +228,14 @@ def train_tokenizers(config: Dict[str, Any], corpus_info: Dict[str, Any]) -> Dic
         
         elif tokenizer_type == "standard":
             # Handle standard tokenizer
-            initial_vocab_tokens = tokenizer_config.get("initial_vocab_tokens", None)
+            
             
             output_file = tokenizer_config["path"].format_map(
                 SafeFormattingDict(tokenizers_dir=tokenizers_dir, 
                                  em_mode=em_mode, 
                                  pruning_criterion_str=pruning_criterion_str,
-                                 pruning_strategy=pruning_strategy))
+                                 pruning_strategy=pruning_strategy,
+                                 init_str=init_str))
                         
             # Train new tokenizer
             
@@ -299,7 +321,7 @@ def tokenize_corpora(config: Dict[str, Any], corpus_info: Dict[str, Any], tokeni
         logger.info("Skipping corpus tokenization (configured to skip)") 
         tokenized_info = defaultdict(dict)
         for tokenizer_config in config["tokenizers"]:
-            dir_path = tokenizer_config["tokenized_data"]
+            dir_path = tokenizer_config["tokenized_data_path"]
             for lang_code in os.listdir(dir_path):
                 lang_dir = os.path.join(dir_path, lang_code)
                 
@@ -570,6 +592,8 @@ def main():
                       help="Pruning criterion for all tokenizers (overrides config)")
     parser.add_argument("--use-intersection-pruning", action="store_true",
                       help="Use intersection pruning strategy for all tokenizers (overrides config)")
+    parser.add_argument("--shared-tokmix-seed-vocab", action="store_true",
+                      help="For tokmix, creates shared seed vocab for tokenizers (overrides config)")
     
     # Step control
     step_group = parser.add_argument_group("Step control")
@@ -600,6 +624,9 @@ def main():
     if args.use_intersection_pruning:
         for tokenizer_config in config["tokenizers"]:
             tokenizer_config["use_intersection_pruning"] = True
+    if args.shared_tokmix_seed_vocab:
+        for tokenizer_config in config["tokenizers"]:
+            tokenizer_config["shared_seed_vocab"] = True
     
     # Automatically derive vocab_size_str from vocab_size (after overrides)
     vocab_size = config["experiment"]["vocab_size"]
@@ -609,7 +636,7 @@ def main():
     os.makedirs(data_dir, exist_ok=True)
     config["experiment"]["data_dir"] = data_dir
 
-    for sub_dir_name in ["tokenizers_dir","tokenized_data_dir","models_dir"]:
+    for sub_dir_name in ["tokenizers_dir", "tokenized_data_dir", "models_dir"]:
         sub_dir = config["experiment"].get(sub_dir_name, "").format(data_dir=data_dir)
         os.makedirs(sub_dir, exist_ok=True)
         config["experiment"][sub_dir_name] = sub_dir
