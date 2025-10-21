@@ -21,8 +21,7 @@ logger = logging.getLogger(__name__)
 # ---------------------------------------------------------------------------
 # HF helpers
 # ---------------------------------------------------------------------------
-# TODO: get rid of whitespace_boundaries arg
-def _apply_pretok_mapping_hf(text: str, pretok: Any, whitespace_boundaries: bool = True) -> str:
+def _apply_pretok_mapping_hf(text: str, pretok: Any, whitespace_boundaries: bool = False) -> str:
     
     normalized = pretok.pre_tokenize_str(text)
     pieces = [piece[0] for piece in normalized]
@@ -282,20 +281,42 @@ def load_tokenizer_with_mode(path: str):
     return tok, byte_level
 
 
-def _build_hf_tokenizer_from_lprobs(
+def _build_unigramlm_hf_tokenizer_from_lprobs(
     lprobs_tuples: List[Tuple[str, float]],
     unk_id: int,
-    pretokenizer: Any
+    pretokenizer: Any = None,
+    decoder: Any = None,
+    base_tokenizer: Any = None
 ) -> Tokenizer:
     """
     Turn a plain log probability dictionary into a HF Unigram tokenizer.
     """
-    #TODO: Add byte_fallback=self.byte_level if/when feature becomes available
     model = Unigram(lprobs_tuples, unk_id)
     tok = Tokenizer(model)
+    if base_tokenizer is not None:
+        # 1) Clone base config
+        base_json = json.loads(base_tokenizer.to_str())
+        # 2) Serialize a *temporary* tokenizer holding just this model,
+        #    then extract its 'model' JSON block.
+        model_json = json.loads(tok.to_str())["model"]
+
+        # 2) Replace only the model (keep *everything else* intact)
+        base_json["model"] = model_json
+
+        # 3) Rebuild tokenizer from modified JSON
+        tok = Tokenizer.from_str(json.dumps(base_json))
+        # NOTE: All of these are preserved automatically from base:
+        # - normalizer
+        # - pre_tokenizer
+        # - decoder
+        # - post_processor (templates for BOS/EOS/CLS/SEP, etc.)
+        # - added_tokens (special + regular added tokens)
+        # - truncation & padding settings
+
     if pretokenizer:
         tok.pre_tokenizer = pretokenizer
-
+    if decoder:
+        tok.decoder = decoder
     return tok
 
 

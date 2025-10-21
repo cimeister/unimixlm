@@ -101,7 +101,7 @@ def train_tokenizers(config: Dict[str, Any], corpus_info: Dict[str, Any]) -> Dic
         pruning_strategy = "intersection" if use_intersection_pruning else "average"
         multigram = tokenizer_config.get("multigram", False)
         initial_vocab_tokens = tokenizer_config.get("initial_vocab_tokens", None)
-        init_str = "sp_init"
+        init_str = config["experiment"].get("vocab_init", "sp") + "_init"
         shared_seed_vocab = tokenizer_config.get("shared_seed_vocab", False)
         shared_seed_str = "_shared_seed" if shared_seed_vocab else ''
 
@@ -238,7 +238,7 @@ def train_tokenizers(config: Dict[str, Any], corpus_info: Dict[str, Any]) -> Dic
                                  init_str=init_str))
                         
             # Train new tokenizer
-            
+            init_strategy = config["experiment"].get("vocab_init", "sp")
             path = train_standard_tokenizer(
                 tokenizer_training_files, 
                 vocab_size=vocab_size, 
@@ -248,7 +248,8 @@ def train_tokenizers(config: Dict[str, Any], corpus_info: Dict[str, Any]) -> Dic
                 output_path=output_file,
                 use_intersection_pruning=use_intersection_pruning,
                 pruning_criterion=pruning_criterion,
-                initial_vocab_tokens=initial_vocab_tokens
+                initial_vocab_tokens=initial_vocab_tokens,
+                use_sp_seed_vocab=init_strategy == "sp"
             )
             
             if path:
@@ -585,6 +586,9 @@ def main():
                       help="Vocabulary size for tokenizers (overrides config)")
     parser.add_argument("--byte-level", action="store_true", 
                       help="Use byte level tokenizers (overrides config)")
+    parser.add_argument("--vocab-init", type=str, 
+                      choices=["sp", "hf"],
+                      help="Vocab init strategy (overrides config)")
     
     # Tokenizer strategy options
     parser.add_argument("--pruning-criterion", type=str, 
@@ -616,6 +620,8 @@ def main():
         config["experiment"]["byte_level"] = True
     if args.vocab_size:
         config["experiment"]["vocab_size"] = args.vocab_size
+    if args.vocab_init:
+        config["experiment"]["vocab_init"] = args.vocab_init
     
     # Apply tokenizer strategy overrides to all tokenizer configs
     if args.pruning_criterion:
