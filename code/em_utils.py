@@ -272,7 +272,7 @@ def forward_backward_unigram_log_space(
     whitespace_boundaries=False
 ):
     """
-    Forward–backward for UnigramLM in log-space, with SentencePiece-style UNK gating:
+    Forward–backward for UnigramLM in log-space, with UNK gating:
     UNK is allowed exactly at positions where *no real token* can start.
 
     Args:
@@ -575,6 +575,7 @@ def _accumulate_usage_worker_soft(args):
             c_dict[tk] += frac
 
     return (dict(c_dict), total)
+
 
 def _accumulate_usage_worker_hard(args):
     """

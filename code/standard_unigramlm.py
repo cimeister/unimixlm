@@ -29,10 +29,9 @@ import platform
 import sys
 import multiprocessing
 
-from tokenizers import Tokenizer
+from tokenizers import Tokenizer, pre_tokenizers, decoders
 from tokenizers.models import Unigram, BPE
 from tokenizers.trainers import UnigramTrainer, BpeTrainer
-from tokenizers.pre_tokenizers import ByteLevel, Whitespace, Sequence
 
 from code.utils import (
     get_baseline_characters,
@@ -42,7 +41,7 @@ from code.utils import (
 
 from code.tokenizer_formatting_utils import (
     load_tokenizer_with_mode,
-    _build_hf_tokenizer_from_lprobs,
+    _build_unigramlm_hf_tokenizer_from_lprobs,
     _load_custom_vocab_from_file,
      _write_sp_seed_vocab_file,
     sp_piece_to_hf,
@@ -63,7 +62,8 @@ from code.constants import (
     MIN_TOKEN_LOG_PROB,
     MIN_CHAR_OCCURENCE_THRESHOLD,
     MAX_BYTE_TOKEN_LEN,
-    MAX_CHAR_TOKEN_LEN
+    MAX_CHAR_TOKEN_LEN,
+    SP_DEFAULT_ARGS
 )
 
 logger = logging.getLogger(__name__)
@@ -446,9 +446,19 @@ class StandardUnigramLMTokenizer:
         if self.base_tokenizer:
             return self.base_tokenizer.pre_tokenizer
         if self.byte_level:
-            return ByteLevel(add_prefix_space=True, use_regex=self.whitespace_token_boundaries)
+            return pre_tokenizers.ByteLevel(add_prefix_space=True, use_regex=self.whitespace_token_boundaries)
         elif self.whitespace_token_boundaries:
-            return Whitespace()
+            return pre_tokenizers.Whitespace()
+        else:
+            return None
+
+    def _get_decoder(self):
+        if self.base_tokenizer:
+            return self.base_tokenizer.decoder
+        if self.byte_level:
+            return decoders.ByteLevel()
+        elif self.whitespace_token_boundaries:
+            raise NotImplementedError
         else:
             return None
 
@@ -472,6 +482,7 @@ class StandardUnigramLMTokenizer:
         logger.info("Using HuggingFace UnigramTrainer for standard Unigram.")
         tok = Tokenizer(Unigram())
         tok.pre_tokenizer = self._get_pretokenizer()
+        tok.decoder = self._get_decoder()
 
         #TODO: Add byte_fallback=self.byte_level when feature becomes available
         trainer = UnigramTrainer(
@@ -495,15 +506,14 @@ class StandardUnigramLMTokenizer:
         """Plain HF BPE trainer; shares most hyper‑params with EM modes."""
         logger.info("Using HuggingFace BPETrainer.")
         tok = Tokenizer(BPE(unk_token=self.unk_token))
-        pretokenizer = self._get_pretokenizer()
-        if pretokenizer:
-            tok.pre_tokenizer = pretokenizer
+        tok.pre_tokenizer = self._get_pretokenizer()
+        tok.decoder = self._get_decoder()
 
         trainer = BpeTrainer(
             vocab_size=self.vocab_size,
             min_frequency=2,
             special_tokens=self.special_tokens,
-            initial_alphabet=ByteLevel.alphabet() if self.byte_level else [],
+            initial_alphabet=pre_tokenizers.ByteLevel.alphabet() if self.byte_level else [],
         )
         tok.train(corpus_files, trainer)
         self.base_tokenizer = tok
@@ -877,13 +887,6 @@ class StandardUnigramLMTokenizer:
             
             vocab = set(custom_tokens)
             vocab.update(self.special_tokens)
-            ws_count, ws_in_word_count = 0, 0
-            for tk in vocab:
-                if 'Ġ' in tk:
-                    ws_count += 1
-                    if 'Ġ' in tk[1:-1]:
-                        ws_in_word_count += 1
-            logger.info(f"{ws_count} tokens with whitespace characters ({ws_in_word_count} where whitespace is within token)")
             logger.info(f"Custom vocabulary prepared: {len(vocab)} tokens")
 
         elif self.use_sp_seed_vocab:
@@ -896,6 +899,15 @@ class StandardUnigramLMTokenizer:
             # Use existing HF-based approach  
             vocab = self._initial_vocab_hf(train_files)
             logger.info(f"HF-seeded initial vocabulary size: {len(vocab)}")
+
+        ws_count, ws_in_word_count = 0, 0
+        for tk in vocab:
+            if 'Ġ' in tk:
+                ws_count += 1
+                if 'Ġ' in tk[1:-1]:
+                    ws_in_word_count += 1
+        logger.info(f"{ws_count} tokens with whitespace characters ({ws_in_word_count} where whitespace is within token)")
+        
         return vocab
 
     def _sp_seed_vocab(self, train_files: List[str]) -> Set[str]:
@@ -913,26 +925,20 @@ class StandardUnigramLMTokenizer:
             out_prefix = os.path.join(tmpdir, "model")
 
             # 2. Construct the spm_train command
-            command = [
-                "spm_train",
+            command = ["spm_train"] + SP_DEFAULT_ARGS + [
                 f"--input={','.join(train_files)}",
                 f"--model_prefix={out_prefix}",
-                "--model_type=unigram",
-                "--normalization_rule_name=identity",
-                
+
                 f"--seed_sentencepiece_size={seed_vocab_size}",
                 f"--max_sentencepiece_length={MAX_BYTE_TOKEN_LEN if self.byte_level else MAX_CHAR_TOKEN_LEN}",
                 f"--split_by_whitespace={'true' if self.whitespace_token_boundaries else 'false'}",  
-                "--remove_extra_whitespaces=false",
-                "--treat_whitespace_as_suffix=false",
                 # -----------------------
 
-                f"--num_sub_iterations=0",
+                "--num_sub_iterations=0",
                 f"--unk_piece={self.unk_token}",
-                "--unk_id=0",
-                "--num_threads=16",
+                f"--num_threads={min(20, multiprocessing.cpu_count()-1)}",
                 f"--vocab_size={seed_vocab_size}"
-            ]
+            ] 
 
             # 3. Execute the command
             logger.info(f"Running SentencePiece CLI command:\n{' '.join(command)}")
@@ -957,16 +963,13 @@ class StandardUnigramLMTokenizer:
             sp.load(out_prefix + ".model")
 
             vocab = set()
-            ws_count, ws_in_word_count = 0, 0
             for i in range(sp.get_piece_size()):
                 p = sp.id_to_piece(i)
-                vocab.add(sp_piece_to_hf(p) if p not in self.special_tokens else p)
-                if 'Ġ' in sp_piece_to_hf(p):
-                    ws_count += 1
-                    if 'Ġ' in sp_piece_to_hf(p)[1:]:
-                        ws_in_word_count += 1
-            logger.info(f"{ws_count} tokens with whitespace characters ({ws_in_word_count} where whitespace is within token)")
-            logger.info(f"Seed vocab sample: {random.sample(vocab, 50)}")
+                hf_p = sp_piece_to_hf(p)
+                exceeds_len = (self.byte_level and len(hf_p.encode("utf-8")) > MAX_BYTE_TOKEN_LEN) or (not self.byte_level and len(hf_p) > MAX_CHAR_TOKEN_LEN)
+                if not exceeds_len: 
+                    vocab.add(hf_p if p not in self.special_tokens else p)
+                
             return vocab
     
     def _initial_vocab_hf(self, train_files: List[str]) -> Set[str]:
@@ -976,14 +979,15 @@ class StandardUnigramLMTokenizer:
         if pretokenizer:
             tok.pre_tokenizer = pretokenizer
         seed_vocab_size = self.vocab_size * INITIAL_VOCAB_MULT_FACTOR
-        logger.info(f"Attempting to find seed vocab of size {seed_vocab_size}...")
+        logger.info(f"Attempting to find seed vocab of size {seed_vocab_size} with HuggingFace library...")
         trainer = UnigramTrainer(
             vocab_size=seed_vocab_size,
             special_tokens=self.special_tokens,
             unk_token=self.unk_token,
             max_piece_length=MAX_BYTE_TOKEN_LEN if self.byte_level else MAX_CHAR_TOKEN_LEN,
             # not strictly necessary since these will be added back later
-            initial_alphabet=ByteLevel.alphabet() if self.byte_level else [],
+            initial_alphabet=pre_tokenizers.ByteLevel.alphabet() if self.byte_level else [],
+            n_sub_iterations=0
         )
         tok.train(train_files, trainer)
         vocab = tok.get_vocab()
@@ -1020,12 +1024,9 @@ class StandardUnigramLMTokenizer:
             expected_vocab_size = token_count + 3
             
             # 2. Construct the spm_train command
-            command = [
-                "spm_train",
+            command = ["spm_train"] + SP_DEFAULT_ARGS + [
                 f"--input={text_paths}",
                 f"--model_prefix={out_prefix}",
-                "--model_type=unigram",
-                "--normalization_rule_name=identity",
                 
                 f"--seed_sentencepieces_file={vocab_path}",
                 f"--vocab_size={expected_vocab_size}",
@@ -1033,9 +1034,7 @@ class StandardUnigramLMTokenizer:
 
                 f"--num_sub_iterations=1",
                 f"--unk_piece={self.unk_token}",
-                "--unk_id=0",
-                "--split_by_whitespace=false",  # handled by write_hf_bytelevel_corpus 
-                "--num_threads=16",
+                f"--num_threads={min(20, multiprocessing.cpu_count()-1)}"
             ]
 
             # 3. Execute the command
@@ -1220,10 +1219,11 @@ class StandardUnigramLMTokenizer:
     # ------------------------------------------------------------------
     def _build_tokenizer(self, lprobs: Dict[str, float], output_path):
         vocab_list, unk_id = self._build_final_vocab(lprobs)
-        tok = _build_hf_tokenizer_from_lprobs(
+        tok = _build_unigramlm_hf_tokenizer_from_lprobs(
             vocab_list,
             unk_id,
-            pretokenizer=self._get_pretokenizer()
+            pretokenizer=self._get_pretokenizer(),
+            decoder=self._get_decoder()
         )
         self.base_tokenizer = tok
         if output_path:
@@ -1536,10 +1536,12 @@ def train_tokmix(per_lang_paths: Dict[str, str],
             source_metadata[lang] = {"path": path, "em_mode": "unknown", "vocab_size": "unknown"}
     
     tkzs = {lg: StandardUnigramLMTokenizer() for lg in per_lang_paths}
-    pretokenizer = None
+    #TODO: figure out nicer way to set pretokenizer/decoder from a base tokenizer
+    pretokenizer, decoder = None, None
     for lg, path in per_lang_paths.items():
         tkzs[lg].load(path)
         pretokenizer = tkzs[lg]._get_pretokenizer()
+        decoder = tkzs[lg]._get_decoder()
 
     # Use unified tokmix_merge function with new parameters
     strategy_desc = f"intersection-{pruning_criterion}" if use_intersection_pruning else f"average-{pruning_criterion}"
@@ -1553,6 +1555,7 @@ def train_tokmix(per_lang_paths: Dict[str, str],
         SPECIAL_TOKENS["unk_token"],
         tokens_to_include,
         pretokenizer,
+        decoder,
         pruning_criterion=pruning_criterion,
         use_intersection_pruning=use_intersection_pruning,
         byte_level=byte_level
@@ -1589,7 +1592,8 @@ def train_standard_tokenizer(corpus_info,
                              dataset_size_normalization=True,
                              use_intersection_pruning=False,
                              pruning_criterion="exact_loss",
-                             initial_vocab_tokens=None
+                             initial_vocab_tokens=None, 
+                             use_sp_seed_vocab=True
                              ):
     """
     Train a standard UnigramLM tokenizer on all languages.
@@ -1631,7 +1635,8 @@ def train_standard_tokenizer(corpus_info,
         dataset_size_normalization=dataset_size_normalization,
         use_intersection_pruning=use_intersection_pruning,
         pruning_criterion=pruning_criterion,
-        initial_vocab_tokens=initial_vocab_tokens
+        initial_vocab_tokens=initial_vocab_tokens,
+        use_sp_seed_vocab=use_sp_seed_vocab
     )
     tokenizer.train(train_files, output_path, corpus_info=corpus_info)
     

@@ -10,7 +10,7 @@ from datetime import datetime
 import platform
 import sys
 import code.constants as constants
-from code.tokenizer_formatting_utils import _build_hf_tokenizer_from_lprobs
+from code.tokenizer_formatting_utils import _build_unigramlm_hf_tokenizer_from_lprobs
 
 from tokenizers import Tokenizer
 from tokenizers.pre_tokenizers import ByteLevel
@@ -554,6 +554,7 @@ def tokmix_merge(
     unk_token: str,
     special: List[str],
     pretokenizer: Any,
+    decoder: Any = None,
     pruning_criterion: str = "probability",      # "probability", "approx_loss", "exact_loss"
     use_intersection_pruning: bool = False,      # True = intersection, False = average
     byte_level: bool = False
@@ -709,7 +710,7 @@ def tokmix_merge(
     
     # Build HF tokenizer
     unk_id = kept_tokens.index(unk_token)
-    return _build_hf_tokenizer_from_lprobs(lprobs_tuples, unk_id, pretokenizer)
+    return _build_unigramlm_hf_tokenizer_from_lprobs(lprobs_tuples, unk_id, pretokenizer=pretokenizer, decoder=decoder)
 
 
 def _get_metadata_path(tokenizer_path: str) -> str:

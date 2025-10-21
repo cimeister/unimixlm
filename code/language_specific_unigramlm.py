@@ -7,6 +7,7 @@ import os
 from pathlib import Path
 from typing import Dict, List
 import numpy as np
+import multiprocessing
 
 from tokenizers import Tokenizer
 
@@ -14,10 +15,10 @@ from code.em_unigram_trainer import EMUnigramTrainer
 from code.standard_unigramlm import StandardUnigramLMTokenizer
 from code.utils import _save_tokenizer_metadata, _create_base_metadata, get_baseline_bytes
 from code.tokenizer_formatting_utils import (
-    _build_hf_tokenizer_from_lprobs, _get_hf_unigram_tokenizer_vocab, _write_sp_seed_vocab_file,
+    _build_unigramlm_hf_tokenizer_from_lprobs, _get_hf_unigram_tokenizer_vocab, _write_sp_seed_vocab_file,
     write_hf_bytelevel_corpus
 )
-from code.constants import SPECIAL_TOKENS, MIN_TOKEN_LOG_PROB
+from code.constants import SPECIAL_TOKENS, MIN_TOKEN_LOG_PROB, SP_DEFAULT_ARGS
 
 logger = logging.getLogger(__name__)
 
@@ -27,15 +28,10 @@ DEFAULT_LANGTOKENIZER_NAME = (
 )
 DEFAULT_BASE_NAME = "langspec_base_tokenizer.json"
 
+
 # ---------------------------------------------------------------------------
 # helpers
 # ---------------------------------------------------------------------------
-
-# assumes you already have these from your code
-# _UNI_TO_BYTE: dict[str(one-char) -> int]
-# SPECIAL_TOKENS: e.g. {"unk_token":"<unk>", "pad_token":"<pad>", ...}
-
-
 def _extract_log_scores(tok: Tokenizer) -> Dict[str, float]:
     """
     Return dict {token -> log_score} from a HF Unigram tokenizer.
@@ -44,9 +40,9 @@ def _extract_log_scores(tok: Tokenizer) -> Dict[str, float]:
     return {tok: score for tok, score in vocab_tuples }
 
 
-def _build_hf_tokenizer_with_new_lprobs(
+def _build_unigramlm_hf_tokenizer_with_new_lprobs(
     base_tokenizer,
-    log_probs: Dict[str, float],
+    new_log_probs: Dict[str, float],
     unk_token: str
 ) -> Tokenizer:
     """
@@ -54,24 +50,14 @@ def _build_hf_tokenizer_with_new_lprobs(
     """
     vocab_tuples = _get_hf_unigram_tokenizer_vocab(base_tokenizer)
     tuples = [
-        (t, max(log_probs[t], MIN_TOKEN_LOG_PROB)) for t, __ in vocab_tuples
+        (t, max(new_log_probs[t], MIN_TOKEN_LOG_PROB)) for t, _ in vocab_tuples
     ]
 
     unk_id = base_tokenizer.get_vocab()[unk_token]
-    tok = _build_hf_tokenizer_from_lprobs(tuples, unk_id, base_tokenizer.pre_tokenizer)
+    tok = _build_unigramlm_hf_tokenizer_from_lprobs(tuples, unk_id, base_tokenizer=base_tokenizer)
     if not tok.pre_tokenizer:
         logger.warning("No pretokenizer set for new HF tokenizer")
-        tok.pre_tokenizer = None
 
-    if hasattr(base_tokenizer, 'post_processor'):
-        tok.post_processor = base_tokenizer.post_processor
-    if hasattr(base_tokenizer, 'decoder'):
-        tok.decoder = base_tokenizer.decoder
-    if hasattr(base_tokenizer.model, 'byte_fallback'):
-        try:
-            tok.model.byte_fallback = base_tokenizer.model.byte_fallback
-        except AttributeError as e:
-            logger.warning(f"Failed to set byte_fallback attribute: {e}")
     return tok
 
 
@@ -195,19 +181,15 @@ class LanguageSpecificUnigramLMTokenizer(StandardUnigramLMTokenizer):
                     "spm_train",
                     f"--input={hf_processed_text_path}",
                     f"--model_prefix={out_prefix}",
-                    "--model_type=unigram",
-                    "--normalization_rule_name=identity",
-                    
                     f"--seed_sentencepieces_file={vocab_path}",
                     f"--vocab_size={expected_vocab_size}",
                     # -----------------------
 
                     f"--num_sub_iterations={max(1, min(int(num_iterations), 20))}",
                     f"--unk_piece={self.unk_token}",
-                    "--unk_id=0",
-                    "--split_by_whitespace=false",  # handled by write_hf_bytelevel_corpus 
-                    "--num_threads=16",
-                ]
+                    
+                    f"--num_threads={min(20, multiprocessing.cpu_count()-1)}"
+                ] + SP_DEFAULT_ARGS
                 # if self.whitespace_token_boundaries:
                 #     command.append("--split_by_whitespace=true")
 
@@ -357,7 +339,7 @@ class LanguageSpecificUnigramLMTokenizer(StandardUnigramLMTokenizer):
             # print("TVD: ", x)
 
             # ----------  HF tokenizer from these probabilities  ----------
-            tok = _build_hf_tokenizer_with_new_lprobs(self.base_tokenizer, token_log_probs, self.unk_token)
+            tok = _build_unigramlm_hf_tokenizer_with_new_lprobs(self.base_tokenizer, token_log_probs, self.unk_token)
             tok.save(str(tk_path))
             
             # Add metadata to language-specific tokenizer
