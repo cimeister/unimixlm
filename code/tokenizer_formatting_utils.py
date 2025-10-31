@@ -1,4 +1,3 @@
-import re
 import os
 import json
 import math
@@ -21,11 +20,11 @@ logger = logging.getLogger(__name__)
 # ---------------------------------------------------------------------------
 # HF helpers
 # ---------------------------------------------------------------------------
-def _apply_pretok_mapping_hf(text: str, pretok: Any, whitespace_boundaries: bool = False) -> str:
+def _apply_pretok_mapping_hf(text: str, pretok: Any, return_individual_pieces: bool = False) -> str:
     
     normalized = pretok.pre_tokenize_str(text)
     pieces = [piece[0] for piece in normalized]
-    if whitespace_boundaries:
+    if return_individual_pieces:
         return pieces
     return ["".join(pieces)]
 
@@ -39,7 +38,7 @@ def _hf_to_sp_piece(token: str) -> str:
     """ 
     out = []
     for ch in token:
-        b = _UNI_TO_BYTE.get(ch)  # GPT-2 byte-unicode -> raw byte (0..255) or None
+        b = constants._UNI_TO_BYTE.get(ch)  # GPT-2 byte-unicode -> raw byte (0..255) or None
         if b is None:
             out.append("\u2581" if ch == " " else ch)
             continue
@@ -102,7 +101,7 @@ def write_hf_bytelevel_corpus(in_path: str, out_path: str, pretok: Any):
         for line in fin:
             line = line.rstrip("\n")
             # Pre-tokenize to HF pieces, then concatenate the HF strings.
-            pieces = _apply_pretok_mapping_hf(line, pretok, whitespace_boundaries=True)
+            pieces = _apply_pretok_mapping_hf(line, pretok, return_individual_pieces=True)
             # The pieces already contain 'Ġ' where spaces were in the *raw* text
             fout.write("".join(pieces) + "\n")
 
@@ -118,7 +117,7 @@ def write_hf_bytelevel_corpus_optimized(in_path: str, out_path: str, pretok: Any
         chunk_size_bytes (int): The approximate size of chunks (in bytes) to
                                 read from the input file at a time.
     """
-    print(f"Processing {os.path.basename(in_path)} -> {os.path.basename(out_path)}")
+    logger.info(f"Processing {os.path.basename(in_path)} -> {os.path.basename(out_path)}")
     with open(in_path, "r", encoding="utf-8", errors="strict") as fin, \
          open(out_path, "w", encoding="utf-8") as fout:
         while True:
@@ -132,12 +131,12 @@ def write_hf_bytelevel_corpus_optimized(in_path: str, out_path: str, pretok: Any
             # one line and passes it to writelines, avoiding storing all
             # processed lines in memory at once.
             processed_lines_generator = (
-                "".join(_apply_pretok_mapping_hf(line.rstrip("\n"), pretok, whitespace_boundaries=True)) + "\n"
+                "".join(_apply_pretok_mapping_hf(line.rstrip("\n"), pretok, return_individual_pieces=True)) + "\n"
                 for line in lines
             )
             
             fout.writelines(processed_lines_generator)
-    print(f"Finished processing {os.path.basename(in_path)}")
+    logger.info(f"Finished processing {os.path.basename(in_path)}")
 
 def _process_file_worker(args: Tuple[str, str, Any]) -> str:
     """
@@ -153,31 +152,6 @@ def _process_file_worker(args: Tuple[str, str, Any]) -> str:
 # ---------------------------------------------------------------------------
 # SentencePiece helpers
 # ---------------------------------------------------------------------------
-def _build_gpt2_byte_maps():
-    """
-    Standard GPT-2 byte<->unicode mapping used by HF ByteLevel.
-    Returns:
-        byte_to_unicode: dict[int -> str(one-char)]
-        unicode_to_byte: dict[str(one-char) -> int]
-    """
-    bs = list(range(33, 127)) + list(range(161, 173)) + list(range(174, 256))
-    cs = bs[:]
-    n = 0
-    for b in range(256):
-        if b not in bs:
-            bs.append(b)
-            cs.append(256 + n)
-            n += 1
-    byte_to_unicode = dict(zip(bs, [chr(c) for c in cs]))
-    unicode_to_byte = {u: b for b, u in byte_to_unicode.items()}
-    return byte_to_unicode, unicode_to_byte
-
-
-_BYTE_TO_UNI, _UNI_TO_BYTE = _build_gpt2_byte_maps()
-_SP_BYTE_ANY_RE = re.compile(r"<0x([0-9A-F]{2})>")
-_SP_SPACE = "▁"
-_HF_SPACE = _BYTE_TO_UNI[32]  # typically "Ġ"
-
 
 def _write_sp_seed_vocab_file_with_conversion(
     vocab_with_scores: list[tuple[str, float]],
@@ -230,12 +204,12 @@ def sp_piece_to_hf_basic(piece: str) -> str:
     # 1) Map every embedded <0xXX> to the GPT-2 unicode char
     def _byte_repl(m):
         b = int(m.group(1), 16)
-        return _BYTE_TO_UNI[b]
-    piece = _SP_BYTE_ANY_RE.sub(_byte_repl, piece)
+        return constants._BYTE_TO_UNI[b]
+    piece = constants._SP_BYTE_ANY_RE.sub(_byte_repl, piece)
 
     # 2) Map SP's whitespace marker to HF's space token char
     #    (SP uses '▁' to mark a preceding space; HF uses the GPT-2 'Ġ' char)
-    piece = piece.replace("\u2581", _HF_SPACE)
+    piece = piece.replace("\u2581", constants._HF_SPACE)
 
     return piece
 
@@ -243,7 +217,7 @@ def sp_piece_to_hf(piece: str) -> str:
     # 1) Replace leading ▁… with Ġ… (keep count)
     i = 0
     n = len(piece)
-    while i < n and piece[i] == _SP_SPACE:
+    while i < n and piece[i] == constants._SP_SPACE:
         i += 1
     prefix = _HF_SPACE * i
     rest = piece[i:]
@@ -251,20 +225,20 @@ def sp_piece_to_hf(piece: str) -> str:
     # 2) Walk the remainder, expanding <0xNN> and mapping other literals via UTF-8 -> ByteLevel
     out = [prefix]
     pos = 0
-    for m in _SP_BYTE_ANY_RE.finditer(rest):
+    for m in constants._SP_BYTE_ANY_RE.finditer(rest):
         # map literal region before the match
         lit = rest[pos:m.start()]
         if lit:
             b = lit.encode("utf-8", errors="strict")
-            out.append("".join(_BYTE_TO_UNI[x] for x in b))
+            out.append("".join(constants._BYTE_TO_UNI[x] for x in b))
         # map the byte token
-        out.append(_BYTE_TO_UNI[int(m.group(1), 16)])
+        out.append(constants._BYTE_TO_UNI[int(m.group(1), 16)])
         pos = m.end()
     # tail literal
     tail = rest[pos:]
     if tail:
         b = tail.encode("utf-8", errors="strict")
-        out.append("".join(_BYTE_TO_UNI[x] for x in b))
+        out.append("".join(constants._BYTE_TO_UNI[x] for x in b))
     return "".join(out)
 
 
