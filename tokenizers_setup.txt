@@ -1,3 +1,4 @@
+git submodule update --init --recursive
 make sure you uninstalled tokenizers from current environment and installed maturin setuptools
 !pip uninstall -u tokenizers
 !pip install maturin setuptools
