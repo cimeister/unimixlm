@@ -12,3 +12,4 @@ data_50k/
 data_80k/
 data_80k_byte/
 results/
+.venv/
