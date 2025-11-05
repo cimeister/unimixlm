@@ -2,3 +2,7 @@
 	path = sentencepiece
 	url = https://github.com/cimeister/sentencepiece.git
 	branch = fixed-vocab-em
+[submodule "tokenizers"]
+	path = tokenizers
+	url = git@github.com:Ahmetcanyvz/tokenizers.git
+	branch = unimixlm_fast
