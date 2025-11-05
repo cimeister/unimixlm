@@ -1,0 +1,93 @@
+{
+  "start_time": 1760284326.177569,
+  "training_metrics": {
+    "initial_vocab_size": null,
+    "pruned_per_iteration": [],
+    "convergence": {
+      "l1_deltas": [],
+      "unk_probs": []
+    },
+    "training_time": null,
+    "final_loss": null,
+    "pruning_criterion": "exact_loss"
+  },
+  "version": "1.0",
+  "created_at": "2025-10-12T15:52:05.806973Z",
+  "tokenizer_class": "StandardUnigramLMTokenizer",
+  "tokenizer_type": "standard",
+  "training_config": {
+    "vocab_size": 10000,
+    "em_mode": null,
+    "num_iterations": 10,
+    "multigram": false,
+    "byte_level": true,
+    "dataset_size_normalization": true,
+    "use_intersection_pruning": true,
+    "pruning_criterion": "exact_loss",
+    "special_tokens": [
+      "<s>",
+      "</s>",
+      "<pad>",
+      "<unk>"
+    ],
+    "initial_vocab_source": "hf_generated"
+  },
+  "corpus_info": {
+    "training_files": [
+      "dslml_corpus_all/train/EN-GB.txt",
+      "dslml_corpus_all/train/EN-US.txt",
+      "dslml_corpus_all/train/ES-AR.txt",
+      "dslml_corpus_all/train/ES-ES.txt",
+      "dslml_corpus_all/train/FR-BE.txt",
+      "dslml_corpus_all/train/FR-CA.txt",
+      "dslml_corpus_all/train/FR-CH.txt",
+      "dslml_corpus_all/train/FR-FR.txt",
+      "dslml_corpus_all/train/PT-BR.txt",
+      "dslml_corpus_all/train/PT-PT.txt",
+      "dslml_corpus_all/train/bs.txt",
+      "dslml_corpus_all/train/hr.txt",
+      "dslml_corpus_all/train/me.txt",
+      "dslml_corpus_all/train/sr.txt"
+    ],
+    "total_files": 14,
+    "corpus_sizes": {
+      "dslml_corpus_all/train/EN-GB.txt": 1028,
+      "dslml_corpus_all/train/EN-US.txt": 1342,
+      "dslml_corpus_all/train/ES-AR.txt": 1982,
+      "dslml_corpus_all/train/ES-ES.txt": 2616,
+      "dslml_corpus_all/train/FR-BE.txt": 122369,
+      "dslml_corpus_all/train/FR-CA.txt": 19041,
+      "dslml_corpus_all/train/FR-CH.txt": 116490,
+      "dslml_corpus_all/train/FR-FR.txt": 84402,
+      "dslml_corpus_all/train/PT-BR.txt": 2556,
+      "dslml_corpus_all/train/PT-PT.txt": 1331,
+      "dslml_corpus_all/train/bs.txt": 45,
+      "dslml_corpus_all/train/hr.txt": 53,
+      "dslml_corpus_all/train/me.txt": 34,
+      "dslml_corpus_all/train/sr.txt": 236
+    },
+    "file_checksums": {
+      "dslml_corpus_all/train/EN-GB.txt": "4f25c8993dec306b844129a043599fa6",
+      "dslml_corpus_all/train/EN-US.txt": "aa2bc2b1752835c5da517e0356d52cb8",
+      "dslml_corpus_all/train/ES-AR.txt": "b3e572d7ede77c6b958137d5f8e1ebff",
+      "dslml_corpus_all/train/ES-ES.txt": "0bd49b295c878c72dd2d33a64a8c1831",
+      "dslml_corpus_all/train/FR-BE.txt": "54cb6c12456e882f5ef29163630ce9e6",
+      "dslml_corpus_all/train/FR-CA.txt": "add663ae34541ce85cdc0bf818b71e22",
+      "dslml_corpus_all/train/FR-CH.txt": "d3494396e3e9cab002e98aed7fc2e01d",
+      "dslml_corpus_all/train/FR-FR.txt": "a2670ea28877f07d261bc924136517af",
+      "dslml_corpus_all/train/PT-BR.txt": "d6879832d4b281648eeefd2269e86ea2",
+      "dslml_corpus_all/train/PT-PT.txt": "ce2f48376943afc4a394890a9382ae7c",
+      "dslml_corpus_all/train/bs.txt": "2fc7bf7029cfdc0a1641f0a79d992e48",
+      "dslml_corpus_all/train/hr.txt": "929ac2db3c539a84ab25c329279d7e00",
+      "dslml_corpus_all/train/me.txt": "cdc3688b3d9d169fff075eaf2ecedeac",
+      "dslml_corpus_all/train/sr.txt": "854f9d69f569259fbcb324ec1e04b24a"
+    },
+    "total_lines": 353525
+  },
+  "environment_info": {
+    "python_version": "3.10.18 (main, Jun  5 2025, 08:37:47) [Clang 14.0.6 ]",
+    "platform": "macOS-26.0.1-arm64-arm-64bit",
+    "num_processes": 16
+  },
+  "tokenizer_file": "base_tokenizer_10k.json"
+}

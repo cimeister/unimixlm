@@ -1,0 +1,24 @@
+{
+  "version": "1.0",
+  "created_at": "2025-10-12T15:57:40.850771Z",
+  "tokenizer_class": "LanguageSpecificUnigramLMTokenizer",
+  "tokenizer_type": "langspec",
+  "environment_info": {
+    "python_version": "3.10.18 (main, Jun  5 2025, 08:37:47) [Clang 14.0.6 ]",
+    "platform": "macOS-26.0.1-arm64-arm-64bit",
+    "num_processes": 16
+  },
+  "training_config": {
+    "vocab_size": 10000,
+    "reestimation_em_mode": "soft",
+    "byte_level": true,
+    "language_code": "ES-AR",
+    "base_tokenizer_path": "dslml_unimixlm_10k/base_tokenizer_10k.json",
+    "num_reestimation_iterations": 3
+  },
+  "corpus_info": {
+    "training_file": "dslml_corpus_all/train/ES-AR.txt",
+    "language_code": "ES-AR"
+  },
+  "tokenizer_file": "langspec_soft_ES-AR.tokenizer.json"
+}

@@ -1,0 +1,13 @@
+git submodule update --init --recursive
+make sure you uninstalled tokenizers from current environment and installed maturin setuptools
+!pip uninstall -u tokenizers
+!pip install maturin setuptools
+(setuptools might be unnecessary)
+go to tokeniners/bindings/python
+maturin develop --release
+if you get:
+    💥 maturin failed
+    Caused by: Both VIRTUAL_ENV and CONDA_PREFIX are set. Please unset one of them
+Use "unset CONDA_PREFIX"n then again maturin develop --release
+You should see "🛠 Installed tokenizers-0.22.2.dev0"
+Try 
