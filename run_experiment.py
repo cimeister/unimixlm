@@ -5,17 +5,17 @@ import json
 from datetime import datetime
 from typing import Dict, Any, List
 from collections import defaultdict
+import subprocess 
+import sys 
 
 # Import and setup environment variables
 from code.environment_setup import setup_environment
 setup_environment()
-from code.utils import SafeFormattingDict, proportional_sample
-from code.corpus_downloader import download_corpus
+from code.utils import SafeFormattingDict 
 from code.standard_unigramlm import train_standard_tokenizer, train_lang_tokenizers, train_tokmix, StandardUnigramLMTokenizer
 from code.language_specific_unigramlm import train_language_specific_tokenizer
 from code.corpus_tokenizer import CorpusTokenizer
 from code.model_trainer import train_models_from_config
-from code.constants import TOKENIZER_TOTAL_TRAINING_LINES
 
 # Setup logging
 logging.basicConfig(
@@ -39,41 +39,74 @@ def load_config(config_path: str) -> Dict[str, Any]:
         raise
 
 
-def process_corpora(config: Dict[str, Any], args: argparse.Namespace) -> Dict[str, Any]:
-    """Download and process corpora."""
-    logger.info("Step 1: Downloading and processing corpora...")
-    
-    # Override from args if specified
-    if args.skip_download or not config["steps"]["download"]:
-        logger.info("Skipping corpus download (using existing data)")
-        # Create a corpus_info structure from processed directory
-        corpus_info = {}
-        processed_dir = config["corpus"]["processed_dir"].format(data_dir=config["experiment"]["data_dir"])
-
-        if not os.path.exists(processed_dir):
-            logger.error(f"Processed directory {processed_dir} does not exist. Cannot skip download step.")
-            raise FileNotFoundError(f"Directory not found: {processed_dir}")
-            
-        for lang_code in os.listdir(processed_dir):
-            if "sampled" in lang_code:
-                continue
-            lang_dir = os.path.join(processed_dir, lang_code)
-            if os.path.isdir(lang_dir):
-                corpus_info[lang_code] = {
-                    'splits': {
-                        'train': os.path.join(lang_dir, "train.txt"),
-                        'val': os.path.join(lang_dir, "val.txt"),
-                        'test': os.path.join(lang_dir, "test.txt")
-                    }
-                }
+def process_corpora(corpus_config: Dict[str, Any], corpus_dir, seed=42):
+    """
+    Call the multilingual_corpus_downloader.py script to download and
+    prepare data into main_corpus/ and tokenizer_corpus/ directories.
+    """
+    logger.info("Step 1: Calling multilingual corpus downloader...")
+    # The main_corpus dir that will be created
+    # Find the downloader script. Assumes it's in the 'code' directory
+    # relative to this script's location (or where it's executed from).
+    downloader_script_path = "corpus_downloader.py"
+    if not os.path.exists(downloader_script_path):
+        logger.error(f"Downloader script not found at {downloader_script_path}")
+        logger.error("Please ensure 'multilingual_corpus_downloader.py' is in the 'code/' directory.")
+        raise FileNotFoundError(downloader_script_path)
         
-        return corpus_info
-            
-    corpus_info = download_corpus(config)
-    return corpus_info
+    command = [
+        sys.executable, # Use the current Python interpreter
+        downloader_script_path,
+        "--dataset", corpus_config.get("dataset", "cc100"),
+        "--lang_set", corpus_config.get("lang_set", "L20"),
+        "--output_dir", corpus_dir,
+        "--total_size_gb", str(corpus_config.get("total_size_gb", 100)),
+        "--main_sampling_temp", str(corpus_config.get("main_sampling_temp", 5.0)),
+        "--tokenizer_size_gb", str(corpus_config.get("tokenizer_size_gb", 10.0)),
+        "--tokenizer_sampling_temp", str(corpus_config.get("tokenizer_sampling_temp", 1.0)),
+        "--min_lines_floor", str(corpus_config.get("min_lines_floor", 1000)),
+        "--val_frac", str(corpus_config.get("val_frac", 0.005)),
+        "--test_frac", str(corpus_config.get("test_frac", 0.005)),
+        "--seed", str(seed)
+    ]
+    
+    if corpus_config.get("skip_cache_clean", False):
+        command.append("--skip_cache_clean")
+
+    logger.info("Running downloader command:")
+    logger.info(" ".join(command))
+    
+    # --- 4. Execute Command ---
+    try:
+        # Use subprocess.run, capture output, and check return code
+        result = subprocess.run(
+            command, 
+            stdout=subprocess.PIPE, 
+            stderr=subprocess.PIPE, 
+            text=True, 
+            check=True, # Raise an error if the command fails
+            encoding='utf-8'
+        )
+        # Log STDOUT and STDERR from the subprocess
+        if result.stdout:
+            logger.info("Downloader STDOUT:\n" + result.stdout)
+        if result.stderr:
+            logger.info("Downloader STDERR:\n" + result.stderr)
+        
+        logger.info("Corpus download script completed successfully.")
+        
+    except subprocess.CalledProcessError as e:
+        # Log the error if the subprocess fails
+        logger.error(f"Corpus downloader script failed with exit code {e.returncode}.")
+        logger.error(f"Downloader STDOUT:\n{e.stdout}")
+        logger.error(f"Downloader STDERR:\n{e.stderr}")
+        raise RuntimeError("Corpus download failed. See logs for details.")
+    except Exception as e:
+        logger.error(f"Failed to run corpus downloader: {str(e)}")
+        raise
 
 
-def train_tokenizers(config: Dict[str, Any], corpus_info: Dict[str, Any]) -> Dict[str, Dict[str, Any]]:
+def train_tokenizers(config: Dict[str, Any], tokenizer_training_files: Dict[str, str]) -> Dict[str, Dict[str, Any]]:
     """Train various tokenizers specified in the configuration."""
     logger.info("Step 2: Training tokenizers...")
     
@@ -81,15 +114,18 @@ def train_tokenizers(config: Dict[str, Any], corpus_info: Dict[str, Any]) -> Dic
     tokenizer_paths = {}
     tokenizers_dir = config["experiment"]["tokenizers_dir"]
 
-    sample_out_dir = os.path.join(config["corpus"]["processed_dir"], "sampled")
-    tokenizer_training_files = proportional_sample(
-        {lg: info['splits']["train"] for lg, info in corpus_info.items()}, 
-        sample_out_dir,
-        TOKENIZER_TOTAL_TRAINING_LINES
-    )
+    # --- CHANGED ---
+    # The proportional_sample call is removed.
+    # tokenizer_training_files is now passed directly as an argument.
+    if not tokenizer_training_files:
+        logger.error("No tokenizer training files found. Cannot train tokenizers.")
+        return {}
+    
+    logger.info(f"Found {len(tokenizer_training_files)} language files for tokenizer training.")
 
     # Process each tokenizer configuration
     for tokenizer_config in config["tokenizers"]:
+    
         tokenizer_name = tokenizer_config["name"]
         tokenizer_type = tokenizer_config["type"]
         pruning_criterion = tokenizer_config.get("pruning_criterion", "exact_loss")
@@ -290,9 +326,7 @@ def train_tokenizers(config: Dict[str, Any], corpus_info: Dict[str, Any]) -> Dic
     return tokenizer_paths
 
 
-def tokenize_corpora(config: Dict[str, Any], corpus_info: Dict[str, Any], tokenizer_paths: Dict[str, Dict[str, Any]]) -> Dict[str, Dict[str, Dict[str, str]]]: 
-    """Tokenize corpora using the trained tokenizers."""
-    
+def tokenize_corpora(config: Dict[str, Any], corpus_info: Dict[str, Any], tokenizer_paths: Dict[str, Dict[str, Any]]) -> Dict[str, Dict[str, Dict[str, str]]]:     
     # Check if we should use pre-tokenized data
     tokenized_data_dir = config["experiment"].get("tokenized_data_dir", "")
 
@@ -320,20 +354,32 @@ def tokenize_corpora(config: Dict[str, Any], corpus_info: Dict[str, Any], tokeni
     """Tokenize corpora using the trained tokenizers."""
     if not config["steps"].get("tokenize_corpora", True):
         logger.info("Skipping corpus tokenization (configured to skip)") 
+        # --- CHANGED ---
+        # This logic now scans for .jsonl files, which is more robust
         tokenized_info = defaultdict(dict)
         for tokenizer_config in config["tokenizers"]:
             dir_path = tokenizer_config["tokenized_data_path"]
+            if not os.path.exists(dir_path):
+                logger.warning(f"Pre-tokenized dir not found: {dir_path}")
+                continue
+                
+            tokenizer_name = tokenizer_config["name"]
             for lang_code in os.listdir(dir_path):
                 lang_dir = os.path.join(dir_path, lang_code)
                 
                 if os.path.isdir(lang_dir):
-                    tokenized_info[tokenizer_name][lang_code] = {
-                        'train': os.path.join(lang_dir, "train.jsonl"),
-                        'val': os.path.join(lang_dir, "val.jsonl"),
-                        'test': os.path.join(lang_dir, "test.jsonl")
-                    }
+                    train_file = os.path.join(lang_dir, "train.jsonl")
+                    val_file = os.path.join(lang_dir, "val.jsonl")
+                    test_file = os.path.join(lang_dir, "test.jsonl")
+                    
+                    if os.path.exists(train_file):
+                        tokenized_info[tokenizer_name][lang_code] = {
+                            'train': train_file,
+                            'val': val_file,
+                            'test': test_file
+                        }
         return tokenized_info
-    
+
     logger.info("Step 3: Tokenizing corpora...")
     use_pretokenized_data_if_exists = config["tokenized_data"].get("use_pretokenized_data_if_exists", False)
 
@@ -350,8 +396,8 @@ def tokenize_corpora(config: Dict[str, Any], corpus_info: Dict[str, Any], tokeni
     # Create corpus tokenizer
     max_lines = config["experiment"].get("max_samples_per_language")
     tokenizer = CorpusTokenizer(
-        corpus_info=corpus_info,
-        tokenizers=tokenizer_configs,
+        corpus_info=corpus_info, 
+        tokenizers=tokenizer_configs,        
         output_dir=tokenized_data_dir,
         max_lines_per_file=max_lines,
         skip_if_exists=use_pretokenized_data_if_exists
@@ -663,21 +709,102 @@ def main():
     
     try:
         # Step 1: Download and process corpora
-        corpus_info = process_corpora(config, args)
+        # This function now runs the downloader script and doesn't return anything.
+
+        # --- Define paths based on downloader script's output ---
         
+        if args.skip_download or config["steps"]["download"] is False:
+            main_corpus_dir = config["corpus"].get("main_corpus_dir", "main_corpus").format(data_dir=config["experiment"]["data_dir"])
+            tokenizer_corpus_dir = config["corpus"].get("tokenizer_corpus_dir", "tokenizer_corpus").format(data_dir=config["experiment"]["data_dir"])
+        else:
+            data_output_dir = config["corpus"].get("data_output_dir", "raw_data").format(data_dir=config["experiment"]["data_dir"])
+            process_corpora(config["corpus"], data_output_dir,
+                seed=config["experiment"].get("seed", 42))
+            main_corpus_dir = os.path.join(data_output_dir, "main_corpus")
+            tokenizer_corpus_dir = os.path.join(data_output_dir, "tokenizer_corpus")
+
+        # --- Build file lists by scanning directories ---
+        logger.info("Scanning download directories for corpus files...")
+        
+        # Build tokenizer_training_files (for tokenizer) from tokenizer_corpus_dir
+        tokenizer_training_files = {}
+        if not os.path.exists(tokenizer_corpus_dir):
+            logger.error(f"Tokenizer corpus directory not found: {tokenizer_corpus_dir}")
+            raise FileNotFoundError(tokenizer_corpus_dir)
+
+        tokenizer_training_langs = config["corpus"].get("tokenizer_training_langs", [])
+        if not tokenizer_training_langs:
+            tokenizer_training_langs = os.listdir(tokenizer_corpus_dir)
+            
+        for lang_code in tokenizer_training_langs: # Scan based on languages found in main corpus
+            lang_dir = os.path.join(tokenizer_corpus_dir, lang_code)
+            train_file = os.path.join(lang_dir, "train.txt")
+            if os.path.exists(train_file) and os.path.getsize(train_file) > 0:
+                tokenizer_training_files[lang_code] = train_file
+            else:
+                logger.warning(f"No tokenizer training file found for {lang_code} in {lang_dir}")
+        final_tokenizer_training_langs = set(tokenizer_training_files.keys())
+        logger.info(f"Found tokenizer training data for {len(tokenizer_training_langs)} languages.")
+
         # Step 2: Train tokenizers
-        tokenizer_paths = train_tokenizers(config, corpus_info)
+        # Pass the newly scanned dict
+        tokenizer_paths = train_tokenizers(config, tokenizer_training_files)
+
+        #  Build corpus_info (for model training) from main_corpus_dir
+        corpus_info = {}
+        if not os.path.exists(main_corpus_dir):
+            logger.error(f"Main corpus directory not found: {main_corpus_dir}")
+            raise FileNotFoundError(main_corpus_dir)
+
+        model_training_langs = config["corpus"].get("model_training_langs", [])
+        if not model_training_langs:
+            model_training_langs = os.listdir(main_corpus_dir)
+            
+        for lang_code in model_training_langs:
+            lang_dir = os.path.join(main_corpus_dir, lang_code)
+            if os.path.isdir(lang_dir):
+                train_file = os.path.join(lang_dir, "train.txt")
+                val_file = os.path.join(lang_dir, "val.txt")
+                test_file = os.path.join(lang_dir, "test.txt")
+                
+                if os.path.exists(train_file):
+                    corpus_info[lang_code] = {
+                        'splits': {
+                            'train': train_file,
+                            'val': val_file,
+                            'test': test_file
+                        }
+                    }
         
+        if not corpus_info:
+            logger.error(f"No language data found in {main_corpus_dir}.")
+            raise RuntimeError("Corpus download seems to have failed to produce data.")
+        final_model_training_langs = set(corpus_info.keys())
+        logger.info(f"Found model training data for {len(final_model_training_langs)} languages.")
+        
+        if final_tokenizer_training_langs - final_model_training_langs:
+            logger.warning(f"Using tokenizer training data for languages {final_tokenizer_training_langs - final_model_training_langs} "
+                " but no model training data for these languages will be used.")
+        
+        if final_model_training_langs - final_tokenizer_training_langs:
+            logger.warning(f"Using model training data for languages {final_model_training_langs - final_tokenizer_training_langs } "
+                " but no tokenizer training data for these languages was used.")
         # Step 3: Tokenize corpora
+        # Pass the newly scanned dict
         tokenized_info = tokenize_corpora(config, corpus_info, tokenizer_paths)
         
         # Step 4: Train language models
         model_paths, model_kwargs = train_models(config, tokenized_info, tokenizer_paths)
         
-        ft_results = finetune_models(config, model_paths, model_kwargs, tokenizer_paths, languages=list(corpus_info.keys()))
-        # Step 5: Evaluate models
+        # Step 5: Fine-tune models
+        # Pass the language list derived from the scan
+        ft_results = finetune_models(config, model_paths, model_kwargs, tokenizer_paths, languages=lang_list)
+        
+        # Step 6: Evaluate models
         # TODO: update evaluate_models func  
        # evaluation_results = evaluate_models(config, model_paths, tokenized_info, tokenizer_paths)
+        
+    
         
         end_time = datetime.now()
         duration = end_time - start_time

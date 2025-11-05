@@ -6,7 +6,7 @@ from collections import OrderedDict
 
 SPECIAL_TOKENS = OrderedDict([("bos_token", "<s>"), ("eos_token", "</s>"), ("pad_token","<pad>"), ("unk_token","<unk>")])
 NUM_TRIMMING_ITERATIONS = 3
-INITIAL_VOCAB_MULT_FACTOR = 8
+INITIAL_VOCAB_MULT_FACTOR = 5
 MIN_CHAR_OCCURENCE_THRESHOLD = 2
 MIN_TOKEN_PROB = 1e-12
 MIN_TOKEN_LOG_PROB = math.log(MIN_TOKEN_PROB)
@@ -18,6 +18,9 @@ MAX_VAL_TEST_SIZE = 3000
 _RNG = random.Random(42)
 _SP_BYTE_ANY_RE = re.compile(r"<0x([0-9A-F]{2})>")
 _SP_SPACE = "▁"
+# --- SentencePiece Pruning Schedule Parameters TODO: make passable params ---
+NUM_SUB_ITERATIONS = 2 
+SHRINKING_FACTOR = 0.75  # SP's default vocabulary shrinking factor
 
 
 def _build_gpt2_byte_maps():
@@ -44,6 +47,7 @@ _BYTE_TO_UNI, _UNI_TO_BYTE = _build_gpt2_byte_maps()
 _HF_SPACE = _BYTE_TO_UNI[32]  # typically "Ġ"
 
 SP_DEFAULT_ARGS = ["--model_type=unigram",
+                    "--train_extremely_large_corpus=true",
                     "--normalization_rule_name=identity",
                     "--remove_extra_whitespaces=false",
                     "--allow_whitespace_only_pieces=true",

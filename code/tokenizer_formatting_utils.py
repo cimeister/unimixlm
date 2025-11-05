@@ -118,6 +118,7 @@ def write_hf_bytelevel_corpus_optimized(in_path: str, out_path: str, pretok: Any
                                 read from the input file at a time.
     """
     logger.info(f"Processing {os.path.basename(in_path)} -> {os.path.basename(out_path)}")
+    empty = True
     with open(in_path, "r", encoding="utf-8", errors="strict") as fin, \
          open(out_path, "w", encoding="utf-8") as fout:
         while True:
@@ -136,6 +137,9 @@ def write_hf_bytelevel_corpus_optimized(in_path: str, out_path: str, pretok: Any
             )
             
             fout.writelines(processed_lines_generator)
+            empty = False
+    if empty:
+        logger.warning(f"No lines produced when processing {in_path}")
     logger.info(f"Finished processing {os.path.basename(in_path)}")
 
 def _process_file_worker(args: Tuple[str, str, Any]) -> str:
