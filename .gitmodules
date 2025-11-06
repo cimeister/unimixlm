@@ -4,5 +4,5 @@
 	branch = fixed-vocab-em
 [submodule "tokenizers"]
 	path = tokenizers
-	url = git@github.com:Ahmetcanyvz/tokenizers.git
+	url = https://github.com/Ahmetcanyvz/tokenizers.git
 	branch = unimixlm_fast
