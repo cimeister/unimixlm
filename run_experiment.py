@@ -114,8 +114,6 @@ def train_tokenizers(config: Dict[str, Any], tokenizer_training_files: Dict[str,
     tokenizer_paths = {}
     tokenizers_dir = config["experiment"]["tokenizers_dir"]
 
-    # --- CHANGED ---
-    # The proportional_sample call is removed.
     # tokenizer_training_files is now passed directly as an argument.
     if not tokenizer_training_files:
         logger.error("No tokenizer training files found. Cannot train tokenizers.")
@@ -728,23 +726,26 @@ def main():
         
         # Build tokenizer_training_files (for tokenizer) from tokenizer_corpus_dir
         tokenizer_training_files = {}
-        if not os.path.exists(tokenizer_corpus_dir):
-            logger.error(f"Tokenizer corpus directory not found: {tokenizer_corpus_dir}")
-            raise FileNotFoundError(tokenizer_corpus_dir)
+        final_tokenizer_training_langs = set()
+        if config["steps"]["train_tokenizers"]:
+            if not os.path.exists(tokenizer_corpus_dir):
+                logger.error(f"Tokenizer corpus directory not found: {tokenizer_corpus_dir}. Set 'corpus.tokenizer_corpus_dir' in config "
+                    "to valid file path.")
+                raise FileNotFoundError(tokenizer_corpus_dir)
 
-        tokenizer_training_langs = config["corpus"].get("tokenizer_training_langs", [])
-        if not tokenizer_training_langs:
-            tokenizer_training_langs = os.listdir(tokenizer_corpus_dir)
-            
-        for lang_code in tokenizer_training_langs: # Scan based on languages found in main corpus
-            lang_dir = os.path.join(tokenizer_corpus_dir, lang_code)
-            train_file = os.path.join(lang_dir, "train.txt")
-            if os.path.exists(train_file) and os.path.getsize(train_file) > 0:
-                tokenizer_training_files[lang_code] = train_file
-            else:
-                logger.warning(f"No tokenizer training file found for {lang_code} in {lang_dir}")
-        final_tokenizer_training_langs = set(tokenizer_training_files.keys())
-        logger.info(f"Found tokenizer training data for {len(tokenizer_training_langs)} languages.")
+            tokenizer_training_langs = config["corpus"].get("tokenizer_training_langs", [])
+            if not tokenizer_training_langs:
+                tokenizer_training_langs = os.listdir(tokenizer_corpus_dir)
+                
+            for lang_code in tokenizer_training_langs: # Scan based on languages found in main corpus
+                lang_dir = os.path.join(tokenizer_corpus_dir, lang_code)
+                train_file = os.path.join(lang_dir, "train.txt")
+                if os.path.exists(train_file) and os.path.getsize(train_file) > 0:
+                    tokenizer_training_files[lang_code] = train_file
+                else:
+                    logger.warning(f"No tokenizer training file found for {lang_code} in {lang_dir}")
+            final_tokenizer_training_langs = set(tokenizer_training_files.keys())
+            logger.info(f"Found tokenizer training data for {len(tokenizer_training_langs)} languages.")
 
         # Step 2: Train tokenizers
         # Pass the newly scanned dict
@@ -752,43 +753,47 @@ def main():
 
         #  Build corpus_info (for model training) from main_corpus_dir
         corpus_info = {}
-        if not os.path.exists(main_corpus_dir):
-            logger.error(f"Main corpus directory not found: {main_corpus_dir}")
-            raise FileNotFoundError(main_corpus_dir)
+        #TODO: fix this logic for getting the training languages for when there's no model training
+        final_model_training_langs = set()
+        if config["steps"]["train_models"]:
+            if not os.path.exists(main_corpus_dir):
+                logger.error(f"Main corpus directory not found: {main_corpus_dir}")
+                raise FileNotFoundError(main_corpus_dir)
 
-        model_training_langs = config["corpus"].get("model_training_langs", [])
-        if not model_training_langs:
-            model_training_langs = os.listdir(main_corpus_dir)
-            
-        for lang_code in model_training_langs:
-            lang_dir = os.path.join(main_corpus_dir, lang_code)
-            if os.path.isdir(lang_dir):
-                train_file = os.path.join(lang_dir, "train.txt")
-                val_file = os.path.join(lang_dir, "val.txt")
-                test_file = os.path.join(lang_dir, "test.txt")
+            model_training_langs = config["corpus"].get("model_training_langs", [])
+            if not model_training_langs:
+                model_training_langs = os.listdir(main_corpus_dir)
                 
-                if os.path.exists(train_file):
-                    corpus_info[lang_code] = {
-                        'splits': {
-                            'train': train_file,
-                            'val': val_file,
-                            'test': test_file
+            for lang_code in model_training_langs:
+                lang_dir = os.path.join(main_corpus_dir, lang_code)
+                if os.path.isdir(lang_dir):
+                    train_file = os.path.join(lang_dir, "train.txt")
+                    val_file = os.path.join(lang_dir, "val.txt")
+                    test_file = os.path.join(lang_dir, "test.txt")
+                    
+                    if os.path.exists(train_file):
+                        corpus_info[lang_code] = {
+                            'splits': {
+                                'train': train_file,
+                                'val': val_file,
+                                'test': test_file
+                            }
                         }
-                    }
-        
-        if not corpus_info:
-            logger.error(f"No language data found in {main_corpus_dir}.")
-            raise RuntimeError("Corpus download seems to have failed to produce data.")
-        final_model_training_langs = set(corpus_info.keys())
-        logger.info(f"Found model training data for {len(final_model_training_langs)} languages.")
-        
-        if final_tokenizer_training_langs - final_model_training_langs:
-            logger.warning(f"Using tokenizer training data for languages {final_tokenizer_training_langs - final_model_training_langs} "
-                " but no model training data for these languages will be used.")
-        
-        if final_model_training_langs - final_tokenizer_training_langs:
-            logger.warning(f"Using model training data for languages {final_model_training_langs - final_tokenizer_training_langs } "
-                " but no tokenizer training data for these languages was used.")
+            
+            if not corpus_info:
+                logger.error(f"No language data found in {main_corpus_dir}.")
+                raise RuntimeError("Corpus download seems to have failed to produce data.")
+            final_model_training_langs = set(corpus_info.keys())
+            logger.info(f"Found model training data for {len(final_model_training_langs)} languages.")
+            
+            if final_model_training_langs:
+                if final_tokenizer_training_langs - final_model_training_langs:
+                    logger.warning(f"Using tokenizer training data for languages {final_tokenizer_training_langs - final_model_training_langs} "
+                        " but no model training data for these languages will be used.")
+                
+                if final_model_training_langs - final_tokenizer_training_langs:
+                    logger.warning(f"Using model training data for languages {final_model_training_langs - final_tokenizer_training_langs } "
+                        " but no tokenizer training data for these languages was used.")
         # Step 3: Tokenize corpora
         # Pass the newly scanned dict
         tokenized_info = tokenize_corpora(config, corpus_info, tokenizer_paths)
@@ -798,7 +803,7 @@ def main():
         
         # Step 5: Fine-tune models
         # Pass the language list derived from the scan
-        ft_results = finetune_models(config, model_paths, model_kwargs, tokenizer_paths, languages=lang_list)
+        ft_results = finetune_models(config, model_paths, model_kwargs, tokenizer_paths, languages=final_model_training_langs)
         
         # Step 6: Evaluate models
         # TODO: update evaluate_models func  

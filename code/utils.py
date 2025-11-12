@@ -1,8 +1,9 @@
+import os
 import math
 from collections import defaultdict, Counter
 import multiprocessing
 import json
-from typing import Dict, List, Tuple, Set, Any, Optional, Union
+from typing import Dict, List, Tuple, Set, Any, Optional, Union, Iterator
 
 from pathlib import Path
 import hashlib
@@ -419,92 +420,73 @@ def encode_text(
     return result
 
 
-def proportional_sample(train_files_by_lang: Dict[str, str],
-                        out_root: str,
-                        total_lines: int) -> Dict[str, str]:
+def proportional_corpus_iterator(
+    filepaths: List[str],
+    total_bytes: int = 1_500_000_000,   # ~2GB, adjust if you want smaller
+    encoding: str = "utf-8",
+    min_chunk: int = 0,                 # set >0 if you want to force at least N bytes per file
+) -> Iterator[str]:
     """
-    For each language copy ≤ n lines into <out_root>/<lang>/sample.txt,
-    where n is proportional to the byte count recorded in meta.json.
-    Returns   lang -> sampled_file_path
+    Yield lines from all files, where each file contributes
+    roughly in proportion to its size, up to `total_bytes` overall.
     """
-    byte_tot = {lg: json.load(open(Path(path).parent/"meta.json"))["bytes_written"]
-                for lg, path in train_files_by_lang.items()}
-    total = sum(byte_tot.values())
+    # get sizes
+    sizes = [os.path.getsize(p) for p in filepaths]
+    total_size = sum(sizes)
+    if total_size == 0:
+        return
 
-    out_path = Path(out_root)
-    out_path.mkdir(parents=True, exist_ok=True)
-    sampled_files = {}
-    for lg, path in train_files_by_lang.items():
-        # ensure at least MIN_TOKENIZER_LANG_TRAINING_LINES lines
-        k = max(constants.MIN_TOKENIZER_LANG_TRAINING_LINES, int(total_lines * byte_tot[lg] / total))
-        dest_dir = out_path / lg
-        dest_dir.mkdir(parents=True, exist_ok=True)
-        dest = dest_dir / "sample.txt"
-        sampled_files[lg] = str(dest)
+    # if the corpus is smaller than total_bytes, just stream everything
+    if total_size <= total_bytes:
+        for path in filepaths:
+            with open(path, "r", encoding=encoding) as f:
+                for line in f:
+                    line = line.rstrip("\n")
+                    if line:
+                        yield line
+        return
 
-        if dest.exists():               # reuse cache
-            continue
+    # compute per-file budgets
+    # budget_i = total_bytes * (size_i / total_size)
+    raw_budgets = [total_bytes * (sz / total_size) for sz in sizes]
+    budgets = [int(b) for b in raw_budgets]
 
-        with open(path, encoding="utf-8", errors="ignore") as src, \
-             open(dest, "w", encoding="utf-8") as tgt:
-            lines_written = 0
-            for line in src:
-                if lines_written == k:
-                    break
-                if constants._RNG.random() > 0.2:   # light intra‑lang subsample
+    # optionally enforce a minimum budget per file
+    if min_chunk > 0:
+        budgets = [max(b, min_chunk) for b in budgets]
+
+    # open all files
+    files = [open(p, "r", encoding=encoding) for p in filepaths]
+    try:
+        # track how much we've yielded per file
+        used = [0] * len(filepaths)
+        active = True
+        # round-robin over files until all budgets are exhausted
+        while active:
+            active = False  # will turn True if any file still has budget + data
+            for i, f in enumerate(files):
+                if used[i] >= budgets[i]:
+                    continue  # this file is done
+                # try to read a line
+                pos_before = f.tell()
+                line = f.readline()
+                if not line:
+                    continue  # EOF for this file
+                # normalize
+                line_stripped = line.rstrip("\n")
+                line_size = len(line.encode(encoding))  # actual bytes we'll count
+                # if this line would exceed the budget, skip it and mark file done
+                if used[i] + line_size > budgets[i]:
+                    # we could seek back, but easier to just stop using this file
                     continue
-                tgt.write(line)
-                lines_written += 1
-    return sampled_files
-
-
-def _sample_lines_from_file(file_path: str, sample_proportion: float, seed: int) -> List[str]:
-    """
-    Efficiently sample lines from a file using reservoir sampling.
-    """
-    import random
-    random.seed(seed)
-    
-    # First, try to estimate file size
-    sample_size = None
-    with open(file_path, 'r', encoding='utf-8', errors='replace') as f:
-        # Read first 1000 lines to estimate
-        first_lines = []
-        i = 0
-        for i, line in enumerate(f):
-            if i >= 1000:
-                break
-            if line.strip():
-                first_lines.append(line.strip())
-        
-        # If file is small, just return all lines
-        if i < 1000:
-            return first_lines
-        
-        # Estimate total lines (rough approximation)
-        f.seek(0, 2)  # End of file
-        file_size = f.tell()
-        f.seek(0)
-        avg_line_size = sum(len(line) for line in first_lines) / len(first_lines)
-        estimated_lines = int(file_size / avg_line_size)
-        sample_size = max(1000, int(estimated_lines * sample_proportion))
-    
-    # Now do reservoir sampling
-    reservoir = []
-    with open(file_path, 'r', encoding='utf-8', errors='replace') as f:
-        for i, line in enumerate(f):
-            line = line.strip()
-            if not line:
-                continue
-                
-            if len(reservoir) < sample_size:
-                reservoir.append(line)
-            else:
-                j = random.randint(0, i)
-                if j < sample_size:
-                    reservoir[j] = line
-    
-    return reservoir
+                # we can use this line
+                used[i] += line_size
+                if line_stripped:
+                    yield line_stripped
+                active = True
+    finally:
+        for f in files:
+            f.close()
 
 
 def np_logaddexp(x, y):
@@ -713,15 +695,18 @@ def tokmix_merge(
     return _build_unigramlm_hf_tokenizer_from_lprobs(lprobs_tuples, unk_id, pretokenizer=pretokenizer, decoder=decoder)
 
 
-def _get_metadata_path(tokenizer_path: str) -> str:
-    """Convert tokenizer path to metadata path."""
-    if tokenizer_path.endswith('.json'):
-        return tokenizer_path[:-5] + '.metadata.json'  # Remove .json, add .metadata.json
-    else:
-        return tokenizer_path + '.metadata.json'  # Fallback
+def _get_metadata_logging_path(output_path=None):
+    logging_path = None
+    if output_path:
+        parent_dir = os.path.dirname(output_path)
+        base_name = os.path.splitext(os.path.basename(output_path))[0]  # remove extension
+        metadata_dir = os.path.join(parent_dir, constants.METADATA_SUBDIR_NAME)
+        os.makedirs(metadata_dir, exist_ok=True)
+        logging_path = os.path.join(metadata_dir, base_name)
+    return logging_path
 
 
-def _save_tokenizer_metadata(tokenizer_path: str, metadata: Dict[str, Any]) -> str:
+def _save_tokenizer_metadata(metadata_dir: str, tokenizer_path: str, metadata: Dict[str, Any]) -> str:
     """
     Save metadata to a separate .metadata.json file alongside the tokenizer.
 
@@ -734,11 +719,17 @@ def _save_tokenizer_metadata(tokenizer_path: str, metadata: Dict[str, Any]) -> s
     """
     try:
         # Generate metadata file path
-        metadata_path = _get_metadata_path(tokenizer_path)
 
         # Add reference to the original tokenizer file
         metadata_with_ref = metadata.copy()
         metadata_with_ref["tokenizer_file"] = Path(tokenizer_path).name
+        base_name = os.path.basename(tokenizer_path)
+        if base_name.endswith(".json"):
+            meta_name = base_name[:-5] + ".metadata.json"
+        else:
+            meta_name = base_name + ".metadata.json" 
+
+        metadata_path = os.path.join(metadata_dir, meta_name)
 
         # Save metadata to separate file
         with open(metadata_path, 'w', encoding='utf-8') as f:
