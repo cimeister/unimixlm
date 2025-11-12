@@ -38,7 +38,11 @@ from code.utils import (
     get_baseline_characters,
     get_baseline_bytes,
     tokmix_merge,
-    compute_intersection_pruning_tokens
+    compute_intersection_pruning_tokens,
+    proportional_corpus_iterator,
+    _save_tokenizer_metadata,
+    _get_metadata_logging_path,
+    _create_base_metadata
 )
 
 from code.tokenizer_formatting_utils import (
@@ -129,7 +133,7 @@ class StandardUnigramLMTokenizer:
         whitespace_token_boundaries: bool = False,
         min_char_occurence_threshold: Optional[int] = None,
         dataset_size_normalization: bool = True,
-        use_intersection_pruning: bool = True,
+        use_intersection_pruning: bool = False,
         initial_vocab_tokens: Optional[str] = None,  # Path to file containing tokens
         #TODO: add check that this is a legal value 
         pruning_criterion: str = "exact_loss",  # "exact_loss", "approx_loss", "probability"
@@ -512,6 +516,7 @@ class StandardUnigramLMTokenizer:
 
         token_level = "byte" if self.byte_level else "character"
         logger.info(f"Training new tokenizer with EM mode: {self.em_mode} at {token_level}-level")
+        logger.info(f"Training on {len(corpus_files)} files. First file: '{corpus_files[0]}'")
         
         # Different training approaches
         if self.em_mode == "bpe":
@@ -542,12 +547,12 @@ class StandardUnigramLMTokenizer:
         return result
 
     def _train_custom_em(self, corpus_files: List[str], output_path=None):
-        logging_path = output_path.split('.')[0] if output_path else None
+        logging_path = _get_metadata_logging_path(output_path)
         self.global_lprobs = self._run_em_sp(corpus_files, per_lang=False, logging_path=logging_path)
         return self._build_tokenizer(self.global_lprobs, output_path)
 
     def _train_multigram(self, corpus_info: Dict[str, str], output_path=None):
-        logging_path = output_path.split('.')[0] if output_path else None
+        logging_path = _get_metadata_logging_path(output_path)
         self.global_lprobs = self._run_em_sp(None, per_lang=True, corpus_info=corpus_info, logging_path=logging_path)
         return self._build_tokenizer(self.global_lprobs, output_path)
 
@@ -566,16 +571,7 @@ class StandardUnigramLMTokenizer:
             special_tokens=self.special_tokens,
             unk_token=self.unk_token
         )
-        # def file_iterator(files):
-        #     """A generator that yields lines from a list of files."""
-        #     for file_path in files:
-        #         with open(file_path, "r", encoding="utf-8") as f:
-        #             for line in f:
-        #                 yield line
 
-        # Create the iterator
-        # corpus_iterator = file_iterator(corpus_files)
-        # tok.train_from_iterator(corpus_iterator, trainer)
         tok.train(corpus_files, trainer)
         self.base_tokenizer = tok
 
@@ -583,7 +579,7 @@ class StandardUnigramLMTokenizer:
             self.base_tokenizer.save(output_path)
             
             # Add metadata to the saved JSON
-            self._add_metadata_to_saved_tokenizer(output_path)
+            self._save_tokenizer_metadata_file(output_path)
             
             logger.info(f"Saved HF-based standard tokenizer with metadata to {output_path}")
         return self.base_tokenizer
@@ -601,13 +597,14 @@ class StandardUnigramLMTokenizer:
             special_tokens=self.special_tokens,
             initial_alphabet=pre_tokenizers.ByteLevel.alphabet() if self.byte_level else [],
         )
-        tok.train(corpus_files, trainer)
+        corpus_iter = proportional_corpus_iterator(corpus_files, total_bytes=1_500_000_000)
+        tok.train_from_iterator(corpus_iter, trainer)
         self.base_tokenizer = tok
         if output_path:
             tok.save(output_path)
             
             # Add metadata to the saved JSON
-            self._add_metadata_to_saved_tokenizer(output_path)
+            self._save_tokenizer_metadata_file(output_path)
             
             logger.info("Saved BPE tokenizer with metadata to %s", output_path)
         return tok
@@ -655,7 +652,6 @@ class StandardUnigramLMTokenizer:
         target_vocab_size = self.vocab_size  # The final vocabulary size we are aiming for
         current_vocab_size = len(state.all_tokens) # Keep track of the current vocab size
         
-        # --- Outer Pruning Loop (replaces the old `for it in ...` loop) ---
         # This loop continues until the vocabulary is pruned down to the target size.
         pruning_iteration = 0
         
@@ -756,7 +752,7 @@ class StandardUnigramLMTokenizer:
             state.global_lprobs = self._log_normalize(state.global_lprobs)
             
             for tk, new_lprob in state.global_lprobs.items():
-                if tk in logging_dict: # NEW: Check if token still exists
+                if tk in logging_dict: 
                     logging_dict[tk]["post-pruning-prob"] = np.exp(new_lprob)
             
             if logging_path is not None:
@@ -1260,16 +1256,11 @@ class StandardUnigramLMTokenizer:
             n_sub_iterations=0
         )
 
-        def file_iterator(files: List[str]):
-            """A generator that yields lines from a list of files."""
-            for file_path in files:
-                with open(file_path, "r", encoding="utf-8") as f:
-                    for line in f:
-                        yield line
-
         # Need to use train_from_iterator for pretokenization to be applied
-        corpus_iterator = file_iterator(train_files)
-        tok.train_from_iterator(corpus_iterator, trainer)
+        # corpus_iterator = file_iterator(train_files)
+        # tok.train(train_files, trainer)
+        corpus_iter = proportional_corpus_iterator(train_files, total_bytes=1_500_000_000)
+        tok.train_from_iterator(corpus_iter, trainer)
         vocab = tok.get_vocab()        
         
         return set(vocab.keys())
@@ -1381,7 +1372,7 @@ class StandardUnigramLMTokenizer:
             tok.save(output_path)
             
             # Add metadata to the saved JSON
-            self._add_metadata_to_saved_tokenizer(output_path)
+            self._save_tokenizer_metadata_file(output_path)
             
             logger.info("Tokenizer with metadata saved to %s", output_path)
         return tok
@@ -1423,19 +1414,19 @@ class StandardUnigramLMTokenizer:
     # 7. metadata collection
     # ------------------------------------------------------------------
     
-    def _add_metadata_to_saved_tokenizer(self, output_path):
+    def _save_tokenizer_metadata_file(self, tokenizer_path):
         """Save metadata to a separate .metadata.json file alongside the tokenizer"""
-        from code.utils import _save_tokenizer_metadata
 
         try:
-            metadata_path = _save_tokenizer_metadata(output_path, self._training_metadata)
+            logging_path = _get_metadata_logging_path(tokenizer_path)
+            metadata_path = _save_tokenizer_metadata(logging_path, tokenizer_path, self._training_metadata)
             if metadata_path:
                 logger.debug(f"Saved metadata to {metadata_path}")
             else:
-                logger.warning(f"Failed to save metadata for {output_path}")
+                logger.warning(f"Failed to save metadata for {tokenizer_path}")
 
         except Exception as e:
-            logger.warning(f"Failed to save metadata for {output_path}: {e}")
+            logger.warning(f"Failed to save metadata for {tokenizer_path}: {e}")
 
     # --------- metadata collection utilities ---------
     def _collect_training_metadata(self, corpus_files, corpus_info=None):
@@ -1464,6 +1455,8 @@ class StandardUnigramLMTokenizer:
         if self.initial_vocab_tokens:
             training_config["initial_vocab_source"] = "custom_file"
             training_config["initial_vocab_file"] = self.initial_vocab_tokens
+        elif self.use_sp_seed_vocab:
+            training_config["initial_vocab_source"] = "sp_generated"
         else:
             training_config["initial_vocab_source"] = "hf_generated"
         
@@ -1688,9 +1681,7 @@ def train_tokmix(per_lang_paths: Dict[str, str],
         byte_level: Whether tokenizers use byte-level encoding
         pruning_criterion: Ranking criterion - "probability", "approx_loss", or "exact_loss" 
         use_intersection_pruning: If True, use intersection pruning; if False, use average-based pruning
-    """
-    from code.utils import _save_tokenizer_metadata, _create_base_metadata
-    
+    """    
     # Collect source tokenizer metadata
     source_metadata = {}
     for lang, path in per_lang_paths.items():
@@ -1708,7 +1699,8 @@ def train_tokmix(per_lang_paths: Dict[str, str],
         except:
             source_metadata[lang] = {"path": path, "em_mode": "unknown", "vocab_size": "unknown"}
     
-    tkzs = {lg: StandardUnigramLMTokenizer() for lg in per_lang_paths}
+    tkzs = {lg: StandardUnigramLMTokenizer(
+        ) for lg in per_lang_paths}
     #TODO: figure out nicer way to set pretokenizer/decoder from a base tokenizer
     pretokenizer, decoder = None, None
     for lg, path in per_lang_paths.items():
@@ -1748,7 +1740,8 @@ def train_tokmix(per_lang_paths: Dict[str, str],
     }
     
     # Save metadata to separate file
-    metadata_path = _save_tokenizer_metadata(output_path, tokmix_metadata)
+    logging_path = _get_metadata_logging_path(output_path)
+    metadata_path = _save_tokenizer_metadata(logging_path, output_path, tokmix_metadata)
 
     if metadata_path:
         logger.info("Saved TokMix tokenizer to %s with metadata to %s", output_path, metadata_path)

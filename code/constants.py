@@ -21,6 +21,7 @@ _SP_SPACE = "▁"
 # --- SentencePiece Pruning Schedule Parameters TODO: make passable params ---
 NUM_SUB_ITERATIONS = 2 
 SHRINKING_FACTOR = 0.75  # SP's default vocabulary shrinking factor
+METADATA_SUBDIR_NAME = "metadata"
 
 
 def _build_gpt2_byte_maps():

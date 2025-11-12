@@ -13,7 +13,7 @@ from tokenizers import Tokenizer
 
 from code.em_unigram_trainer import EMUnigramTrainer
 from code.standard_unigramlm import StandardUnigramLMTokenizer
-from code.utils import _save_tokenizer_metadata, _create_base_metadata, get_baseline_bytes
+from code.utils import _create_base_metadata, get_baseline_bytes
 from code.tokenizer_formatting_utils import (
     _build_unigramlm_hf_tokenizer_from_lprobs, _get_hf_unigram_tokenizer_vocab, _write_sp_seed_vocab_file,
     write_hf_bytelevel_corpus
@@ -72,7 +72,7 @@ class LanguageSpecificUnigramLMTokenizer(StandardUnigramLMTokenizer):
         unk_token: str = SPECIAL_TOKENS["unk_token"],
         special_tokens=None,
         reestimation_em_mode: str = "soft",
-        num_iterations: int = 20,
+        num_iterations: int = 10,
         byte_level: bool = False,
         whitespace_token_boundaries: bool = False
     ):
@@ -366,11 +366,7 @@ class LanguageSpecificUnigramLMTokenizer(StandardUnigramLMTokenizer):
             except:
                 lang_metadata["base_tokenizer_metadata"] = {"em_mode": "unknown", "vocab_size": "unknown"}
             
-            metadata_path = _save_tokenizer_metadata(str(tk_path), lang_metadata)
-            if metadata_path:
-                logger.debug(f"Saved language-specific metadata to {metadata_path}")
-            else:
-                logger.warning(f"Failed to save metadata for {tk_path}")
+            self._save_tokenizer_metadata_file(str(tk_path))
 
             self.per_lang_tok[lang_code] = {
                 "tokenizer": tok,

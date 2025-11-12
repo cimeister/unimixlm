@@ -5,7 +5,6 @@ from collections import defaultdict
 import numpy as np
 from typing import Dict, List, Tuple
 
-from code.utils import _sample_lines_from_file
 from code.tokenizer_formatting_utils import _apply_pretok_mapping_hf
 from code.constants import (
     MIN_TOKEN_LOG_PROB, 
