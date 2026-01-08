@@ -2,7 +2,8 @@
 """
 run_las_experiments.py
 Full LAS-UnigramLM experiment pipeline for a high/low resource language pair.
-Supports multiple pretrained LMs with automatic tokenizer adjustment and memory-efficient large model loading.
+Supports multiple pretrained LMs with automatic tokenizer adjustment, memory-efficient large model loading,
+automatic embedding alignment, and single HF repo organization.
 
 Example usage:
 python3 run_las_experiments.py --high en --low yo --model FacebookAI/xlm-roberta-base --inference_string 'Hello world!' --length_prior_weights '{"en": 0.1, "yo": 0.3}'
@@ -13,6 +14,9 @@ from pathlib import Path
 import torch
 from torch.utils.data import Dataset
 from transformers import AutoTokenizer, AutoModelForCausalLM, Trainer, TrainingArguments, DataCollatorForLanguageModeling
+from tokenizers import Tokenizer
+from tokenizers.models import Unigram
+from transformers import PreTrainedTokenizerFast
 
 # ---------------------- Logging ----------------------
 logging.basicConfig(level=logging.INFO)
@@ -28,6 +32,146 @@ for pkg in required_packages:
 # ---------------------- Add code/ to sys.path ----------------------
 sys.path.insert(0, str(Path(__file__).parent / "code"))
 from language_specific_unigramlm import LanguageSpecificUnigramLMTokenizer
+
+def export_las_tokenizer_hf(las_tokenizer, output_dir, special_tokens=None):
+    """
+    Export LAS-UnigramLM tokenizer to HF-compatible format.
+    """
+    os.makedirs(output_dir, exist_ok=True)
+
+    vocab = las_tokenizer.shared_vocab  # token -> score
+    tokens = list(vocab.keys())
+    scores = [vocab[t] for t in tokens]
+
+    # Build Unigram model
+    unigram = Unigram(
+        vocab=list(zip(tokens, scores)),
+        unk_id=tokens.index("<unk>") if "<unk>" in tokens else 0
+    )
+
+    tokenizer = Tokenizer(unigram)
+
+    tokenizer_json = os.path.join(output_dir, "tokenizer.json")
+    tokenizer.save(tokenizer_json)
+
+    hf_tokenizer = PreTrainedTokenizerFast(
+        tokenizer_file=tokenizer_json,
+        unk_token="<unk>",
+        pad_token="<pad>" if "<pad>" in tokens else None,
+        bos_token="<s>" if "<s>" in tokens else None,
+        eos_token="</s>" if "</s>" in tokens else None,
+        mask_token="<mask>" if "<mask>" in tokens else None,
+    )
+
+    hf_tokenizer.save_pretrained(output_dir)
+
+    return output_dir
+
+# ---------------------- LAS → HF tokenizer export ----------------------
+def export_las_tokenizer_hf_single_repo(
+    las_tokenizer,
+    output_dir,
+    push_to_hub=True,
+    repo_id=None,  # just repo name, username will be prepended automatically
+    hf_username="suchirsalhan"
+):
+    """
+    Save all LAS tokenizers (shared base + per-language) in a single HF repo structure
+    with metadata, README, and push everything to Hugging Face.
+
+    Args:
+        las_tokenizer: LanguageSpecificUnigramLMTokenizer instance
+        output_dir: Path to save tokenizers
+        push_to_hub: Whether to push to Hugging Face
+        repo_id: Repository name on HF (without username). If None, defaults to folder name.
+        hf_username: Hugging Face username
+    """
+    import os, subprocess, json
+    from pathlib import Path
+    from transformers import PreTrainedTokenizerFast
+
+    output_dir = Path(output_dir)
+    output_dir.mkdir(parents=True, exist_ok=True)
+
+    # ---------------- Shared base tokenizer ----------------
+    base_path = output_dir / "shared_base"
+    base_path.mkdir(exist_ok=True, parents=True)
+    base_tok_json = base_path / "tokenizer.json"
+    las_tokenizer.base_tokenizer.save(str(base_tok_json))
+
+    # ---------------- Per-language tokenizers + metadata ----------------
+    metadata_dir = output_dir / "metadata"
+    metadata_dir.mkdir(parents=True, exist_ok=True)
+
+    for lang, info in las_tokenizer.per_lang_tok.items():
+        lang_dir = output_dir / f"langspec_soft_{lang}"
+        lang_dir.mkdir(exist_ok=True, parents=True)
+
+        lang_tok_json = lang_dir / "tokenizer.json"
+        info["tokenizer"].save(str(lang_tok_json))
+
+        # Save metadata per language
+        meta_path = metadata_dir / f"langspec_soft_{lang}.metadata.json"
+        with open(meta_path, "w", encoding="utf-8") as f:
+            json.dump({
+                "training_config": info.get("training_config", {}),
+                "corpus_info": info.get("corpus_info", {}),
+                "path": str(lang_tok_json)
+            }, f, ensure_ascii=False, indent=2)
+
+    # ---------------- HF-compatible root tokenizer ----------------
+    special_tokens = {}
+    base_vocab = las_tokenizer.base_tokenizer.get_vocab()
+    for tok in ["<unk>", "<pad>", "<s>", "</s>", "<mask>"]:
+        if tok in base_vocab:
+            special_tokens[tok] = tok
+
+    hf_tokenizer = PreTrainedTokenizerFast(
+        tokenizer_file=str(base_tok_json),
+        unk_token=special_tokens.get("<unk>"),
+        pad_token=special_tokens.get("<pad>"),
+        bos_token=special_tokens.get("<s>"),
+        eos_token=special_tokens.get("</s>"),
+        mask_token=special_tokens.get("<mask>")
+    )
+    hf_tokenizer.save_pretrained(output_dir)
+
+    # ---------------- Create a simple README.md ----------------
+    readme_path = output_dir / "README.md"
+    if not readme_path.exists():
+        readme_content = f"""# LAS-UnigramLM tokenizer for {', '.join(las_tokenizer.per_lang_tok.keys())}
+
+This repository contains the LAS-UnigramLM tokenizer trained on languages: {', '.join(las_tokenizer.per_lang_tok.keys())}.
+
+- Tokenizer type: Unigram LM
+- Special tokens: {list(special_tokens.keys())}
+"""
+        readme_path.write_text(readme_content, encoding="utf-8")
+
+    # ---------------- Commit & push to Hugging Face ----------------
+    if push_to_hub:
+        if repo_id is None:
+            repo_id = output_dir.name
+        hf_url = f"https://huggingface.co/{hf_username}/{repo_id}"
+
+        # Initialize git if needed
+        if not (output_dir / ".git").exists():
+            subprocess.run(["git", "init"], cwd=str(output_dir), check=True)
+            subprocess.run(["git", "checkout", "-b", "main"], cwd=str(output_dir), check=True)
+
+        # Remove existing origin if it exists
+        subprocess.run(["git", "remote", "remove", "origin"], cwd=str(output_dir), check=False)
+        subprocess.run(["git", "remote", "add", "origin", hf_url], cwd=str(output_dir), check=True)
+
+        subprocess.run(["git", "add", "."], cwd=str(output_dir), check=True)
+        subprocess.run(["git", "commit", "-m", "Add LAS tokenizers + metadata + README"], cwd=str(output_dir), check=True)
+        subprocess.run(["git", "branch", "-M", "main"], cwd=str(output_dir), check=True)
+        subprocess.run(["git", "push", "-u", "origin", "main", "--force"], cwd=str(output_dir), check=True)
+
+        logger.info(f"Pushed all LAS tokenizers to Hugging Face repo: {hf_url}")
+
+    return output_dir
+
 
 # ---------------------- Dataset helper ----------------------
 class TokenizedTextDataset(Dataset):
@@ -77,62 +221,61 @@ def compute_perplexity(model, tokenizer, texts, preprocess_fn, device="cuda"):
 def main():
     import argparse
     parser = argparse.ArgumentParser(description="Run LAS-UnigramLM experiments.")
-    parser.add_argument("--high", type=str, required=True, help="High-resource language code (e.g., 'en')")
-    parser.add_argument("--low", type=str, required=True, help="Low-resource language code (e.g., 'yo')")
-    parser.add_argument("--model", type=str, default="allenai/Olmo-3-1025-7B", choices=[
-        "allenai/Olmo-3-1025-7B",
-        "FacebookAI/xlm-roberta-base",
-        "CohereLabs/aya-expanse-8b"
-    ], help="Pretrained LM to use")
+    parser.add_argument("--high", type=str, required=True)
+    parser.add_argument("--low", type=str, required=True)
+    parser.add_argument("--model", type=str, default="allenai/Olmo-3-1025-7B")
     parser.add_argument("--inference_string", type=str, default=None)
     parser.add_argument("--inference_file", type=str, default=None)
-    parser.add_argument("--length_prior_weights", type=str, default="{}", help='JSON: {"en":0.1,"yo":0.3}')
-    parser.add_argument("--fine_tune", action="store_true", help="Fine-tune LLM on LAS-tokenized text")
+    parser.add_argument("--length_prior_weights", type=str, default="{}")
+    parser.add_argument("--fine_tune", action="store_true")
     parser.add_argument("--ft_epochs", type=int, default=1)
     parser.add_argument("--ft_batch_size", type=int, default=2)
+    parser.add_argument("--push-hf", action=argparse.BooleanOptionalAction, default=True)
     args = parser.parse_args()
 
     LANGUAGES = [args.high, args.low]
     length_prior_weights = json.loads(args.length_prior_weights)
 
-    # ---- Load tokenizer with automatic adjustments ----
     tokenizer = AutoTokenizer.from_pretrained(args.model, trust_remote_code=True)
-    if hasattr(tokenizer, "byte_level") and tokenizer.byte_level:
-        logger.info("Byte-level tokenizer detected; using raw text for preprocessing.")
-        preprocess_fn = lambda x: x
-    else:
-        logger.info("Non-byte-level tokenizer detected; using normalized lowercase text for preprocessing.")
-        preprocess_fn = lambda x: x.strip().lower()
+    preprocess_fn = lambda x: x if getattr(tokenizer, "byte_level", False) else x.strip().lower()
 
-    # ---- Efficient model loading for large models ----
     model = AutoModelForCausalLM.from_pretrained(
         args.model,
         trust_remote_code=True,
-        device_map="auto",  # auto device placement
+        device_map="auto",
         torch_dtype=torch.float16 if torch.cuda.is_available() else torch.float32
     )
-    logger.info(f"Loaded model {args.model} with memory-efficient settings.")
 
-    # ---- Check corpora ----
     CORPUS_DIR = Path("data/parallel/dev")
     corpus_paths = {lang: CORPUS_DIR/f"{lang}.txt" for lang in LANGUAGES}
     for lang,p in corpus_paths.items():
         if not p.exists(): raise FileNotFoundError(f"Corpus {lang} not found: {p}")
 
-    # ---- Train LAS-UnigramLM (model-specific folder) ----
-    safe_model_name = args.model.replace("/", "_")
-    OUTPUT_DIR = Path(f"multilingual/tokenizers/{safe_model_name}_{args.high}_{args.low}")
+    safe_model_name = args.model.split("/")[-1]
+    OUTPUT_DIR = Path(f"multilingual/tokenizers/unimix-{args.high}_{args.low}-{safe_model_name}")
     OUTPUT_DIR.mkdir(parents=True, exist_ok=True)
 
     shared_las = LanguageSpecificUnigramLMTokenizer(vocab_size=len(tokenizer), byte_level=True)
     tokenizer_paths = shared_las.train(
         corpus_info={lang:str(corpus_paths[lang]) for lang in LANGUAGES},
-        base_tokenizer_path=str(OUTPUT_DIR/"shared_base.json"),
+        base_tokenizer_path=str(OUTPUT_DIR/"shared_base/tokenizer.json"),
         output_dir=str(OUTPUT_DIR),
         load_base_if_exists=False,
         load_tokenizers_if_exists=False
     )
     logger.info(f"LAS-UnigramLM saved: {tokenizer_paths}")
+
+    # ---- Export LAS tokenizer + metadata in single HF repo and push ----
+    las_hf_path = export_las_tokenizer_hf_single_repo(
+        shared_las,
+        OUTPUT_DIR,
+        push_to_hub=args.push_hf,
+        repo_id=f"unimix-{args.high}_{args.low}-{safe_model_name}"
+    )
+    logger.info(f"HF LAS tokenizer exported to {las_hf_path}")
+
+    model.resize_token_embeddings(len(shared_las.base_tokenizer.get_vocab()))
+    logger.info(f"Resized LM embeddings to {len(shared_las.base_tokenizer.get_vocab())} tokens")
 
     # ---- v* inference ----
     if args.inference_string:
@@ -145,8 +288,8 @@ def main():
         logger.info(f"v* tokenization results for {file_path}:")
         for toks, logp in zip(results, log_probs):
             print(f"{' '.join(toks)} | adjusted log-prob: {logp:.6f}")
-
-    # ---- Optional fine-tuning ----
+    
+     # ---- Optional fine-tuning ----
     if args.fine_tune:
         all_texts, lang_texts = [], {}
         for lang,path in corpus_paths.items():
@@ -198,3 +341,4 @@ def main():
 
 if __name__=="__main__":
     main()
+
