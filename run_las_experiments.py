@@ -33,62 +33,22 @@ for pkg in required_packages:
 sys.path.insert(0, str(Path(__file__).parent / "code"))
 from language_specific_unigramlm import LanguageSpecificUnigramLMTokenizer
 
-def export_las_tokenizer_hf(las_tokenizer, output_dir, special_tokens=None):
-    """
-    Export LAS-UnigramLM tokenizer to HF-compatible format.
-    """
-    os.makedirs(output_dir, exist_ok=True)
-
-    vocab = las_tokenizer.shared_vocab  # token -> score
-    tokens = list(vocab.keys())
-    scores = [vocab[t] for t in tokens]
-
-    # Build Unigram model
-    unigram = Unigram(
-        vocab=list(zip(tokens, scores)),
-        unk_id=tokens.index("<unk>") if "<unk>" in tokens else 0
-    )
-
-    tokenizer = Tokenizer(unigram)
-
-    tokenizer_json = os.path.join(output_dir, "tokenizer.json")
-    tokenizer.save(tokenizer_json)
-
-    hf_tokenizer = PreTrainedTokenizerFast(
-        tokenizer_file=tokenizer_json,
-        unk_token="<unk>",
-        pad_token="<pad>" if "<pad>" in tokens else None,
-        bos_token="<s>" if "<s>" in tokens else None,
-        eos_token="</s>" if "</s>" in tokens else None,
-        mask_token="<mask>" if "<mask>" in tokens else None,
-    )
-
-    hf_tokenizer.save_pretrained(output_dir)
-
-    return output_dir
-
 # ---------------------- LAS → HF tokenizer export ----------------------
 def export_las_tokenizer_hf_single_repo(
     las_tokenizer,
     output_dir,
     push_to_hub=True,
-    repo_id=None,  # just repo name, username will be prepended automatically
+    repo_id=None,
     hf_username="suchirsalhan"
 ):
-    """
-    Save all LAS tokenizers (shared base + per-language) in a single HF repo structure
-    with metadata, README, and push everything to Hugging Face.
-
-    Args:
-        las_tokenizer: LanguageSpecificUnigramLMTokenizer instance
-        output_dir: Path to save tokenizers
-        push_to_hub: Whether to push to Hugging Face
-        repo_id: Repository name on HF (without username). If None, defaults to folder name.
-        hf_username: Hugging Face username
-    """
-    import os, subprocess, json
+    import os, json
     from pathlib import Path
     from transformers import PreTrainedTokenizerFast
+    from huggingface_hub import HfApi, HfFolder
+    import subprocess
+    import logging
+
+    logger = logging.getLogger(__name__)
 
     output_dir = Path(output_dir)
     output_dir.mkdir(parents=True, exist_ok=True)
@@ -110,8 +70,9 @@ def export_las_tokenizer_hf_single_repo(
         lang_tok_json = lang_dir / "tokenizer.json"
         info["tokenizer"].save(str(lang_tok_json))
 
-        # Save metadata per language
+        # Save metadata
         meta_path = metadata_dir / f"langspec_soft_{lang}.metadata.json"
+        meta_path.parent.mkdir(parents=True, exist_ok=True)  # ensure parent exists
         with open(meta_path, "w", encoding="utf-8") as f:
             json.dump({
                 "training_config": info.get("training_config", {}),
@@ -136,7 +97,7 @@ def export_las_tokenizer_hf_single_repo(
     )
     hf_tokenizer.save_pretrained(output_dir)
 
-    # ---------------- Create a simple README.md ----------------
+    # ---------------- README.md ----------------
     readme_path = output_dir / "README.md"
     if not readme_path.exists():
         readme_content = f"""# LAS-UnigramLM tokenizer for {', '.join(las_tokenizer.per_lang_tok.keys())}
@@ -148,29 +109,53 @@ This repository contains the LAS-UnigramLM tokenizer trained on languages: {', '
 """
         readme_path.write_text(readme_content, encoding="utf-8")
 
-    # ---------------- Commit & push to Hugging Face ----------------
+    # ---------------- Commit & push to HF ----------------
     if push_to_hub:
+        from huggingface_hub import HfApi
+
         if repo_id is None:
             repo_id = output_dir.name
         hf_url = f"https://huggingface.co/{hf_username}/{repo_id}"
 
-        # Initialize git if needed
+        # Create repo if missing
+        api = HfApi()
+        token = HfFolder.get_token()
+        try:
+            api.repo_info(f"{hf_username}/{repo_id}", token=token)
+        except:
+            logger.info(f"Creating HF repo: {hf_url}")
+            api.create_repo(repo_id=repo_id, token=token, private=False, exist_ok=True)
+
+        # ---------------- Git operations manually ----------------
         if not (output_dir / ".git").exists():
             subprocess.run(["git", "init"], cwd=str(output_dir), check=True)
             subprocess.run(["git", "checkout", "-b", "main"], cwd=str(output_dir), check=True)
+            subprocess.run(["git", "remote", "add", "origin", hf_url], cwd=str(output_dir), check=True)
 
-        # Remove existing origin if it exists
-        subprocess.run(["git", "remote", "remove", "origin"], cwd=str(output_dir), check=False)
-        subprocess.run(["git", "remote", "add", "origin", hf_url], cwd=str(output_dir), check=True)
-
+        # Stage all files
         subprocess.run(["git", "add", "."], cwd=str(output_dir), check=True)
-        subprocess.run(["git", "commit", "-m", "Add LAS tokenizers + metadata + README"], cwd=str(output_dir), check=True)
-        subprocess.run(["git", "branch", "-M", "main"], cwd=str(output_dir), check=True)
-        subprocess.run(["git", "push", "-u", "origin", "main", "--force"], cwd=str(output_dir), check=True)
 
-        logger.info(f"Pushed all LAS tokenizers to Hugging Face repo: {hf_url}")
+        # Commit (ignore if nothing to commit)
+        try:
+            subprocess.run(
+                ["git", "commit", "-m", "Add LAS tokenizers + metadata + README"],
+                cwd=str(output_dir),
+                check=True
+            )
+        except subprocess.CalledProcessError:
+            logger.warning("Nothing to commit, skipping git commit.")
+
+        # Push to main branch
+        subprocess.run(
+            ["git", "push", "-u", "origin", "main", "--force"],
+            cwd=str(output_dir),
+            check=True
+        )
+
+        logger.info(f"Pushed LAS tokenizers to HF repo: {hf_url}")
 
     return output_dir
+
 
 
 # ---------------------- Dataset helper ----------------------
