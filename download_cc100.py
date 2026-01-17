@@ -5,16 +5,13 @@ CC100-only multilingual corpus downloader (HF Hub).
 python download_cc100.py \
   --lang_set L60 \
   --output_dir ./cc100_10k_lines \
-  --max_lines_per_lang 10000
+  --max_lines_per_lang 10000 \
+  --push_to_hf MultilingualUnigramLM/cc100_10k_lines
 
 Features:
 - CC100 streaming only. No FLORES Download, since we use this for evaluation. 
 - Language sets: L20 / L60
-- Temperature-based sampling
-- 50% max per-language cap
-- Minimum line floor
 """
-
 
 import json
 import random
@@ -23,7 +20,8 @@ import logging
 from pathlib import Path
 from typing import Dict, List
 from tqdm import tqdm
-from datasets import load_dataset
+from datasets import load_dataset, Dataset, DatasetDict
+from huggingface_hub import Repository
 
 # ---------------------------------------------------------------------
 # Logging
@@ -118,7 +116,7 @@ class CC100Downloader:
         self,
         lang: str,
         out_dir: Path,
-        cap_bytes: int,
+        cap_bytes: int | None,
         min_lines: int,
         max_lines: int | None,
     ):
@@ -202,6 +200,30 @@ def download_flores(out_dir: Path, langs: List[str]):
             f.close()
 
 # ---------------------------------------------------------------------
+# Push to HF
+# ---------------------------------------------------------------------
+def push_to_hf(local_dir: Path, repo_id: str, datasetdict_layout: bool = False):
+    if datasetdict_layout:
+        # Build DatasetDict
+        data_dict = {}
+        for lang_dir in local_dir.iterdir():
+            if lang_dir.is_dir():
+                txt_file = lang_dir / "train.txt"
+                with open(txt_file, "r", encoding="utf-8") as f:
+                    lines = [{"text": line.strip()} for line in f]
+                data_dict[lang_dir.name] = Dataset.from_list(lines)
+        dataset = DatasetDict(data_dict)
+        dataset.push_to_hub(repo_id)
+        log.info(f"Pushed DatasetDict to HF: {repo_id}")
+    else:
+        # Folder-per-language
+        repo = Repository(local_dir, clone_from=repo_id, use_auth_token=True)
+        repo.git_add(auto_lfs_track=True)
+        repo.git_commit("Upload CC100 corpus")
+        repo.git_push()
+        log.info(f"Pushed folder-per-language to HF: {repo_id}")
+
+# ---------------------------------------------------------------------
 # Main
 # ---------------------------------------------------------------------
 def main():
@@ -213,6 +235,8 @@ def main():
     ap.add_argument("--min_lines_floor", type=int, default=0)
     ap.add_argument("--main_sampling_temp", type=float, default=DEFAULT_MAIN_TEMP)
     ap.add_argument("--download_flores", type=str, default="false")
+    ap.add_argument("--push_to_hf", type=str, default=None, help="HF repo ID (org/repo_name)")
+    ap.add_argument("--datasetdict_layout", action="store_true", help="Use DatasetDict layout")
     ap.add_argument("--seed", type=int, default=DEFAULT_SEED)
     args = ap.parse_args()
 
@@ -234,7 +258,7 @@ def main():
 
     for lg in langs:
         if args.max_lines_per_lang is not None:
-            cap_bytes = None  # ignore byte cap
+            cap_bytes = None
         else:
             cap_gb = min(props[lg] * args.total_size_gb, MAX_LANG_CAP * args.total_size_gb)
             cap_bytes = int(cap_gb * (1024 ** 3))
@@ -251,6 +275,9 @@ def main():
         download_flores(root / "parallel_data", langs)
     else:
         log.info("Skipping FLORES download (--download_flores false)")
+
+    if args.push_to_hf:
+        push_to_hf(main_dir, args.push_to_hf, args.datasetdict_layout)
 
 if __name__ == "__main__":
     main()
