@@ -2,13 +2,11 @@
 """Hydra entry point for LAS experiments."""
 
 import hydra
-from hydra.utils import get_original_cwd
-from omegaconf import DictConfig, OmegaConf
+from omegaconf import DictConfig
 import logging
 
-from las_experiment.run_las_tokenizer import run_tokenizer
-from las_experiment.run_las_finetune import run_finetune
-from las_experiment.las_lighteval_example import example_lighteval_usage
+from las_experiment.las_tokenizer import run_tokenizer
+from las_experiment.las_finetune import run_finetune
 
 
 @hydra.main(config_path="config", config_name="default", version_base="1.3")
@@ -27,9 +25,6 @@ def main(cfg: DictConfig) -> None:
     elif cfg.experiment.get("type", None) == "finetuning":
         logging.info("Starting mode: finetuning")
         run_finetune(cfg.experiment)
-    elif cfg.experiment.get("type", None) == "eval":
-        logging.info("Starting mode: eval")
-        example_lighteval_usage(cfg.experiment)
 
 
 if __name__ == "__main__":

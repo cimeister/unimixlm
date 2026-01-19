@@ -1,14 +1,11 @@
 type: finetuning
-high: en
-low: yo
+langs:
+  - yo
 model: allenai/Olmo-3-1025-7B
 las_tokenizer_path: /home/USER/unimixlm/multilingual/tokenizers/unimix-en_yo-Olmo-3-1025-7B
 output_dir: ./finetuned_model
-length_prior_weights:
-  en: 0.1
-  yo: 0.3
 epochs: 1
-batch_size: 8
+batch_size: 16
 gradient_accumulation_steps: 1
 dataset:
   pack_dataset: true
@@ -20,11 +17,11 @@ lora_r: 32
 lora_alpha: 64
 lora_dropout: 0.05
 lora_target_modules: ""
-learning_rate: 1e-4
+learning_rate: 5e-4
 wandb:
   enabled: true
   project: "unimixlm"
   entity: "therootof3"
-  run_name: ${experiment.model}-${experiment.high}-${experiment.low}-lr${experiment.learning_rate}-packed
+  run_name: ${experiment.model}-${experiment.langs}-lr${experiment.learning_rate}-packed
   tags: []
   notes: null
