@@ -1,0 +1,9 @@
+type: tokenizer_training
+high: en
+low: yo
+model: allenai/Olmo-3-1025-7B
+length_prior_weights:
+  en: 0.1
+  yo: 0.3
+inference_string: "Mo wà dáadáa "
+inference_file: null
