@@ -1,11 +1,9 @@
 #!/usr/bin/env python3
 """
-Run olmo_fineweb2.py to:
-- Download Olmo-3 tokenizer if not present
-- Stream FineWeb2-10K dataset
-- Save N lines per language locally
-- Train LAS-UnigramLM tokenizers per language using Olmo-3 as base
-- Push resulting tokenizers to Hugging Face
+new_olmo.py
+End-to-end pipeline for language-specific LAS-UnigramLM tokenizers using Olmo-3 as base.
+Each language trains in its own subprocess to avoid daemonic process issues on macOS.
+HF push happens asynchronously immediately after each tokenizer finishes training.
 """
 
 import logging, os, subprocess, sys, itertools
@@ -160,8 +158,8 @@ corpus_file = '{corpus_file}'
 base_path = '{base_path}'
 output_dir = Path('{output_dir}') / 'tokenizers' / lang
 output_dir.mkdir(parents=True, exist_ok=True)
-
-las_tokenizer = LanguageSpecificUnigramLMTokenizer(vocab_size=8000, byte_level=True, reestimation_em_mode='soft')
+vocab_size = 
+las_tokenizer = LanguageSpecificUnigramLMTokenizer(vocab_size=len(tokenizer), byte_level=True, reestimation_em_mode='soft')
 las_tokenizer.train(
     corpus_info={{lang: corpus_file}},
     base_tokenizer_path=str(base_path),
