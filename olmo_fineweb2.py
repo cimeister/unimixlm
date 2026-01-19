@@ -114,7 +114,7 @@ from olmo_fineweb2 import push_to_hf_new
 
 lang = '{lang}'
 corpus_file = '{corpus_file}'
-base_tokenizer_path = '{output_dir / lang / "base_tokenizer.json"}'
+base_tokenizer_path = '{output_dir / lang / f"base_{lang}.tokenizer.json"}'
 vocab_size = {len(model_tokenizer)}
 lang_output_dir = Path('{output_dir / lang}')
 lang_output_dir.mkdir(parents=True, exist_ok=True)
