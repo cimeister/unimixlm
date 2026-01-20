@@ -14,6 +14,13 @@ from transformers import (
 import wandb
 from peft import LoraConfig, get_peft_model, TaskType
 from code.language_specific_unigramlm import LanguageSpecificUnigramLMTokenizer
+import pycountry
+
+
+def to_iso639_3(code: str) -> str:
+    code = code.lower()
+    entry = pycountry.languages.get(alpha_2=code)
+    return entry.alpha_3
 
 
 # ---------------------- Dataset helper ----------------------
@@ -139,7 +146,7 @@ def infer_lora_targets(model_type: str):
 
 def run_finetune(cfg):
     langs = list(cfg.langs)
-    model_name = cfg.model
+    model_name = cfg.model.model_name
     las_tokenizer_path = (
         Path(cfg.las_tokenizer_path) if cfg.las_tokenizer_path else None
     )
@@ -147,23 +154,20 @@ def run_finetune(cfg):
     ft_epochs = cfg.epochs
     ft_batch_size = cfg.batch_size
     dataset_cfg = cfg.dataset
-    lora_r = cfg.lora_r
-    lora_alpha = cfg.lora_alpha
-    lora_dropout = cfg.lora_dropout
-    lora_target_modules = cfg.lora_target_modules
+    lora_cfg = cfg.lora
+    lora_r = lora_cfg.r
+    lora_alpha = lora_cfg.alpha
+    lora_dropout = lora_cfg.dropout
+    lora_target_modules = lora_cfg.target_modules
     learning_rate = cfg.learning_rate
-    wandb_cfg = cfg.wandb if hasattr(cfg, "wandb") else None
-    wandb_enabled = bool(wandb_cfg and wandb_cfg.enabled)
+    logger_cfg = cfg.logger if hasattr(cfg, "logger") else None
+    wandb_enabled = bool(logger_cfg and logger_cfg.enabled)
 
     LANGUAGES = langs
 
     tokenizer = AutoTokenizer.from_pretrained(model_name, trust_remote_code=True)
     if tokenizer.pad_token is None:
         tokenizer.pad_token = tokenizer.eos_token
-
-    preprocess_fn = (
-        lambda x: x if getattr(tokenizer, "byte_level", False) else x.strip().lower()
-    )
 
     model = AutoModelForCausalLM.from_pretrained(
         model_name,
@@ -179,72 +183,81 @@ def run_finetune(cfg):
         if not p.exists():
             raise FileNotFoundError(f"Corpus {lang} not found: {p}")
 
-    if las_tokenizer_path is None:
-        raise ValueError("las_tokenizer_path must be set in config for finetuning.")
+    def preprocess_fn(x):
+        return x if getattr(tokenizer, "byte_level", False) else x.strip().lower()
 
-    # TODO: In the case when only a single file is provided, use it both as base and language-specific tokenizer
-    base_tokenizer_path = las_tokenizer_path / "shared_base/tokenizer.json"
-    language_paths = {
-        lang: str(las_tokenizer_path / f"langspec_soft_{lang}.tokenizer.json")
-        for lang in LANGUAGES
-    }
-    if not base_tokenizer_path.exists():
-        raise FileNotFoundError(f"Base LAS tokenizer not found: {base_tokenizer_path}")
-    for lang, p in language_paths.items():
-        if not Path(p).exists():
-            raise FileNotFoundError(f"LAS tokenizer for {lang} not found: {p}")
+    if las_tokenizer_path is not None:
+        # TODO: In the case when only a single file is provided, use it both as base and language-specific tokenizer
+        base_tokenizer_path = las_tokenizer_path / "base.tokenizer.json"
+        language_paths = {
+            lang: str(
+                las_tokenizer_path
+                / f"langspec_soft_{to_iso639_3(lang)}_Latn.tokenizer.json"
+            )
+            for lang in LANGUAGES
+        }
+        if not base_tokenizer_path.exists():
+            raise FileNotFoundError(
+                f"Base LAS tokenizer not found: {base_tokenizer_path}"
+            )
+        for lang, p in language_paths.items():
+            if not Path(p).exists():
+                raise FileNotFoundError(f"LAS tokenizer for {lang} not found: {p}")
 
-    shared_las = LanguageSpecificUnigramLMTokenizer(
-        vocab_size=len(tokenizer), byte_level=True
-    )
-    shared_las.load(str(base_tokenizer_path), language_paths)
-    logging.info(f"Loaded LAS tokenizer for fine-tuning from {las_tokenizer_path}.")
+        shared_las = LanguageSpecificUnigramLMTokenizer(
+            vocab_size=len(tokenizer), byte_level=True
+        )
+        shared_las.load(str(base_tokenizer_path), language_paths)
+        logging.info(f"Loaded LAS tokenizer for fine-tuning from {las_tokenizer_path}.")
 
-    def las_preprocess(text: str) -> str:
-        _, best_tokens = shared_las.best_language_encode(preprocess_fn(text))
-        return " ".join(best_tokens)
+        def las_preprocess(text: str) -> str:
+            _, best_tokens = shared_las.best_language_encode(preprocess_fn(text))
+            return " ".join(best_tokens)
 
-    model.resize_token_embeddings(len(shared_las.base_tokenizer.get_vocab()))
-    logging.info(
-        f"Resized LM embeddings to {len(shared_las.base_tokenizer.get_vocab())} tokens"
-    )
-
-    # configure wandb
-    if wandb_enabled:
-        wandb.init(
-            project=str(wandb_cfg.project),
-            entity=str(wandb_cfg.entity),
-            name=wandb_cfg.run_name,
-            tags=list(wandb_cfg.tags) if wandb_cfg.tags else None,
-            notes=wandb_cfg.notes,
+        model.resize_token_embeddings(len(shared_las.base_tokenizer.get_vocab()))
+        logging.info(
+            f"Resized LM embeddings to {len(shared_las.base_tokenizer.get_vocab())} tokens"
         )
 
     all_texts, lang_texts = [], {}
     for lang, path in corpus_paths.items():
         with open(path, "r", encoding="utf-8") as f:
             lines = [l.strip() for l in f if l.strip()]
-            tok_lines = [las_preprocess(l) for l in lines]
+            tok_lines = [
+                las_preprocess(l) if las_tokenizer_path is not None else l
+                for l in lines
+            ]
             all_texts.extend(tok_lines)
             lang_texts[lang] = tok_lines
 
-    total_train_tokens = count_training_tokens(all_texts, tokenizer, preprocess_fn)
-    logging.info(f"Total training tokens: {total_train_tokens}")
-    for lang in LANGUAGES:
-        lang_tokens = count_training_tokens(lang_texts[lang], tokenizer, preprocess_fn)
-        logging.info(f"Training tokens for {lang}: {lang_tokens}")
+    # configure wandb
     if wandb_enabled:
-        if wandb.run is not None:
-            wandb.log(
-                {
-                    "train/total_tokens": total_train_tokens,
-                    **{
-                        f"train/tokens_{lang}": count_training_tokens(
-                            lang_texts[lang], tokenizer, preprocess_fn
-                        )
-                        for lang in LANGUAGES
-                    },
-                }
-            )
+        wandb.init(
+            project=str(logger_cfg.project),
+            entity=str(logger_cfg.entity),
+            name=logger_cfg.run_name,
+            tags=list(logger_cfg.tags) if logger_cfg.tags else None,
+            notes=logger_cfg.notes,
+        )
+
+    lang_token_counts = {
+        lang: count_training_tokens(lang_texts[lang], tokenizer, preprocess_fn)
+        for lang in LANGUAGES
+    }
+    total_train_tokens = sum(lang_token_counts.values())
+    logging.info(f"Total training tokens: {total_train_tokens}")
+    for lang, lang_tokens in lang_token_counts.items():
+        logging.info(f"Training tokens for {lang}: {lang_tokens}")
+    if wandb_enabled and wandb.run is not None:
+        wandb.log(
+            {
+                "train/total_tokens": total_train_tokens,
+                **{
+                    f"train/tokens_{lang}": count
+                    for lang, count in lang_token_counts.items()
+                },
+            }
+        )
 
     dataset = TokenizedTextDataset(all_texts, tokenizer, preprocess_fn, dataset_cfg)
     logging.info(
@@ -265,7 +278,8 @@ def run_finetune(cfg):
     )
     model = get_peft_model(model, lora_config)
     model_save_dir = str(
-        output_dir / f"las_finetuned_{model_name.split('/')[-1]}_{str(langs)}"
+        output_dir
+        / f"las_finetuned_{model_name.split('/')[-1]}_{str(langs)}_{'original-tokenizer' if las_tokenizer_path is None else 'las-tokenizer'}"
     )
 
     # ---- Fine-tuning ----

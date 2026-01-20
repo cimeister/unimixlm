@@ -1,3 +1,0 @@
-defaults:
-  - experiment: tokenizer_training
-  - _self_
