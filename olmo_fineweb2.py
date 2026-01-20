@@ -6,9 +6,12 @@ Each language trains in its own subprocess to avoid daemonic process issues on m
 HF push happens asynchronously immediately after each tokenizer finishes training.
 """
 
-import logging, os, subprocess, sys, itertools
+import logging
+import subprocess
+import sys
+import itertools
 from pathlib import Path
-from concurrent.futures import ThreadPoolExecutor, as_completed
+from concurrent.futures import ThreadPoolExecutor
 
 from transformers import AutoTokenizer
 from datasets import load_dataset
@@ -16,10 +19,6 @@ from datasets import load_dataset
 # ---------------------- Logging ----------------------
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
-
-# ---------------------- Add code/ to sys.path ----------------------
-sys.path.insert(0, str(Path(__file__).parent / "code"))
-from language_specific_unigramlm import LanguageSpecificUnigramLMTokenizer
 
 # ---------------------- Languages ----------------------
 all_langs = [
@@ -34,31 +33,20 @@ all_langs = [
     "som_Latn"
 ]
 
-# ---------------------- HuggingFace push utility ----------------------
-def push_to_hf(output_dir, hf_username, repo_name):
+def push_to_hf_new(output_dir, hf_username, repo_name):
     from huggingface_hub import HfApi, HfFolder
     api = HfApi()
     token = HfFolder.get_token()
     repo_id = f"{hf_username}/{repo_name}"
-    hf_url = f"https://huggingface.co/{repo_id}"
-    try:
-        api.repo_info(repo_id, token=token)
-    except:
-        logger.info(f"Creating HF repo: {hf_url}")
-        api.create_repo(repo_id=repo_id, token=token, private=False, exist_ok=True)
-
-    if not (output_dir / ".git").exists():
-        subprocess.run(["git", "init"], cwd=str(output_dir), check=True)
-        subprocess.run(["git", "checkout", "-b", "main"], cwd=str(output_dir), check=True)
-        subprocess.run(["git", "remote", "add", "origin", hf_url], cwd=str(output_dir), check=True)
-
-    subprocess.run(["git", "add", "."], cwd=str(output_dir), check=True)
-    try:
-        subprocess.run(["git", "commit", "-m", f"Add {repo_name} files"], cwd=str(output_dir), check=True)
-    except subprocess.CalledProcessError:
-        logger.warning("Nothing to commit, skipping git commit.")
-    subprocess.run(["git", "push", "-u", "origin", "main", "--force"], cwd=str(output_dir), check=True)
-    logger.info(f"Pushed to HF repo: {hf_url}")
+    api.create_repo(repo_id=repo_id, token=token, private=False, exist_ok=True)
+    api.upload_folder(
+        repo_id=repo_id,
+        folder_path=str(output_dir),
+        token=token,
+        allow_patterns=["*.json"],  # save only .json tokenizer files.
+        ignore_patterns=[".git/*"],
+    )
+    logger.info(f"Pushed to HF repo: https://huggingface.co/{repo_id}")
 
 # ---------------------- FineWeb2-10K streaming / reading ----------------------
 def prepare_language_corpora(langs, lines_per_lang=10000, input_dir=None, output_dir="./data/parallel"):
@@ -99,29 +87,6 @@ def prepare_language_corpora(langs, lines_per_lang=10000, input_dir=None, output
 
     return corpus_info
 
-# ---------------------- Single language training ----------------------
-def train_and_push(lang, corpus_file, base_tokenizer_path, output_root, hf_username):
-    """
-    Train one-language LAS-UnigramLM tokenizer and push asynchronously.
-    """
-    logger.info(f"Training LAS-UnigramLM tokenizer for {lang}...")
-    lang_output_dir = output_root / "tokenizers" / lang
-    lang_output_dir.mkdir(parents=True, exist_ok=True)
-
-    # Train
-    las_tokenizer = LanguageSpecificUnigramLMTokenizer(vocab_size=8000, byte_level=True, reestimation_em_mode="soft")
-    las_tokenizer.train(
-        corpus_info={lang: corpus_file},
-        base_tokenizer_path=str(base_tokenizer_path),
-        output_dir=str(lang_output_dir),
-        load_base_if_exists=True,
-        load_tokenizers_if_exists=False
-    )
-
-    # Async HF push
-    push_to_hf(lang_output_dir, hf_username, f"olmo-3-fineweb-{lang}")
-    logger.info(f"Finished training and pushing {lang}")
-
 # ---------------------- Main pipeline ----------------------
 def main(langs, lines_per_lang=10000, output_dir="./olmo3_las_tokenizers", hf_username="MultilingualUnigramLM"):
     output_dir = Path(output_dir)
@@ -129,12 +94,9 @@ def main(langs, lines_per_lang=10000, output_dir="./olmo3_las_tokenizers", hf_us
 
     # 1. Load Olmo-3 tokenizer as base
     logger.info("Loading Olmo-3 tokenizer as base...")
-    base_tokenizer = AutoTokenizer.from_pretrained("allenai/Olmo-3-1025-7B", trust_remote_code=True)
-
-    base_path = output_dir / "olmo3_base_tokenizer.json"
-    if not base_path.exists():
-        logger.info(f"Saving base tokenizer to {base_path}")
-        base_tokenizer.save_pretrained(output_dir)
+    model_tokenizer = AutoTokenizer.from_pretrained(
+        "allenai/Olmo-3-1025-7B", trust_remote_code=True
+    )
 
     # 2. Prepare corpora
     corpus_info = prepare_language_corpora(langs, lines_per_lang=lines_per_lang, output_dir=output_dir / "corpora")
@@ -151,23 +113,23 @@ import sys
 from pathlib import Path
 sys.path.insert(0, '{Path(__file__).parent}/code')
 from language_specific_unigramlm import LanguageSpecificUnigramLMTokenizer
-from new_olmo import push_to_hf
+from olmo_fineweb2 import push_to_hf_new
 
 lang = '{lang}'
 corpus_file = '{corpus_file}'
-base_path = '{base_path}'
-output_dir = Path('{output_dir}') / 'tokenizers' / lang
-output_dir.mkdir(parents=True, exist_ok=True)
-vocab_size = 
-las_tokenizer = LanguageSpecificUnigramLMTokenizer(vocab_size=len(tokenizer), byte_level=True, reestimation_em_mode='soft')
+base_tokenizer_path = '{output_dir / lang / "base.tokenizer.json"}'
+vocab_size = {len(model_tokenizer)}
+lang_output_dir = Path('{output_dir / lang}')
+lang_output_dir.mkdir(parents=True, exist_ok=True)
+las_tokenizer = LanguageSpecificUnigramLMTokenizer(vocab_size=vocab_size, byte_level=True, reestimation_em_mode='soft')
 las_tokenizer.train(
     corpus_info={{lang: corpus_file}},
-    base_tokenizer_path=str(base_path),
-    output_dir=str(output_dir),
+    base_tokenizer_path=str(base_tokenizer_path),
+    output_dir=str(lang_output_dir),
     load_base_if_exists=True,
     load_tokenizers_if_exists=False
 )
-push_to_hf(output_dir, '{hf_username}', f'olmo-3-fineweb-{{lang}}')
+push_to_hf_new(lang_output_dir, '{hf_username}', f'olmo-3-fineweb-{{lang}}')
 print('Finished training and pushing {lang}')
             """
         ]
