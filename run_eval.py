@@ -14,6 +14,8 @@ import lm_eval
 import pycountry
 from lm_eval.models.huggingface import HFLM
 from omegaconf import DictConfig
+from lm_eval.utils import handle_non_serializable
+
 
 import logging
 
@@ -157,7 +159,7 @@ def run_eval_one_model(model, model_args, cfg: DictConfig) -> None:
         num_fewshot=5,
         batch_size=str(cfg.batch_size),
         log_samples=bool(cfg.log_samples),
-        limit=10,  # TODO remove after testing
+        # limit=10,  # TODO remove after testing
     )
 
     # run piqa with configured few-shot
@@ -168,7 +170,7 @@ def run_eval_one_model(model, model_args, cfg: DictConfig) -> None:
         num_fewshot=0,
         batch_size=str(cfg.batch_size),
         log_samples=bool(cfg.log_samples),
-        limit=10,  # TODO remove after testing
+        # limit=10,  # TODO remove after testing
     )
 
     return results1, results2
@@ -182,7 +184,9 @@ def main(cfg: DictConfig) -> None:
         datefmt="%Y-%m-%d %H:%M:%S",
     )
 
-    eval_results = {"config": cfg}
+    output_dir = Path(getattr(cfg, "output_path", "./eval_results"))
+    output_dir.mkdir(parents=True, exist_ok=True)
+    timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
 
     if cfg.get("cuda_visible_devices"):
         os.environ.setdefault("CUDA_VISIBLE_DEVICES", str(cfg.cuda_visible_devices))
@@ -192,17 +196,33 @@ def main(cfg: DictConfig) -> None:
 
     logging.info(f"Evaluating base model: {model} with args: {base_model_args}")
     r1, r2 = run_eval_one_model(model, base_model_args, cfg)
-    eval_results["base_model"] = {"mmlu_belebele": r1, "piqa": r2}
+
+    output_path = output_dir / f"eval_results_base_{timestamp}.json"
+    with open(output_path, "w") as f:
+        json.dump(
+            {"mmlu_belebele": r1, "piqa": r2},
+            f,
+            indent=2,
+            default=handle_non_serializable,
+        )
 
     finetuned_model_args = f"pretrained={cfg.model_args.pretrained},peft={cfg.model_args.peft_original_tok}"
     logging.info(
         f"Evaluating finetuned model with original tokenizer: {model} with args: {finetuned_model_args}"
     )
     r1, r2 = run_eval_one_model(model, finetuned_model_args, cfg=cfg)
-    eval_results["finetuned_model_original_tokenizer"] = {
-        "mmlu_belebele": r1,
-        "piqa": r2,
-    }
+
+    output_path = output_dir / f"eval_results_ft_{timestamp}.json"
+    with open(output_path, "w") as f:
+        json.dump(
+            {
+                "mmlu_belebele": r1,
+                "piqa": r2,
+            },
+            f,
+            indent=2,
+            default=handle_non_serializable,
+        )
 
     finetuned_model_las_args = (
         f"pretrained={cfg.model_args.pretrained},peft={cfg.model_args.peft_las_tok}"
@@ -229,18 +249,20 @@ def main(cfg: DictConfig) -> None:
             f"Evaluating finetuned model with LAS tokenizer: {model} with args: {model_args}"
         )
         r1, r2 = run_eval_one_model(model, model_args, cfg)
-        eval_results["finetuned_model_las_tokenizer"] = {
-            "mmlu_belebele": r1,
-            "piqa": r2,
-        }
 
-    # save results with date and time stamp
-    output_dir = Path(getattr(cfg, "output_path", "./eval_results"))
-    output_dir.mkdir(parents=True, exist_ok=True)
-    timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
-    output_path = output_dir / f"eval_results_{timestamp}.json"
-    with output_path.open("w", encoding="utf-8") as f:
-        json.dump(eval_results, f, indent=2, ensure_ascii=False, default=str)
+        output_path = output_dir / f"eval_results_ft_las_{timestamp}.json"
+        with open(output_path, "w") as f:
+            json.dump(
+                {
+                    "mmlu_belebele": r1,
+                    "piqa": r2,
+                },
+                f,
+                indent=2,
+                default=handle_non_serializable,
+            )
+
+    logging.info("Evaluation complete.")
 
 
 if __name__ == "__main__":
