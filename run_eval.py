@@ -64,7 +64,7 @@ class LasTokenizerHFLM(HFLM):
             vocab_size=len(self.tokenizer),
             byte_level=self._las_byte_level,
         )
-        las.load(str(base_path), [str(language_path)])
+        las.load(str(base_path), {self._las_lang: str(language_path)})
         self._las = las
 
     def _base_preprocess(self, text: str) -> str:
@@ -235,7 +235,7 @@ def main(cfg: DictConfig) -> None:
                 "las_tokenizer_main_path": str(
                     cfg.custom_tokenizer.las_tokenizer_main_path
                 ),
-                "las_lang": list(cfg.custom_tokenizer.las_lang),
+                "las_lang": str(cfg.custom_tokenizer.las_lang),
                 "las_byte_level": bool(cfg.custom_tokenizer.byte_level),
                 "las_lowercase_if_not_byte_level": bool(
                     cfg.custom_tokenizer.lowercase_if_not_byte_level

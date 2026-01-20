@@ -18,7 +18,7 @@ batch_size: auto:4
 log_samples: false
 
 custom_tokenizer:
-  enabled: false
+  enabled: true
   las_tokenizer_main_path: "/home/as3623/unimixlm/olmo3_las_tokenizers/yor_Latn"
   las_lang: yor
   byte_level: true
