@@ -1,7 +1,7 @@
 defaults:
   - _self_
 
-cuda_visible_devices: "0,1"
+cuda_visible_devices: "1"
 output_path: ./eval_results
 
 model: hf
