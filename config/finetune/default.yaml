@@ -1,0 +1,27 @@
+defaults:
+  - model: olmo3-1025-7b
+  - logger: wandb-andrzej
+  - lora: r32-k64
+  - _self_
+
+langs: 
+  - yo
+
+# if set to null then the original model tokenizer is used
+las_tokenizer_path: /home/USER/unimixlm/olmo3_las_tokenizers/yor_Latn
+# las_tokenizer_path: null 
+
+output_dir: ./finetuned_model
+
+epochs: 1
+batch_size: 16
+gradient_accumulation_steps: 1
+learning_rate: 5e-4
+
+dataset:
+  pack_dataset: true
+  align_to_max_seq_len: true
+  add_eos_between_samples: true
+  drop_last_pack: false
+  max_seq_len: 128
+
