@@ -4,14 +4,10 @@ defaults:
   - lora: r32-k64
   - _self_
 
-langs: 
-  - yo
-
-# if set to null then the original model tokenizer is used
-las_tokenizer_path: /home/as3623/unimixlm/olmo3_las_tokenizers/yor_Latn
-# las_tokenizer_path: null 
+langs: []   # overridden by Hydra
 
 output_dir: ./finetuned_model
+las_tokenizer_path: null
 
 epochs: 1
 batch_size: 16
@@ -19,9 +15,23 @@ gradient_accumulation_steps: 1
 learning_rate: 5e-4
 
 dataset:
+  size: 5M
+  max_seq_len: 2048
   pack_dataset: true
   align_to_max_seq_len: true
   add_eos_between_samples: true
   drop_last_pack: false
-  max_seq_len: 128
 
+lora:
+  r: 8
+  alpha: 16
+  dropout: 0.05
+  target_modules: null
+
+logger:
+  enabled: false
+  project: fineweb2-las
+  entity: null
+  run_name: ${hydra:job.name}
+  tags: [fineweb2, las, lora]
+  notes: null
