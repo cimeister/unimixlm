@@ -5,7 +5,6 @@ defaults:
   - _self_
 
 langs: []   # overridden by Hydra
-
 output_dir: ./finetuned_model
 las_tokenizer_path: null
 
