@@ -1,5 +1,10 @@
 #!/usr/bin/env python3
-"""Hydra entry point for LAS experiments with FineWeb2 {5M, 10M} Datasets"""
+"""
+Hydra entry point for LAS experiments with FineWeb2 {5M, 10M} Datasets
+python las_finetune.py -m \
+  langs=fil,hau,ibo,ind,lit,nya,ron,sna,som,swh,yor,zsm \
+  dataset_size=5M,10M
+"""
 
 import hydra
 from omegaconf import DictConfig
