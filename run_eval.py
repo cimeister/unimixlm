@@ -145,35 +145,56 @@ def build_piqa_tasks(langs: list[str]) -> list[str]:
 
 def run_eval_one_model(model, model_args, cfg: DictConfig) -> None:
     langs = list(cfg.eval_langs)
-    mmlu_tasks = build_mmlu_tasks(langs)
-    belebele_tasks = build_belebele_tasks(langs)
-    piqa_tasks = build_piqa_tasks(langs)
 
-    logging.info(f"Tasks to run: {mmlu_tasks + belebele_tasks + piqa_tasks}")
+    tasks_list = list(cfg.tasks)
+
+    logging.info(f"Tasks to run: {tasks_list}")
 
     # run belebele and mmlu with configured few-shot
-    results1 = lm_eval.simple_evaluate(
-        model=model,
-        model_args=model_args,
-        tasks=mmlu_tasks + belebele_tasks,
-        num_fewshot=5,
-        batch_size=str(cfg.batch_size),
-        log_samples=bool(cfg.log_samples),
-        # limit=10,  # TODO remove after testing
+    results1 = (
+        lm_eval.simple_evaluate(
+            model=model,
+            model_args=model_args,
+            tasks=build_mmlu_tasks(langs),
+            num_fewshot=5,
+            batch_size=str(cfg.batch_size),
+            log_samples=bool(cfg.log_samples),
+            # limit=10,  # TODO remove after testing
+        )
+        if "mmlu" in tasks_list
+        else None
+    )
+
+    results2 = (
+        lm_eval.simple_evaluate(
+            model=model,
+            model_args=model_args,
+            tasks=build_belebele_tasks(langs),
+            num_fewshot=5,
+            batch_size=str(cfg.batch_size),
+            log_samples=bool(cfg.log_samples),
+            # limit=10,  # TODO remove after testing
+        )
+        if "belebele" in tasks_list
+        else None
     )
 
     # run piqa with configured few-shot
-    results2 = lm_eval.simple_evaluate(
-        model=model,
-        model_args=model_args,
-        tasks=piqa_tasks,
-        num_fewshot=0,
-        batch_size=str(cfg.batch_size),
-        log_samples=bool(cfg.log_samples),
-        # limit=10,  # TODO remove after testing
+    results3 = (
+        lm_eval.simple_evaluate(
+            model=model,
+            model_args=model_args,
+            tasks=build_piqa_tasks(langs),
+            num_fewshot=0,
+            batch_size=str(cfg.batch_size),
+            log_samples=bool(cfg.log_samples),
+            # limit=10,  # TODO remove after testing
+        )
+        if "piqa" in tasks_list
+        else None
     )
 
-    return results1, results2
+    return results1, results2, results3
 
 
 @hydra.main(config_path="config/eval", config_name="default", version_base="1.3")
@@ -195,12 +216,12 @@ def main(cfg: DictConfig) -> None:
     base_model_args = f"pretrained={cfg.model_args.pretrained}"
 
     logging.info(f"Evaluating base model: {model} with args: {base_model_args}")
-    r1, r2 = run_eval_one_model(model, base_model_args, cfg)
+    r1, r2, r3 = run_eval_one_model(model, base_model_args, cfg)
 
     output_path = output_dir / f"eval_results_base_{timestamp}.json"
     with open(output_path, "w") as f:
         json.dump(
-            {"mmlu_belebele": r1, "piqa": r2},
+            {"mmlu": r1, "belebele": r2, "piqa": r3},
             f,
             indent=2,
             default=handle_non_serializable,
@@ -210,14 +231,15 @@ def main(cfg: DictConfig) -> None:
     logging.info(
         f"Evaluating finetuned model with original tokenizer: {model} with args: {finetuned_model_args}"
     )
-    r1, r2 = run_eval_one_model(model, finetuned_model_args, cfg=cfg)
+    r1, r2, r3 = run_eval_one_model(model, finetuned_model_args, cfg=cfg)
 
     output_path = output_dir / f"eval_results_ft_{timestamp}.json"
     with open(output_path, "w") as f:
         json.dump(
             {
-                "mmlu_belebele": r1,
-                "piqa": r2,
+                "mmlu": r1,
+                "belebele": r2,
+                "piqa": r3,
             },
             f,
             indent=2,
@@ -248,14 +270,15 @@ def main(cfg: DictConfig) -> None:
         logging.info(
             f"Evaluating finetuned model with LAS tokenizer: {model} with args: {model_args}"
         )
-        r1, r2 = run_eval_one_model(model, model_args, cfg)
+        r1, r2, r3 = run_eval_one_model(model, model_args, cfg)
 
         output_path = output_dir / f"eval_results_ft_las_{timestamp}.json"
         with open(output_path, "w") as f:
             json.dump(
                 {
-                    "mmlu_belebele": r1,
-                    "piqa": r2,
+                    "mmlu": r1,
+                    "belebele": r2,
+                    "piqa": r3,
                 },
                 f,
                 indent=2,
