@@ -1,9 +1,9 @@
 #!/usr/bin/env python3
 """
 Hydra entry point for LAS experiments with FineWeb2 {5M, 10M} Datasets
-python las_finetune.py -m \
-  langs=fil,hau,ibo,ind,lit,nya,ron,sna,som,swh,yor,zsm \
-  dataset_size=5M,10M
+python las_finetune.py \
+  langs=[yor] \  # or fil,hau,ibo,ind,lit,nya,ron,sna,som,swh,yor,zsm
+  dataset.size=10M  # or 5M
 """
 
 import hydra
@@ -27,15 +27,14 @@ def main(cfg: DictConfig) -> None:
         raise ValueError(f"Expected exactly one language per job, got: {cfg.langs}")
 
     # Auto-name output_dir and wandb run
-    lang = cfg.langs[0]
+    langs = "-".join(cfg.langs)
     dataset_size = str(cfg.dataset.size)
     base_output_dir = Path(cfg.output_dir)
 
-    cfg.output_dir = str(base_output_dir / f"{lang}_{dataset_size}")
-    
-    if cfg.logger.enabled:
-        cfg.logger.run_name = f"{lang}_{dataset_size}_{cfg.logger.run_name}"
-
+    cfg.output_dir = str(
+        base_output_dir
+        / f"{'ft' if not cfg.las_tokenizer_path else 'ft-las'}_{langs}_{dataset_size}_modified"
+    )
     logging.info("Loaded configuration:")
     logging.info(cfg)
     logging.info(f"Output directory set to: {cfg.output_dir}")
