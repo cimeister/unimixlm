@@ -6,83 +6,27 @@ Each language trains in its own subprocess to avoid daemonic process issues on m
 HF push happens asynchronously immediately after each tokenizer finishes training.
 """
 
-import logging
-import subprocess
-import sys
 import itertools
-from pathlib import Path
+import logging
 from concurrent.futures import ThreadPoolExecutor
+from pathlib import Path
 
-from transformers import AutoTokenizer
+import hydra
 from datasets import load_dataset
+from omegaconf import DictConfig
+from transformers import AutoTokenizer
+
+from code.language_specific_unigramlm import LanguageSpecificUnigramLMTokenizer
+from code.standard_unigramlm import StandardUnigramLMTokenizer
+
 
 # ---------------------- Logging ----------------------
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
 
-# ---------------------- Languages ----------------------
-all_langs = [
-    "afr_Latn",
-    "als_Latn",
-    "azj_Latn",
-    "bos_Latn",
-    "cat_Latn",
-    "cos_Latn",
-    "cym_Latn",
-    "dan_Latn",
-    "deu_Latn",
-    "fao_Latn",
-    "fil_Latn",
-    "fin_Latn",
-    "fry_Latn",
-    "gla_Latn",
-    "gle_Latn",
-    "glg_Latn",
-    "gmh_Latn",
-    "hat_Latn",
-    "hau_Latn",
-    "haw_Latn",
-    "hif_Latn",
-    "hin_Latn",
-    "hrv_Latn",
-    "hun_Latn",
-    "ibo_Latn",
-    "ind_Latn",
-    "isl_Latn",
-    "ita_Latn",
-    "jav_Latn",
-    "kin_Latn",
-    "kmr_Latn",
-    "lit_Latn",
-    "ltz_Latn",
-    "lus_Latn",
-    "lvs_Latn",
-    "mlt_Latn",
-    "mww_Latn",
-    "nob_Latn",
-    "plt_Latn",
-    "por_Latn",
-    "ron_Latn",
-    "slv_Latn",
-    "smo_Latn",
-    "sot_Latn",
-    "srp_Latn",
-    "sun_Latn",
-    "swe_Latn",
-    "swh_Latn",
-    "tuk_Latn",
-    "uzn_Latn",
-    "vie_Latn",
-    "yor_Latn",
-    "zul_Latn",
-    "sna_Latn",
-    "nya_Latn",
-    "zsm_Latn",
-    "som_Latn",
-]
 
-
-def push_to_hf_new(output_dir, hf_username, repo_name):
+def push_to_hf(output_dir: Path, hf_username: str, repo_name: str) -> None:
+    """Create/update a public HF repo and upload tokenizer JSON artifacts."""
     from huggingface_hub import HfApi, HfFolder
 
     api = HfApi()
@@ -96,16 +40,85 @@ def push_to_hf_new(output_dir, hf_username, repo_name):
         allow_patterns=["*.json"],  # save only .json tokenizer files.
         ignore_patterns=[".git/*"],
     )
-    logger.info(f"Pushed to HF repo: https://huggingface.co/{repo_id}")
+    logger.info("Pushed to HF repo: https://huggingface.co/%s", repo_id)
+
+
+def train_language_tokenizer(
+    *,
+    lang: str,
+    corpus_file: str,
+    seed_tokenizer_path: str,
+    output_dir: str,
+    hf_username: str,
+    vocab_size: int,
+    byte_level: bool = True,
+    em_mode: str = "soft",
+    reestimation_em_mode: str = "soft",
+    use_sp_seed_vocab: bool = False,
+    load_base_if_exists: bool = True,
+    load_tokenizers_if_exists: bool = False,
+    push_to_hf_flag: bool = True,
+) -> None:
+    """
+    Train a two-stage tokenizer for a single language:
+    1) A base Unigram tokenizer seeded from the base model's tokenizer vocab.
+    2) A language-specific LAS Unigram tokenizer re-estimated from the base.
+
+    The resulting artifacts are written under `output_dir` and can optionally
+    be pushed to a Hugging Face Hub repo.
+    """
+    # Ensure the output directory exists for this language.
+    lang_output_dir = Path(output_dir)
+    lang_output_dir.mkdir(parents=True, exist_ok=True)
+
+    # Path where the base Unigram tokenizer JSON will be stored.
+    base_tokenizer_path = lang_output_dir / "base.tokenizer.json"
+
+    # Stage 1: Train the base Unigram tokenizer, seeded from the model vocab.
+    # - `initial_vocab_tokens` points at the base model's tokenizer.json.
+    # - `use_sp_seed_vocab=False` means we do not override the seed vocab.
+    base_tok = StandardUnigramLMTokenizer(
+        vocab_size=vocab_size,
+        byte_level=byte_level,
+        em_mode=em_mode,
+        initial_vocab_tokens=str(Path(seed_tokenizer_path)),
+        use_sp_seed_vocab=use_sp_seed_vocab,
+    )
+    base_tok.train(
+        [corpus_file],
+        output_path=str(base_tokenizer_path),
+        load_if_exists=False,
+    )
+
+    # Stage 2: Train the language-specific LAS tokenizer using the base.
+    # This re-estimates token probabilities based on the single-language corpus.
+    las_tokenizer = LanguageSpecificUnigramLMTokenizer(
+        vocab_size=vocab_size,
+        byte_level=byte_level,
+        reestimation_em_mode=reestimation_em_mode,
+    )
+    las_tokenizer.train(
+        corpus_info={lang: corpus_file},
+        base_tokenizer_path=str(base_tokenizer_path),
+        output_dir=str(lang_output_dir),
+        load_base_if_exists=load_base_if_exists,
+        load_tokenizers_if_exists=load_tokenizers_if_exists,
+    )
+
+    # Optional: upload JSON artifacts to the HF Hub.
+    if push_to_hf_flag:
+        push_to_hf(lang_output_dir, hf_username, f"olmo-3-fineweb-{lang}")
+
+    logger.info("Finished training and pushing %s", lang)
 
 
 # ---------------------- FineWeb2-10K streaming / reading ----------------------
-def prepare_language_corpora(
-    langs, lines_per_lang=10000, input_dir=None, output_dir="./data/parallel"
-):
+def prepare_language_corpora(langs, lines_per_lang=10000, output_dir="./data/parallel"):
     """
-    Either read existing txt files from input_dir or stream FineWeb2-10K.
-    Returns dict {lang_code: path_to_file}.
+    Build per-language text files either by:
+    - streaming FineWeb2-10K for each language.
+
+    Returns a dict mapping language code -> local text file path.
     """
     output_dir = Path(output_dir)
     output_dir.mkdir(parents=True, exist_ok=True)
@@ -113,14 +126,6 @@ def prepare_language_corpora(
 
     for lang in langs:
         out_file = output_dir / f"{lang}.txt"
-        if input_dir and (Path(input_dir) / f"{lang}.txt").exists():
-            logger.info(f"Copying existing file for {lang}")
-            out_file.write_text(
-                (Path(input_dir) / f"{lang}.txt").read_text(encoding="utf-8"),
-                encoding="utf-8",
-            )
-            corpus_info[lang] = str(out_file)
-            continue
 
         logger.info(f"Streaming {lang} from FineWeb2-10K...")
         try:
@@ -152,77 +157,58 @@ def main(
     output_dir,
     lines_per_lang=10000,
     hf_username="MultilingualUnigramLM",
+    model_name="allenai/Olmo-3-1025-7B",
+    max_workers=8,
+    training_cfg=None,
+    push_to_hf=True,
 ):
     output_dir = Path(output_dir)
     output_dir.mkdir(parents=True, exist_ok=True)
 
-    # 1. Load Olmo-3 tokenizer as base
+    # 1) Load Olmo-3 tokenizer as the base vocabulary seed.
     logger.info("Loading Olmo-3 tokenizer as base...")
-    model_tokenizer = AutoTokenizer.from_pretrained(
-        "allenai/Olmo-3-1025-7B", trust_remote_code=True
-    )
+    model_tokenizer = AutoTokenizer.from_pretrained(model_name, trust_remote_code=True)
     seed_tokenizer_dir = output_dir / "model_tokenizer"
     seed_tokenizer_dir.mkdir(parents=True, exist_ok=True)
     model_tokenizer.save_pretrained(seed_tokenizer_dir)
     seed_tokenizer_path = seed_tokenizer_dir / "tokenizer.json"
 
-    # 2. Prepare corpora
+    # 2) Prepare per-language corpora (stream or read from disk).
     corpus_info = prepare_language_corpora(
-        langs, lines_per_lang=lines_per_lang, output_dir=output_dir / "corpora"
+        langs,
+        lines_per_lang=lines_per_lang,
+        output_dir=output_dir / "corpora",
     )
 
-    # 3. Train & push in separate subprocesses
+    # 3) Train & push in parallel threads.
     futures = []
-    push_executor = ThreadPoolExecutor(max_workers=8)
+    push_executor = ThreadPoolExecutor(max_workers=max_workers)
+    training_cfg = training_cfg or {}
 
     for lang, corpus_file in corpus_info.items():
-        train_cmd = [
-            sys.executable,
-            "-c",
-            f"""
-import sys
-from pathlib import Path
-sys.path.insert(0, '{Path(__file__).parent}/code')
-from language_specific_unigramlm import LanguageSpecificUnigramLMTokenizer
-from standard_unigramlm import StandardUnigramLMTokenizer
-from olmo_fineweb2 import push_to_hf_new
-
-lang = '{lang}'
-corpus_file = '{corpus_file}'
-seed_tokenizer_path = '{seed_tokenizer_path}'
-base_tokenizer_path = '{output_dir / lang / "base.tokenizer.json"}'
-vocab_size = {len(model_tokenizer)}
-lang_output_dir = Path('{output_dir / lang}')
-lang_output_dir.mkdir(parents=True, exist_ok=True)
-
-# Train base Unigram tokenizer initialized from the model tokenizer vocab
-base_tok = StandardUnigramLMTokenizer(
-    vocab_size=vocab_size,
-    byte_level=True,
-    em_mode="soft",
-    initial_vocab_tokens=str(seed_tokenizer_path),
-    use_sp_seed_vocab=False,
-)
-base_tok.train([corpus_file], output_path=str(base_tokenizer_path), load_if_exists=False)
-
-# Train language-specific tokenizer from the base Unigram tokenizer
-las_tokenizer = LanguageSpecificUnigramLMTokenizer(
-    vocab_size=vocab_size,
-    byte_level=True,
-    reestimation_em_mode='soft'
-)
-las_tokenizer.train(
-    corpus_info={{lang: corpus_file}},
-    base_tokenizer_path=str(base_tokenizer_path),
-    output_dir=str(lang_output_dir),
-    load_base_if_exists=True,
-    load_tokenizers_if_exists=False
-)
-push_to_hf_new(lang_output_dir, '{hf_username}', f'olmo-3-fineweb-{{lang}}')
-print('Finished training and pushing {lang}')
-            """,
-        ]
-        futures.append(push_executor.submit(subprocess.run, train_cmd, check=True))
+        # Dispatch per-language training using the in-process function.
+        futures.append(
+            push_executor.submit(
+                train_language_tokenizer,
+                lang=lang,
+                corpus_file=corpus_file,
+                seed_tokenizer_path=str(seed_tokenizer_path),
+                output_dir=str(output_dir / lang),
+                hf_username=hf_username,
+                vocab_size=len(model_tokenizer),
+                byte_level=bool(training_cfg.get("byte_level", True)),
+                em_mode=str(training_cfg.get("em_mode", "soft")),
+                reestimation_em_mode=str(
+                    training_cfg.get("reestimation_em_mode", "soft")
+                ),
+                use_sp_seed_vocab=bool(training_cfg.get("use_sp_seed_vocab", False)),
+                load_base_if_exists=bool(training_cfg.get("load_base_if_exists", True)),
+                load_tokenizers_if_exists=bool(
+                    training_cfg.get("load_tokenizers_if_exists", False)
+                ),
+                push_to_hf_flag=bool(push_to_hf),
+            )
+        )
 
     # Wait for all tasks
     for future in futures:
@@ -232,10 +218,24 @@ print('Finished training and pushing {lang}')
 
 
 # ---------------------- Entry point ----------------------
-if __name__ == "__main__":
+@hydra.main(
+    config_path="config/tokenizer_training",
+    config_name="default",
+    version_base="1.3",
+)
+def hydra_main(cfg: DictConfig) -> None:
+    langs = list(cfg.languages.langs)
     main(
-        all_langs,
-        output_dir="./olmo3_las_tokenizers_new",
-        lines_per_lang=10000,
-        hf_username="MultilingualUnigramLM",
+        langs,
+        output_dir=cfg.data.output_dir,
+        lines_per_lang=cfg.data.lines_per_lang,
+        hf_username=cfg.hf.username,
+        model_name=cfg.model.model_name,
+        max_workers=cfg.execution.max_workers,
+        training_cfg=cfg.training,
+        push_to_hf=cfg.hf.push,
     )
+
+
+if __name__ == "__main__":
+    hydra_main()
