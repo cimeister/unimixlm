@@ -1,0 +1,22 @@
+# Default configuration for olmo_fineweb2 tokenizer training
+
+defaults:
+  - languages: all
+  - hf: multilingualunigramlm
+  - model: olmo3-1025-7b
+  - _self_
+
+data:
+  output_dir: ./olmo3_las_tokenizers_new_very_new
+  lines_per_lang: 10000
+  
+training:
+  byte_level: true
+  em_mode: soft
+  reestimation_em_mode: soft
+  use_sp_seed_vocab: false
+  load_base_if_exists: true
+  load_tokenizers_if_exists: false
+
+execution:
+  max_workers: 8
