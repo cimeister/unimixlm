@@ -14,12 +14,17 @@ eval_langs:
   - en
   - yo
 
-batch_size: auto:4
+tasks:
+  # - mmlu
+  - belebele
+  - piqa
+
+batch_size: auto
 log_samples: false
 
 custom_tokenizer:
   enabled: true
-  las_tokenizer_main_path: "/home/USER/unimixlm/olmo3_las_tokenizers/yor_Latn"
   las_lang: yor
+  las_tokenizer_main_path: "/home/USER/unimixlm/olmo3_las_tokenizers/${custom_tokenizer.las_lang}_Latn"
   byte_level: true
   lowercase_if_not_byte_level: true
