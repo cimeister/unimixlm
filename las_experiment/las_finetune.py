@@ -16,18 +16,8 @@ from transformers import (
 import wandb
 from peft import LoraConfig, get_peft_model, TaskType
 from code.language_specific_unigramlm import LanguageSpecificUnigramLMTokenizer
-import pycountry
 
 logging.basicConfig(level=logging.INFO)
-
-
-# ---------------------- Utils ----------------------
-def to_iso639_3(code: str) -> str:
-    code = code.lower()
-    entry = pycountry.languages.get(alpha_2=code)
-    if entry is None:
-        raise ValueError(f"Unknown ISO-639-1 code: {code}")
-    return entry.alpha_3
 
 
 def resolve_fineweb2_dataset(size: str) -> str:
@@ -47,7 +37,9 @@ class TokenizedTextDataset(Dataset):
         align_to_max_seq_len = bool(dataset_cfg.get("align_to_max_seq_len", True))
         drop_last_pack = bool(dataset_cfg.get("drop_last_pack", False))
         pack_dataset = bool(dataset_cfg.get("pack_dataset", False))
-        add_eos_between_samples = bool(dataset_cfg.get("add_eos_between_samples", False))
+        add_eos_between_samples = bool(
+            dataset_cfg.get("add_eos_between_samples", False)
+        )
 
         if pack_dataset and max_seq_len is None:
             raise ValueError("max_seq_len must be set when pack_dataset=True")
@@ -126,8 +118,10 @@ def run_finetune(cfg):
     langs = cfg.langs
     dataset_size = cfg.dataset.size
     model_name = cfg.model.model_name
-    las_tokenizer_path = Path(cfg.las_tokenizer_path) if cfg.las_tokenizer_path else None
-    output_dir = Path(cfg.output_dir) / f"{'-'.join(langs)}_{dataset_size}"
+    las_tokenizer_path = (
+        Path(cfg.las_tokenizer_path) if cfg.las_tokenizer_path else None
+    )
+    output_dir = Path(cfg.output_dir)
     output_dir.mkdir(parents=True, exist_ok=True)
 
     tokenizer = AutoTokenizer.from_pretrained(model_name, trust_remote_code=True)
@@ -147,11 +141,22 @@ def run_finetune(cfg):
     # ---- LAS tokenizer integration ----
     if las_tokenizer_path:
         base_tokenizer_path = las_tokenizer_path / "base.tokenizer.json"
-        language_paths = {lang: str(las_tokenizer_path / f"langspec_soft_{to_iso639_3(lang)}_Latn.tokenizer.json") for lang in langs}
-        shared_las = LanguageSpecificUnigramLMTokenizer(vocab_size=len(tokenizer), byte_level=True)
+        language_paths = {
+            lang: str(las_tokenizer_path / f"langspec_soft_{lang}_Latn.tokenizer.json")
+            for lang in langs
+        }
+        shared_las = LanguageSpecificUnigramLMTokenizer(
+            vocab_size=len(tokenizer), byte_level=True
+        )
         shared_las.load(str(base_tokenizer_path), language_paths)
-        def las_preprocess(text): return " ".join(shared_las.best_language_encode(preprocess_fn(text))[1])
-        model.resize_token_embeddings(len(shared_las.base_tokenizer.get_vocab()))
+
+        def las_preprocess(text):
+            # return " ".join(shared_las.best_language_encode(preprocess_fn(text))[1])
+            return "".join(
+                shared_las.best_language_encode(preprocess_fn(text))[1]
+            ).replace("Ġ", " ")
+
+        # model.resize_token_embeddings(len(shared_las.base_tokenizer.get_vocab()))
     else:
         las_preprocess = preprocess_fn
 
@@ -176,20 +181,32 @@ def run_finetune(cfg):
         )
 
     # ---- Token accounting ----
-    lang_token_counts = {lang: count_training_tokens(lang_texts[lang], tokenizer, preprocess_fn) for lang in langs}
+    lang_token_counts = {
+        lang: count_training_tokens(lang_texts[lang], tokenizer, preprocess_fn)
+        for lang in langs
+    }
     total_train_tokens = sum(lang_token_counts.values())
     logging.info(f"Total training tokens: {total_train_tokens}")
     for lang, count in lang_token_counts.items():
         logging.info(f"Training tokens [{lang}]: {count}")
     if cfg.logger.enabled and wandb.run:
-        wandb.log({"train/total_tokens": total_train_tokens, **{f"train/tokens_{lang}": c for lang, c in lang_token_counts.items()}})
+        wandb.log(
+            {
+                "train/total_tokens": total_train_tokens,
+                **{f"train/tokens_{lang}": c for lang, c in lang_token_counts.items()},
+            }
+        )
 
     # ---- Dataset ----
     dataset = TokenizedTextDataset(all_texts, tokenizer, las_preprocess, cfg.dataset)
     data_collator = DataCollatorForLanguageModeling(tokenizer=tokenizer, mlm=False)
 
     # ---- LoRA ----
-    lora_targets = [m.strip() for m in cfg.lora.target_modules.split(",")] if cfg.lora.target_modules else infer_lora_targets(model.config.model_type)
+    lora_targets = (
+        [m.strip() for m in cfg.lora.target_modules.split(",")]
+        if cfg.lora.target_modules
+        else infer_lora_targets(model.config.model_type)
+    )
     lora_config = LoraConfig(
         r=cfg.lora.r,
         lora_alpha=cfg.lora.alpha,
@@ -201,42 +218,25 @@ def run_finetune(cfg):
 
     # ---- Trainer ----
     training_args = TrainingArguments(
-        output_dir=str(output_dir),
         num_train_epochs=cfg.epochs,
         per_device_train_batch_size=cfg.batch_size,
         save_strategy="epoch",
         logging_strategy="steps",
-        logging_steps=10,
+        logging_steps=1,
         report_to=["wandb"] if cfg.logger.enabled else [],
         bf16=True,
         learning_rate=cfg.learning_rate,
         gradient_accumulation_steps=getattr(cfg, "gradient_accumulation_steps", 1),
     )
-    trainer = Trainer(model=model, train_dataset=dataset, tokenizer=tokenizer, data_collator=data_collator, args=training_args)
+    trainer = Trainer(
+        model=model,
+        train_dataset=dataset,
+        tokenizer=tokenizer,
+        data_collator=data_collator,
+        args=training_args,
+    )
 
     logging.info("Starting fine-tuning...")
     trainer.train()
     trainer.save_model(str(output_dir))
     logging.info("Fine-tuning complete.")
-
-
-# ---------------------- Example cfg ----------------------
-if __name__ == "__main__":
-    from types import SimpleNamespace
-
-    cfg = SimpleNamespace(
-        langs=["fil", "hau"],  # ONE or MULTIPLE languages
-        dataset=SimpleNamespace(size="5M", max_seq_len=2048, pack_dataset=True, add_eos_between_samples=True, align_to_max_seq_len=False, drop_last_pack=False),
-        model=SimpleNamespace(model_name="gpt2"),
-        lora=SimpleNamespace(r=8, alpha=16, dropout=0.05, target_modules=None),
-        epochs=1,
-        batch_size=2,
-        learning_rate=5e-5,
-        gradient_accumulation_steps=4,
-        output_dir="./finetuned_model",
-        las_tokenizer_path=None,
-        logger=SimpleNamespace(enabled=False, project="fineweb2-las", entity=None, run_name="debug-run", tags=["fineweb2","las","lora"], notes=None),
-    )
-
-    run_finetune(cfg)
-
