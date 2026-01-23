@@ -32,7 +32,7 @@ def resolve_fineweb2_dataset(size: str) -> str:
 
 # ---------------------- Dataset helper ----------------------
 class TokenizedTextDataset(Dataset):
-    def __init__(self, texts, tokenizer, preprocess_fn, dataset_cfg):
+    def __init__(self, texts, tokenizer, preprocess_fn, dataset_cfg, encode_fn=None):
         max_seq_len = dataset_cfg.get("max_seq_len", 4096)
         align_to_max_seq_len = bool(dataset_cfg.get("align_to_max_seq_len", True))
         drop_last_pack = bool(dataset_cfg.get("drop_last_pack", False))
@@ -46,10 +46,18 @@ class TokenizedTextDataset(Dataset):
 
         self.examples = []
 
+        eos_id = tokenizer.eos_token_id
+        pad_id = tokenizer.pad_token_id or eos_id or 0
         if pack_dataset:
-            eos_id = tokenizer.eos_token_id
-            pad_id = tokenizer.pad_token_id or eos_id or 0
-            tokenized = [tokenizer(preprocess_fn(t), truncation=False, padding=False)["input_ids"] for t in texts]
+            if encode_fn:
+                tokenized = [encode_fn(t) for t in texts]
+            else:
+                tokenized = [
+                    tokenizer(preprocess_fn(t), truncation=False, padding=False)[
+                        "input_ids"
+                    ]
+                    for t in texts
+                ]
 
             packed_blocks = []
             current = []
@@ -81,14 +89,35 @@ class TokenizedTextDataset(Dataset):
                 self.examples.append({"input_ids": block, "attention_mask": attn})
         else:
             for t in texts:
-                enc = tokenizer(
-                    preprocess_fn(t),
-                    truncation=align_to_max_seq_len,
-                    max_length=max_seq_len if align_to_max_seq_len else None,
-                    padding="max_length" if align_to_max_seq_len else False,
-                    return_attention_mask=True,
-                )
-                self.examples.append({"input_ids": enc["input_ids"], "attention_mask": enc.get("attention_mask")})
+                if encode_fn:
+                    ids = encode_fn(t)
+                    if align_to_max_seq_len:
+                        ids = ids[:max_seq_len]
+                        pad_len = max_seq_len - len(ids)
+                        attention_mask = [1] * len(ids) + [0] * pad_len
+                        ids = ids + [pad_id] * pad_len
+                    else:
+                        attention_mask = [1] * len(ids)
+                    self.examples.append(
+                        {
+                            "input_ids": ids,
+                            "attention_mask": attention_mask,
+                        }
+                    )
+                else:
+                    enc = tokenizer(
+                        preprocess_fn(t),
+                        truncation=align_to_max_seq_len,
+                        max_length=max_seq_len if align_to_max_seq_len else None,
+                        padding="max_length" if align_to_max_seq_len else False,
+                        return_attention_mask=True,
+                    )
+                    self.examples.append(
+                        {
+                            "input_ids": enc["input_ids"],
+                            "attention_mask": enc.get("attention_mask"),
+                        }
+                    )
 
     def __len__(self):
         return len(self.examples)
@@ -97,17 +126,32 @@ class TokenizedTextDataset(Dataset):
         return self.examples[idx]
 
 
-def count_training_tokens(texts, tokenizer, preprocess_fn):
-    return sum(tokenizer(preprocess_fn(t), return_tensors="pt")["input_ids"].numel() for t in texts)
+def count_training_tokens(texts, tokenizer, preprocess_fn, encode_fn=None):
+    if encode_fn:
+        return sum(len(encode_fn(t)) for t in texts)
+    return sum(
+        tokenizer(preprocess_fn(t), return_tensors="pt")["input_ids"].numel()
+        for t in texts
+    )
 
 
 def infer_lora_targets(model_type: str):
     if model_type in {"llama", "mistral", "qwen2", "gemma", "olmo", "olmo3"}:
-        return ["q_proj", "k_proj", "v_proj", "o_proj", "gate_proj", "up_proj", "down_proj"]
+        return [
+            "q_proj",
+            "k_proj",
+            "v_proj",
+            "o_proj",
+            "gate_proj",
+            "up_proj",
+            "down_proj",
+        ]
     elif model_type in {"gpt2", "gpt_neo", "gpt_neox", "gptj", "bloom"}:
         return ["c_attn", "c_proj"]
     else:
-        raise ValueError(f"Unsupported model type for LoRA target inference: {model_type}")
+        raise ValueError(
+            f"Unsupported model type for LoRA target inference: {model_type}"
+        )
 
 
 # ---------------------- Main Fine-tune ----------------------
@@ -150,23 +194,41 @@ def run_finetune(cfg):
         )
         shared_las.load(str(base_tokenizer_path), language_paths)
 
-        def las_preprocess(text):
-            # return " ".join(shared_las.best_language_encode(preprocess_fn(text))[1])
-            return "".join(
-                shared_las.best_language_encode(preprocess_fn(text))[1]
-            ).replace("Ġ", " ")
-
-        # model.resize_token_embeddings(len(shared_las.base_tokenizer.get_vocab()))
+        def las_encode_ids(text):
+            _, toks = shared_las.best_language_encode(preprocess_fn(text))
+            ids = tokenizer.convert_tokens_to_ids(toks)
+            if isinstance(ids, int):
+                ids = [ids]
+            return ids
     else:
-        las_preprocess = preprocess_fn
+        las_encode_ids = None
 
     # ---- Load FineWeb2 multilingual splits ----
     HF_DATASET_NAME = resolve_fineweb2_dataset(dataset_size)
     all_texts, lang_texts = [], {}
     for lang in langs:
         logging.info(f"Loading {HF_DATASET_NAME} :: {lang}_Latn")
-        ds = load_dataset(HF_DATASET_NAME, f"{lang}_Latn", split="train", streaming=False)
-        texts = [las_preprocess(x["text"]) for x in ds]
+        ds = load_dataset(
+            HF_DATASET_NAME, f"{lang}_Latn", split="train", streaming=False
+        )
+
+        texts = [x["text"] for x in ds]
+        logging.info(f"Example text [{lang}]: {texts[0][:200]}...")
+        if texts:
+            sample_text = preprocess_fn(texts[0])
+            orig_tokens = tokenizer.tokenize(sample_text)
+            orig_ids = tokenizer.convert_tokens_to_ids(orig_tokens)
+            logging.info(
+                f"Original tokenization [{lang}]: tokens={orig_tokens[:50]} ids={orig_ids[:50]}"
+            )
+            if las_tokenizer_path:
+                las_lang, las_tokens = shared_las.best_language_encode(sample_text)
+                las_ids = tokenizer.convert_tokens_to_ids(las_tokens)
+                if isinstance(las_ids, int):
+                    las_ids = [las_ids]
+                logging.info(
+                    f"LAS tokenization [{lang}] (best_lang={las_lang}): tokens={las_tokens[:50]} ids={las_ids[:50]}"
+                )
         all_texts.extend(texts)
         lang_texts[lang] = texts
 
@@ -182,7 +244,9 @@ def run_finetune(cfg):
 
     # ---- Token accounting ----
     lang_token_counts = {
-        lang: count_training_tokens(lang_texts[lang], tokenizer, preprocess_fn)
+        lang: count_training_tokens(
+            lang_texts[lang], tokenizer, preprocess_fn, encode_fn=las_encode_ids
+        )
         for lang in langs
     }
     total_train_tokens = sum(lang_token_counts.values())
@@ -198,7 +262,21 @@ def run_finetune(cfg):
         )
 
     # ---- Dataset ----
-    dataset = TokenizedTextDataset(all_texts, tokenizer, las_preprocess, cfg.dataset)
+    dataset = TokenizedTextDataset(
+        all_texts,
+        tokenizer,
+        preprocess_fn,
+        cfg.dataset,
+        encode_fn=las_encode_ids,
+    )
+    val_size = max(1, int(len(dataset) * float(cfg.val_fraction)))
+    train_size = len(dataset) - val_size
+    logging.info(f"Train dataset size: {train_size} samples")
+    logging.info(f"Eval dataset size: {val_size} samples")
+    generator = torch.Generator().manual_seed(getattr(cfg, "seed", 42))
+    train_dataset, eval_dataset = torch.utils.data.random_split(
+        dataset, [train_size, val_size], generator=generator
+    )
     data_collator = DataCollatorForLanguageModeling(tokenizer=tokenizer, mlm=False)
 
     # ---- LoRA ----
@@ -221,6 +299,8 @@ def run_finetune(cfg):
         num_train_epochs=cfg.epochs,
         per_device_train_batch_size=cfg.batch_size,
         save_strategy="epoch",
+        eval_strategy="steps",
+        eval_steps=50,
         logging_strategy="steps",
         logging_steps=1,
         report_to=["wandb"] if cfg.logger.enabled else [],
@@ -230,7 +310,8 @@ def run_finetune(cfg):
     )
     trainer = Trainer(
         model=model,
-        train_dataset=dataset,
+        train_dataset=train_dataset,
+        eval_dataset=eval_dataset,
         tokenizer=tokenizer,
         data_collator=data_collator,
         args=training_args,
