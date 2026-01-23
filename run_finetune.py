@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """
 Hydra entry point for LAS experiments with FineWeb2 {5M, 10M} Datasets
-python las_finetune.py \
+python run_finetune.py \
   langs=[yor] \  # or fil,hau,ibo,ind,lit,nya,ron,sna,som,swh,yor,zsm
   dataset.size=10M  # or 5M
 """
@@ -11,7 +11,7 @@ from omegaconf import DictConfig
 import logging
 from pathlib import Path
 
-from las_experiment.las_finetune import run_finetune
+from las_experiment.finetune import run_finetune
 
 
 @hydra.main(config_path="config/finetune", config_name="default", version_base="1.3")

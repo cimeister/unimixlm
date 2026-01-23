@@ -6,10 +6,11 @@ date
 mkdir -p logs
 
 # langs=(ibo fil lit swh zsm ron ind) 
-langs=(ibo fil lit) 
+# langs=(ibo fil lit) 
+langs=(swh zsm ron ind)
 
 for lang in "${langs[@]}"; do
-	CUDA_VISIBLE_DEVICES=0 PYTHONBUFFERED=1 \
+	CUDA_VISIBLE_DEVICES=0 PYTHONUNBUFFERED=1 \
         python3 run_eval.py \
             "model_lang=${lang}" \
             &> "logs/eval_full_${lang}.txt"
