@@ -1,14 +1,14 @@
 defaults:
   - _self_
 
-cuda_visible_devices: "1"
-output_path: ./eval_results
+cuda_visible_devices: "2"
+output_path: ./eval_results/yor-quick-modified
 
 model: hf
 model_args:
   pretrained: "allenai/Olmo-3-1025-7B"
-  peft_original_tok: "/home/USER/unimixlm/finetuned_model/las_finetuned_Olmo-3-1025-7B_['yo']_original-tokenizer"
-  peft_las_tok: "/home/USER/unimixlm/finetuned_model/las_finetuned_Olmo-3-1025-7B_['yo']_las-tokenizer"
+  peft_original_tok: "/home/USER/unimixlm/finetuned_model/ft_yor_10M_modified"
+  peft_las_tok: "/home/USER/unimixlm/finetuned_model/ft-las_yor_10M_modified"
 
 eval_langs:
   - en
@@ -25,6 +25,6 @@ log_samples: false
 custom_tokenizer:
   enabled: true
   las_lang: yor
-  las_tokenizer_main_path: "/home/USER/unimixlm/olmo3_las_tokenizers/${custom_tokenizer.las_lang}_Latn"
+  las_tokenizer_main_path: "/home/USER/unimixlm/olmo3_las_tokenizers_new/${custom_tokenizer.las_lang}_Latn"
   byte_level: true
   lowercase_if_not_byte_level: true

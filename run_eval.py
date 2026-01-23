@@ -79,20 +79,20 @@ class LasTokenizerHFLM(HFLM):
             return text
         text = self._base_preprocess(text)
         _, tokens = self._las.best_language_encode(text)
-        return " ".join(tokens)
+        return tokens
 
-    def _las_preprocess_batch(self, texts: list[str]) -> list[str]:
+    def _las_preprocess_batch(self, texts: list[str]) -> list[list[str]]:
         if self._las is None:
-            return texts
+            return [self._base_preprocess(t) for t in texts]
         preprocessed = [self._base_preprocess(t) for t in texts]
         _, encs = self._las.best_language_encode_batch(preprocessed)
-        rendered = []
+        rendered: list[list[str]] = []
         for text, enc in zip(preprocessed, encs):
             if enc is None:
                 _, tokens = self._las.best_language_encode(text)
-                rendered.append(" ".join(tokens))
+                rendered.append(tokens)
             else:
-                rendered.append(" ".join(enc.tokens))
+                rendered.append(enc.tokens)
         return rendered
 
     def tok_encode(
@@ -102,12 +102,20 @@ class LasTokenizerHFLM(HFLM):
         left_truncate_len: int | None = None,
         **kwargs,
     ) -> list[int]:
-        return super().tok_encode(
-            self._las_preprocess(string),
-            add_special_tokens=add_special_tokens,
-            left_truncate_len=left_truncate_len,
-            **kwargs,
-        )
+        tokens = self._las_preprocess(string)
+        if isinstance(tokens, str):
+            return super().tok_encode(
+                tokens,
+                add_special_tokens=add_special_tokens,
+                left_truncate_len=left_truncate_len,
+                **kwargs,
+            )
+        ids = self.tokenizer.convert_tokens_to_ids(tokens)
+        if isinstance(ids, int):
+            ids = [ids]
+        if left_truncate_len is not None:
+            ids = ids[-left_truncate_len:]
+        return ids
 
     def tok_batch_encode(
         self,
@@ -117,12 +125,33 @@ class LasTokenizerHFLM(HFLM):
         truncation: bool = False,
     ) -> tuple[torch.Tensor, torch.Tensor]:
         processed = self._las_preprocess_batch(strings)
-        return super().tok_batch_encode(
-            processed,
-            padding_side=padding_side,
-            left_truncate_len=left_truncate_len,
-            truncation=truncation,
+        if processed and isinstance(processed[0], str):
+            return super().tok_batch_encode(
+                processed,
+                padding_side=padding_side,
+                left_truncate_len=left_truncate_len,
+                truncation=truncation,
+            )
+        token_ids = []
+        for tokens in processed:
+            ids = self.tokenizer.convert_tokens_to_ids(tokens)
+            if isinstance(ids, int):
+                ids = [ids]
+            if left_truncate_len is not None:
+                ids = ids[-left_truncate_len:]
+            token_ids.append(ids)
+        if truncation and left_truncate_len is None:
+            max_len = getattr(self.tokenizer, "model_max_length", None)
+            if max_len and max_len > 0:
+                token_ids = [ids[-max_len:] for ids in token_ids]
+
+        self.tokenizer.padding_side = padding_side
+        batch = self.tokenizer.pad(
+            {"input_ids": token_ids},
+            padding=True,
+            return_tensors="pt",
         )
+        return batch["input_ids"], batch["attention_mask"]
 
 
 def to_iso639_3(code: str) -> str:
