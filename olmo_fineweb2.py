@@ -107,7 +107,7 @@ def train_language_tokenizer(
 
     # Optional: upload JSON artifacts to the HF Hub.
     if push_to_hf_flag:
-        push_to_hf(lang_output_dir, hf_username, f"olmo-3-fineweb-{lang}")
+        push_to_hf(lang_output_dir, hf_username, f"las-tok-olmo-3-fineweb-{lang}")
 
     logger.info("Finished training and pushing %s", lang)
 
