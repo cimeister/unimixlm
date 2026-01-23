@@ -9,7 +9,7 @@ langs=(ibo fil lit swh zsm ron ind)  # yor
 
 for lang in "${langs[@]}"; do
 	CUDA_VISIBLE_DEVICES=0 \
-        python3 las_finetune.py \
+        python3 run_finetune.py \
             "langs=[${lang}]" \
             "las_tokenizer_path=/home/USER/unimixlm/olmo3_las_tokenizers_new/${lang}_Latn" \
             "dataset.size=10M" \
