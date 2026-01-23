@@ -33,7 +33,7 @@ def main(cfg: DictConfig) -> None:
 
     cfg.output_dir = str(
         base_output_dir
-        / f"{'ft' if not cfg.las_tokenizer_path else 'ft-las'}_{langs}_{dataset_size}_modified"
+        / f"{'ft' if not cfg.las_tokenizer_path else 'ft-las'}_{langs}_{dataset_size}"
     )
     logging.info("Loaded configuration:")
     logging.info(cfg)
