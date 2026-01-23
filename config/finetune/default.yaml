@@ -12,8 +12,9 @@ las_tokenizer_path: null
 
 epochs: 1
 batch_size: 4
-gradient_accumulation_steps: 4
+gradient_accumulation_steps: 8
 learning_rate: 5e-4
+val_fraction: 0.01
 
 dataset:
   size: 10M
