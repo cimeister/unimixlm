@@ -154,22 +154,22 @@ class LasTokenizerHFLM(HFLM):
         return batch["input_ids"], batch["attention_mask"]
 
 
-def to_iso639_3(code: str) -> str:
+def to_iso639_2(code: str) -> str:
     code = code.lower()
-    entry = pycountry.languages.get(alpha_2=code)
-    return entry.alpha_3
+    entry = pycountry.languages.get(alpha_3=code)
+    return entry.alpha_2
 
 
 def build_mmlu_tasks(langs: list[str]) -> list[str]:
-    return [f"global_mmlu_full_{lang}" for lang in langs]
+    return [f"global_mmlu_full_{to_iso639_2(lang)}" for lang in langs]
 
 
 def build_belebele_tasks(langs: list[str]) -> list[str]:
-    return [f"belebele_{to_iso639_3(lang)}_Latn" for lang in langs]
+    return [f"belebele_{lang}_Latn" for lang in langs]
 
 
 def build_piqa_tasks(langs: list[str]) -> list[str]:
-    return [f"global_piqa_completions_{to_iso639_3(lang)}_latn" for lang in langs]
+    return [f"global_piqa_completions_{lang}_latn" for lang in langs]
 
 
 def run_eval_one_model(model, model_args, cfg: DictConfig) -> None:
@@ -188,7 +188,6 @@ def run_eval_one_model(model, model_args, cfg: DictConfig) -> None:
             num_fewshot=5,
             batch_size=str(cfg.batch_size),
             log_samples=bool(cfg.log_samples),
-            # limit=10,  # TODO remove after testing
         )
         if "mmlu" in tasks_list
         else None
@@ -202,7 +201,6 @@ def run_eval_one_model(model, model_args, cfg: DictConfig) -> None:
             num_fewshot=5,
             batch_size=str(cfg.batch_size),
             log_samples=bool(cfg.log_samples),
-            # limit=10,  # TODO remove after testing
         )
         if "belebele" in tasks_list
         else None
@@ -217,7 +215,6 @@ def run_eval_one_model(model, model_args, cfg: DictConfig) -> None:
             num_fewshot=0,
             batch_size=str(cfg.batch_size),
             log_samples=bool(cfg.log_samples),
-            # limit=10,  # TODO remove after testing
         )
         if "piqa" in tasks_list
         else None
@@ -237,9 +234,6 @@ def main(cfg: DictConfig) -> None:
     output_dir = Path(getattr(cfg, "output_path", "./eval_results"))
     output_dir.mkdir(parents=True, exist_ok=True)
     timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
-
-    if cfg.get("cuda_visible_devices"):
-        os.environ.setdefault("CUDA_VISIBLE_DEVICES", str(cfg.cuda_visible_devices))
 
     model = cfg.model
     base_model_args = f"pretrained={cfg.model_args.pretrained}"
