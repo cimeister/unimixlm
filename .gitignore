@@ -24,3 +24,4 @@ eval_results/
 outputs/
 
 lm-evaluation-harness/
+trainer_output/

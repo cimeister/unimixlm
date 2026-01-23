@@ -1,9 +1,11 @@
 #!/usr/bin/env python3
 """
-new_olmo.py
-End-to-end pipeline for language-specific LAS-UnigramLM tokenizers using Olmo-3 as base.
-Each language trains in its own subprocess to avoid daemonic process issues on macOS.
-HF push happens asynchronously immediately after each tokenizer finishes training.
+tokenizer_training.py
+End-to-end, in-process pipeline for training language-specific LAS UnigramLM tokenizers.
+For each language, we first train a StandardUnigramLMTokenizer seeded from a base
+model tokenizer, then train a LanguageSpecificUnigramLMTokenizer (LAS) on the
+language corpus. Languages are processed in parallel via ThreadPoolExecutor, and
+the resulting tokenizer JSON artifacts can optionally be pushed to the HF Hub.
 """
 
 import itertools
@@ -11,18 +13,11 @@ import logging
 from concurrent.futures import ThreadPoolExecutor
 from pathlib import Path
 
-import hydra
 from datasets import load_dataset
-from omegaconf import DictConfig
 from transformers import AutoTokenizer
 
 from code.language_specific_unigramlm import LanguageSpecificUnigramLMTokenizer
 from code.standard_unigramlm import StandardUnigramLMTokenizer
-
-
-# ---------------------- Logging ----------------------
-logging.basicConfig(level=logging.INFO)
-logger = logging.getLogger(__name__)
 
 
 def push_to_hf(output_dir: Path, hf_username: str, repo_name: str) -> None:
@@ -40,7 +35,7 @@ def push_to_hf(output_dir: Path, hf_username: str, repo_name: str) -> None:
         allow_patterns=["*.json"],  # save only .json tokenizer files.
         ignore_patterns=[".git/*"],
     )
-    logger.info("Pushed to HF repo: https://huggingface.co/%s", repo_id)
+    logging.info("Pushed to HF repo: https://huggingface.co/%s", repo_id)
 
 
 def train_language_tokenizer(
@@ -109,7 +104,7 @@ def train_language_tokenizer(
     if push_to_hf_flag:
         push_to_hf(lang_output_dir, hf_username, f"las-tok-olmo-3-fineweb-{lang}")
 
-    logger.info("Finished training and pushing %s", lang)
+    logging.info("Finished training and pushing %s", lang)
 
 
 # ---------------------- FineWeb2-10K streaming / reading ----------------------
@@ -127,13 +122,13 @@ def prepare_language_corpora(langs, lines_per_lang=10000, output_dir="./data/par
     for lang in langs:
         out_file = output_dir / f"{lang}.txt"
 
-        logger.info(f"Streaming {lang} from FineWeb2-10K...")
+        logging.info(f"Streaming {lang} from FineWeb2-10K...")
         try:
             ds_stream = load_dataset(
                 "MultilingualUnigramLM/FineWeb2-10K", split=lang, streaming=True
             )
         except Exception as e:
-            logger.warning(f"Skipping {lang}: {e}")
+            logging.warning(f"Skipping {lang}: {e}")
             continue
 
         lines = []
@@ -145,14 +140,14 @@ def prepare_language_corpora(langs, lines_per_lang=10000, output_dir="./data/par
         with open(out_file, "w", encoding="utf-8") as f:
             for line in lines:
                 f.write(line + "\n")
-        logger.info(f"Wrote {len(lines)} lines for {lang} to {out_file}")
+        logging.info(f"Wrote {len(lines)} lines for {lang} to {out_file}")
         corpus_info[lang] = str(out_file)
 
     return corpus_info
 
 
 # ---------------------- Main pipeline ----------------------
-def main(
+def run_tokenizer_training(
     langs,
     output_dir,
     lines_per_lang=10000,
@@ -166,7 +161,7 @@ def main(
     output_dir.mkdir(parents=True, exist_ok=True)
 
     # 1) Load Olmo-3 tokenizer as the base vocabulary seed.
-    logger.info("Loading Olmo-3 tokenizer as base...")
+    logging.info("Loading Olmo-3 tokenizer as base...")
     model_tokenizer = AutoTokenizer.from_pretrained(model_name, trust_remote_code=True)
     seed_tokenizer_dir = output_dir / "model_tokenizer"
     seed_tokenizer_dir.mkdir(parents=True, exist_ok=True)
@@ -214,28 +209,4 @@ def main(
     for future in futures:
         future.result()
 
-    logger.info("All language-specific tokenizers trained and pushed asynchronously!")
-
-
-# ---------------------- Entry point ----------------------
-@hydra.main(
-    config_path="config/tokenizer_training",
-    config_name="default",
-    version_base="1.3",
-)
-def hydra_main(cfg: DictConfig) -> None:
-    langs = list(cfg.languages.langs)
-    main(
-        langs,
-        output_dir=cfg.data.output_dir,
-        lines_per_lang=cfg.data.lines_per_lang,
-        hf_username=cfg.hf.username,
-        model_name=cfg.model.model_name,
-        max_workers=cfg.execution.max_workers,
-        training_cfg=cfg.training,
-        push_to_hf=cfg.hf.push,
-    )
-
-
-if __name__ == "__main__":
-    hydra_main()
+    logging.info("All language-specific tokenizers trained and pushed asynchronously!")
