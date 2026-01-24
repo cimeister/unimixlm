@@ -2,14 +2,14 @@
 """
 tokenizer_training.py
 End-to-end, in-process pipeline for training language-specific LAS UnigramLM tokenizers.
-For each language, we first train a StandardUnigramLMTokenizer seeded from a base
-model tokenizer, then train a LanguageSpecificUnigramLMTokenizer (LAS) on the
-language corpus. Languages are processed in parallel via ThreadPoolExecutor, and
+For each language, train a LanguageSpecificUnigramLMTokenizer (LAS) seeded from the model tokenizer
+on the language corpus. Languages are processed in parallel via ThreadPoolExecutor, and
 the resulting tokenizer JSON artifacts can optionally be pushed to the HF Hub.
 """
 
 import itertools
 import logging
+import shutil
 from concurrent.futures import ThreadPoolExecutor
 from pathlib import Path
 
@@ -17,7 +17,6 @@ from datasets import load_dataset
 from transformers import AutoTokenizer
 
 from code.language_specific_unigramlm import LanguageSpecificUnigramLMTokenizer
-from code.standard_unigramlm import StandardUnigramLMTokenizer
 
 
 def push_to_hf(output_dir: Path, hf_username: str, repo_name: str) -> None:
@@ -168,7 +167,7 @@ def run_tokenizer_training(
 
         # save the seed tokenizer under the name of base tokenizer for consistency
         base_tokenizer_path = lang_output_dir / "base.tokenizer.json"
-        model_tokenizer.save_pretrained(base_tokenizer_path)
+        shutil.copy2(seed_tokenizer_path, base_tokenizer_path)
 
         futures.append(
             push_executor.submit(
