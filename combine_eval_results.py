@@ -30,6 +30,35 @@ RUN_PATTERNS = {
 }
 
 MMLU_GENERAL_SUFFIXES = {"stem", "humanities", "social_sciences", "other"}
+LANG_ALIAS_TO_THREE = {
+    "en": "eng",
+    "eng": "eng",
+    "english": "eng",
+    "yo": "yor",
+    "yor": "yor",
+    "yoruba": "yor",
+    "ig": "ibo",
+    "ibo": "ibo",
+    "fil": "fil",
+    "sw": "swh",
+    "swh": "swh",
+    "ms": "zsm",
+    "zsm": "zsm",
+    "ro": "ron",
+    "ron": "ron",
+    "li": "lit",
+    "lit": "lit",
+}
+THREE_TO_MMLU = {
+    "eng": "en",
+    "yor": "yo",
+    "ibo": "ig",
+    "fil": "fil",
+    "swh": "sw",
+    "zsm": "ms",
+    "ron": "ro",
+    "lit": "li",
+}
 
 
 @dataclass(frozen=True)
@@ -65,21 +94,23 @@ def _extract_metric(entry: dict) -> Optional[Metric]:
     return Metric(acc=float(acc), stderr=float(stderr))
 
 
-def _language_key(lang: str) -> Dict[str, str]:
-    lang = lang.lower()
-    if lang in {"en", "eng", "english"}:
-        return {
-            "mmlu": "global_mmlu_full_en",
-            "piqa": "global_piqa_completions_eng_latn",
-            "belebele": "belebele_eng_Latn",
-        }
-    if lang in {"yo", "yor", "yoruba"}:
-        return {
-            "mmlu": "global_mmlu_full_yo",
-            "piqa": "global_piqa_completions_yor_latn",
-            "belebele": "belebele_yor_Latn",
-        }
+def _normalize_lang(lang: str) -> str:
+    lang = lang.strip().lower()
+    if lang in LANG_ALIAS_TO_THREE:
+        return LANG_ALIAS_TO_THREE[lang]
+    if re.fullmatch(r"[a-z]{2,3}", lang):
+        return lang
     raise ValueError(f"Unsupported language: {lang}")
+
+
+def _language_key(lang: str) -> Dict[str, str]:
+    three = _normalize_lang(lang)
+    mmlu_code = THREE_TO_MMLU.get(three, three)
+    return {
+        "mmlu": f"global_mmlu_full_{mmlu_code}",
+        "piqa": f"global_piqa_completions_{three}_latn",
+        "belebele": f"belebele_{three}_Latn",
+    }
 
 
 def _parse_model_name(model_args: Optional[str]) -> str:
@@ -292,12 +323,6 @@ def main() -> int:
         default=None,
         help="Directory to save plots (defaults to results dir).",
     )
-    parser.add_argument(
-        "--languages",
-        nargs="+",
-        default=["en", "yo"],
-        help="Languages to include (e.g., en yo).",
-    )
     args = parser.parse_args()
 
     results_dir: Path = args.results_dir
@@ -323,7 +348,8 @@ def main() -> int:
 
     combined_results: Dict[str, dict] = {}
 
-    for lang in args.languages:
+    target_lang = str(results_dir).split("/")[-1]
+    for lang in ["en", target_lang]:
         per_run_metrics = {
             run: _extract_language_metrics(data, lang) for run, data in loaded.items()
         }
