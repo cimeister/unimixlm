@@ -43,58 +43,37 @@ def train_language_tokenizer(
     lang: str,
     corpus_file: str,
     seed_tokenizer_path: str,
-    output_dir: str,
     hf_username: str,
     vocab_size: int,
     byte_level: bool = True,
-    em_mode: str = "soft",
+    lang_output_dir: Path,
     reestimation_em_mode: str = "soft",
-    use_sp_seed_vocab: bool = False,
     load_base_if_exists: bool = True,
     load_tokenizers_if_exists: bool = False,
     push_to_hf_flag: bool = True,
+    unk_token: str = None,
 ) -> None:
     """
-    Train a two-stage tokenizer for a single language:
-    1) A base Unigram tokenizer seeded from the base model's tokenizer vocab.
-    2) A language-specific LAS Unigram tokenizer re-estimated from the base.
+    Train a tokenizer for a single language:
+    A language-specific LAS Unigram tokenizer re-estimated from the base.
 
     The resulting artifacts are written under `output_dir` and can optionally
     be pushed to a Hugging Face Hub repo.
     """
-    # Ensure the output directory exists for this language.
-    lang_output_dir = Path(output_dir)
-    lang_output_dir.mkdir(parents=True, exist_ok=True)
 
     # Path where the base Unigram tokenizer JSON will be stored.
-    base_tokenizer_path = lang_output_dir / "base.tokenizer.json"
 
-    # Stage 1: Train the base Unigram tokenizer, seeded from the model vocab.
-    # - `initial_vocab_tokens` points at the base model's tokenizer.json.
-    # - `use_sp_seed_vocab=False` means we do not override the seed vocab.
-    base_tok = StandardUnigramLMTokenizer(
-        vocab_size=vocab_size,
-        byte_level=byte_level,
-        em_mode=em_mode,
-        initial_vocab_tokens=str(Path(seed_tokenizer_path)),
-        use_sp_seed_vocab=use_sp_seed_vocab,
-    )
-    base_tok.train(
-        [corpus_file],
-        output_path=str(base_tokenizer_path),
-        load_if_exists=False,
-    )
-
-    # Stage 2: Train the language-specific LAS tokenizer using the base.
+    # Train the language-specific LAS tokenizer using the base.
     # This re-estimates token probabilities based on the single-language corpus.
     las_tokenizer = LanguageSpecificUnigramLMTokenizer(
         vocab_size=vocab_size,
         byte_level=byte_level,
         reestimation_em_mode=reestimation_em_mode,
+        unk_token=unk_token,
     )
     las_tokenizer.train(
         corpus_info={lang: corpus_file},
-        base_tokenizer_path=str(base_tokenizer_path),
+        base_tokenizer_path=str(seed_tokenizer_path),
         output_dir=str(lang_output_dir),
         load_base_if_exists=load_base_if_exists,
         load_tokenizers_if_exists=load_tokenizers_if_exists,
@@ -182,26 +161,34 @@ def run_tokenizer_training(
 
     for lang, corpus_file in corpus_info.items():
         # Dispatch per-language training using the in-process function.
+
+        # Ensure the output directory exists for this language.
+        lang_output_dir = Path(output_dir) / lang
+        lang_output_dir.mkdir(parents=True, exist_ok=True)
+
+        # save the seed tokenizer under the name of base tokenizer for consistency
+        base_tokenizer_path = lang_output_dir / "base.tokenizer.json"
+        model_tokenizer.save_pretrained(base_tokenizer_path)
+
         futures.append(
             push_executor.submit(
                 train_language_tokenizer,
                 lang=lang,
                 corpus_file=corpus_file,
                 seed_tokenizer_path=str(seed_tokenizer_path),
-                output_dir=str(output_dir / lang),
+                lang_output_dir=lang_output_dir,
                 hf_username=hf_username,
                 vocab_size=len(model_tokenizer),
                 byte_level=bool(training_cfg.get("byte_level", True)),
-                em_mode=str(training_cfg.get("em_mode", "soft")),
                 reestimation_em_mode=str(
                     training_cfg.get("reestimation_em_mode", "soft")
                 ),
-                use_sp_seed_vocab=bool(training_cfg.get("use_sp_seed_vocab", False)),
                 load_base_if_exists=bool(training_cfg.get("load_base_if_exists", True)),
                 load_tokenizers_if_exists=bool(
                     training_cfg.get("load_tokenizers_if_exists", False)
                 ),
                 push_to_hf_flag=bool(push_to_hf),
+                unk_token="<|endoftext|>",
             )
         )
 
@@ -210,4 +197,3 @@ def run_tokenizer_training(
         future.result()
 
     logging.info("All language-specific tokenizers trained and pushed asynchronously!")
-
