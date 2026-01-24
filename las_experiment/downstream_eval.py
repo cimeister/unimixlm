@@ -160,7 +160,8 @@ def to_iso639_2(code: str) -> str:
             return "sw"
         elif code == "zsm":
             return "ms"
-
+        elif code == "fil":
+            return "fil"  # Filipino uses 'fil' as alpha_2 code in global MMLU
         else:
             raise ValueError(f"Cannot convert language code: {code}")
     return entry.alpha_2
