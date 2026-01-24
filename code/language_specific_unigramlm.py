@@ -213,7 +213,13 @@ class LanguageSpecificUnigramLMTokenizer(StandardUnigramLMTokenizer):
                     if p_hf not in vocab_dict:
                         additional_tokens.add(p_hf)
                     if p_hf in set(SPECIAL_TOKENS.values()) | {self.unk_token}:
-                        logp = float(vocab_dict[p_hf])
+                        try:
+                            logp = float(vocab_dict[p_hf])
+                        except KeyError:
+                            logging.warning(
+                                f"Special token {p_hf} not found in vocab_dict; skipping"
+                            )
+                            continue
                     else:
                         logp = float(sp.get_score(i))  # SP log-score
                     token_logps[p_hf] = logp
@@ -339,6 +345,7 @@ class LanguageSpecificUnigramLMTokenizer(StandardUnigramLMTokenizer):
             # print("TVD: ", x)
 
             # ----------  HF tokenizer from these probabilities  ----------
+            logger.info(f"Internal unk token is {self.unk_token}")
             tok = _build_unigramlm_hf_tokenizer_with_new_lprobs(self.base_tokenizer, token_log_probs, self.unk_token)
             tok.save(str(tk_path))
             
