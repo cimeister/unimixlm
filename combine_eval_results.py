@@ -58,6 +58,7 @@ THREE_TO_MMLU = {
     "zsm": "ms",
     "ron": "ro",
     "lit": "li",
+    "ind": "id",
 }
 
 
@@ -106,6 +107,8 @@ def _normalize_lang(lang: str) -> str:
 def _language_key(lang: str) -> Dict[str, str]:
     three = _normalize_lang(lang)
     mmlu_code = THREE_TO_MMLU.get(three, three)
+    if three == "fil":
+        three = "tgl"
     return {
         "mmlu": f"global_mmlu_full_{mmlu_code}",
         "piqa": f"global_piqa_completions_{three}_latn",
