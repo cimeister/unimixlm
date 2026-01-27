@@ -1,0 +1,220 @@
+{
+  "source_files": {
+    "base": "eval_results_base_20260124_052127.json",
+    "ft": "eval_results_ft_20260124_052127.json",
+    "ft_las": "eval_results_ft_las_20260127_005712.json"
+  },
+  "models": {
+    "base": "allenai/Olmo-3-1025-7B",
+    "ft": "allenai/Olmo-3-1025-7B + peft:ft_ind_10M",
+    "ft_las": "unknown"
+  },
+  "results": {
+    "en": {
+      "benchmarks": [
+        "mmlu_overall",
+        "mmlu_humanities",
+        "mmlu_other",
+        "mmlu_social_sciences",
+        "mmlu_stem",
+        "piqa",
+        "belebele"
+      ],
+      "runs": {
+        "base": {
+          "mmlu_overall": {
+            "acc": 0.6409343398376299,
+            "stderr": 0.0038652536029911556
+          },
+          "mmlu_humanities": {
+            "acc": 0.5757704569606801,
+            "stderr": 0.0068516162294026215
+          },
+          "mmlu_other": {
+            "acc": 0.6890891535243,
+            "stderr": 0.00802912488909731
+          },
+          "mmlu_social_sciences": {
+            "acc": 0.731556711082223,
+            "stderr": 0.007831091920159367
+          },
+          "mmlu_stem": {
+            "acc": 0.6022835394862036,
+            "stderr": 0.008413499095082197
+          },
+          "piqa": {
+            "acc": 0.71,
+            "stderr": 0.045604802157206845
+          },
+          "belebele": {
+            "acc": 0.8977777777777778,
+            "stderr": 0.01010362546337126
+          }
+        },
+        "ft": {
+          "mmlu_overall": {
+            "acc": 0.6420737786640079,
+            "stderr": 0.003865310778852552
+          },
+          "mmlu_humanities": {
+            "acc": 0.5759829968119022,
+            "stderr": 0.0068589054554769125
+          },
+          "mmlu_other": {
+            "acc": 0.6948825233344061,
+            "stderr": 0.00799281662416079
+          },
+          "mmlu_social_sciences": {
+            "acc": 0.7325316867078323,
+            "stderr": 0.007803046974652465
+          },
+          "mmlu_stem": {
+            "acc": 0.6003805899143673,
+            "stderr": 0.008459129737991235
+          },
+          "piqa": {
+            "acc": 0.75,
+            "stderr": 0.04351941398892446
+          },
+          "belebele": {
+            "acc": 0.9033333333333333,
+            "stderr": 0.009855588084303063
+          }
+        },
+        "ft_las": {
+          "mmlu_overall": {
+            "acc": 0.5902293120638086,
+            "stderr": 0.003995398582402187
+          },
+          "mmlu_humanities": {
+            "acc": 0.5260361317747078,
+            "stderr": 0.0070190114708952095
+          },
+          "mmlu_other": {
+            "acc": 0.6205342774380431,
+            "stderr": 0.008455376878135164
+          },
+          "mmlu_social_sciences": {
+            "acc": 0.6919077023074424,
+            "stderr": 0.008127222947169489
+          },
+          "mmlu_stem": {
+            "acc": 0.556929908024104,
+            "stderr": 0.008636236741285882
+          },
+          "piqa": {
+            "acc": 0.67,
+            "stderr": 0.04725815626252606
+          },
+          "belebele": {
+            "acc": 0.8866666666666667,
+            "stderr": 0.010572536088492608
+          }
+        }
+      }
+    },
+    "ind": {
+      "benchmarks": [
+        "mmlu_overall",
+        "mmlu_humanities",
+        "mmlu_other",
+        "mmlu_social_sciences",
+        "mmlu_stem",
+        "piqa",
+        "belebele"
+      ],
+      "runs": {
+        "base": {
+          "mmlu_overall": {
+            "acc": 0.46339552770260645,
+            "stderr": 0.0041106380327219465
+          },
+          "mmlu_humanities": {
+            "acc": 0.41381509032943675,
+            "stderr": 0.006924355894817942
+          },
+          "mmlu_other": {
+            "acc": 0.5030576118442227,
+            "stderr": 0.008882154600966061
+          },
+          "mmlu_social_sciences": {
+            "acc": 0.509587260318492,
+            "stderr": 0.008922041543284593
+          },
+          "mmlu_stem": {
+            "acc": 0.45321915635902316,
+            "stderr": 0.00871584067225879
+          },
+          "piqa": {
+            "acc": 0.37,
+            "stderr": 0.04852365870939099
+          },
+          "belebele": {
+            "acc": 0.7366666666666667,
+            "stderr": 0.014689553047342525
+          }
+        },
+        "ft": {
+          "mmlu_overall": {
+            "acc": 0.4685230024213075,
+            "stderr": 0.004125050015282948
+          },
+          "mmlu_humanities": {
+            "acc": 0.4212539851222104,
+            "stderr": 0.0069772555650964435
+          },
+          "mmlu_other": {
+            "acc": 0.5111039588027035,
+            "stderr": 0.008876988077416624
+          },
+          "mmlu_social_sciences": {
+            "acc": 0.5089372765680859,
+            "stderr": 0.008944065528819952
+          },
+          "mmlu_stem": {
+            "acc": 0.4576593720266413,
+            "stderr": 0.008740451594769789
+          },
+          "piqa": {
+            "acc": 0.44,
+            "stderr": 0.04988876515698589
+          },
+          "belebele": {
+            "acc": 0.7377777777777778,
+            "stderr": 0.01466958020221789
+          }
+        },
+        "ft_las": {
+          "mmlu_overall": {
+            "acc": 0.4215211508332146,
+            "stderr": 0.00409430922170812
+          },
+          "mmlu_humanities": {
+            "acc": 0.3638682252922423,
+            "stderr": 0.0068267866912603715
+          },
+          "mmlu_other": {
+            "acc": 0.46636626971355005,
+            "stderr": 0.008897136029106745
+          },
+          "mmlu_social_sciences": {
+            "acc": 0.4718882027949301,
+            "stderr": 0.008939993854906719
+          },
+          "mmlu_stem": {
+            "acc": 0.41420869013637807,
+            "stderr": 0.008702618206139748
+          },
+          "piqa": {
+            "acc": 0.46,
+            "stderr": 0.05009082659620333
+          },
+          "belebele": {
+            "acc": 0.6711111111111111,
+            "stderr": 0.01566902485777856
+          }
+        }
+      }
+    }
+  }
+}
