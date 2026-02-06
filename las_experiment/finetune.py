@@ -32,7 +32,7 @@ def resolve_fineweb2_dataset(size: str) -> str:
 
 # ---------------------- Dataset helper ----------------------
 class TokenizedTextDataset(Dataset):
-    def __init__(self, texts, tokenizer, preprocess_fn, dataset_cfg, encode_fn=None):
+    def __init__(self, texts, tokenizer, dataset_cfg, encode_fn=None):
         max_seq_len = dataset_cfg.get("max_seq_len", 4096)
         align_to_max_seq_len = bool(dataset_cfg.get("align_to_max_seq_len", True))
         drop_last_pack = bool(dataset_cfg.get("drop_last_pack", False))
@@ -53,9 +53,7 @@ class TokenizedTextDataset(Dataset):
                 tokenized = [encode_fn(t) for t in texts]
             else:
                 tokenized = [
-                    tokenizer(preprocess_fn(t), truncation=False, padding=False)[
-                        "input_ids"
-                    ]
+                    tokenizer(t, truncation=False, padding=False)["input_ids"]
                     for t in texts
                 ]
 
@@ -106,7 +104,7 @@ class TokenizedTextDataset(Dataset):
                     )
                 else:
                     enc = tokenizer(
-                        preprocess_fn(t),
+                        t,
                         truncation=align_to_max_seq_len,
                         max_length=max_seq_len if align_to_max_seq_len else None,
                         padding="max_length" if align_to_max_seq_len else False,
@@ -126,13 +124,10 @@ class TokenizedTextDataset(Dataset):
         return self.examples[idx]
 
 
-def count_training_tokens(texts, tokenizer, preprocess_fn, encode_fn=None):
+def count_training_tokens(texts, tokenizer, encode_fn=None):
     if encode_fn:
         return sum(len(encode_fn(t)) for t in texts)
-    return sum(
-        tokenizer(preprocess_fn(t), return_tensors="pt")["input_ids"].numel()
-        for t in texts
-    )
+    return sum(tokenizer(t, return_tensors="pt")["input_ids"].numel() for t in texts)
 
 
 def infer_lora_targets(model_type: str):
@@ -179,9 +174,6 @@ def run_finetune(cfg):
         dtype=torch.bfloat16 if torch.cuda.is_available() else torch.float32,
     )
 
-    def preprocess_fn(x):
-        return x if getattr(tokenizer, "byte_level", False) else x.strip().lower()
-
     # ---- LAS tokenizer integration ----
     if las_tokenizer_path:
         base_tokenizer_path = las_tokenizer_path / "base.tokenizer.json"
@@ -189,13 +181,11 @@ def run_finetune(cfg):
             lang: str(las_tokenizer_path / f"langspec_soft_{lang}_Latn.tokenizer.json")
             for lang in langs
         }
-        shared_las = LanguageSpecificUnigramLMTokenizer(
-            vocab_size=len(tokenizer), byte_level=True
-        )
+        shared_las = LanguageSpecificUnigramLMTokenizer(vocab_size=len(tokenizer))
         shared_las.load(str(base_tokenizer_path), language_paths)
 
         def las_encode_ids(text):
-            _, toks = shared_las.best_language_encode(preprocess_fn(text))
+            _, toks = shared_las.best_language_encode(text)
             ids = tokenizer.convert_tokens_to_ids(toks)
             if isinstance(ids, int):
                 ids = [ids]
@@ -215,7 +205,7 @@ def run_finetune(cfg):
         texts = [x["text"] for x in ds]
         logging.info(f"Example text [{lang}]: {texts[0][:200]}...")
         if texts:
-            sample_text = preprocess_fn(texts[0])
+            sample_text = texts[0]
             orig_tokens = tokenizer.tokenize(sample_text)
             orig_ids = tokenizer.convert_tokens_to_ids(orig_tokens)
             logging.info(
@@ -245,7 +235,7 @@ def run_finetune(cfg):
     # ---- Token accounting ----
     lang_token_counts = {
         lang: count_training_tokens(
-            lang_texts[lang], tokenizer, preprocess_fn, encode_fn=las_encode_ids
+            lang_texts[lang], tokenizer, encode_fn=las_encode_ids
         )
         for lang in langs
     }
@@ -265,7 +255,6 @@ def run_finetune(cfg):
     dataset = TokenizedTextDataset(
         all_texts,
         tokenizer,
-        preprocess_fn,
         cfg.dataset,
         encode_fn=las_encode_ids,
     )
