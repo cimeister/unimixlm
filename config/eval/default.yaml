@@ -16,16 +16,19 @@ eval_langs:
   - ${model_lang}
 
 tasks:
-  - mmlu
+  # - mmlu
   - belebele
   - piqa
 
 batch_size: auto
 log_samples: false
 
+eval_base:
+  enabled: true
+eval_ft:
+  enabled: true
+
 custom_tokenizer:
   enabled: true
   las_lang: ${model_lang}
-  las_tokenizer_main_path: "/home/as3623/unimixlm/olmo3_las_tokenizers_new/${model_lang}_Latn"
-  byte_level: true
-  lowercase_if_not_byte_level: true
+  las_tokenizer_main_path: "/home/as3623/unimixlm/olmo3_las_tokenizers_correct_base/${model_lang}_Latn"

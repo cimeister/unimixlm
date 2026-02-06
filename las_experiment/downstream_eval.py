@@ -26,14 +26,10 @@ class LasTokenizerHFLM(HFLM):
         pretrained: str,
         las_tokenizer_main_path: str,
         las_lang: str,
-        las_byte_level: bool = True,
-        las_lowercase_if_not_byte_level: bool = True,
         **kwargs,
     ) -> None:
         self._las_tokenizer_path = Path(las_tokenizer_main_path)
         self._las_lang = las_lang
-        self._las_byte_level = las_byte_level
-        self._las_lowercase_if_not_byte_level = las_lowercase_if_not_byte_level
         self._las = None
 
         super().__init__(pretrained=pretrained, **kwargs)
@@ -60,32 +56,22 @@ class LasTokenizerHFLM(HFLM):
 
         las = LanguageSpecificUnigramLMTokenizer(
             vocab_size=len(self.tokenizer),
-            byte_level=self._las_byte_level,
         )
         las.load(str(base_path), {self._las_lang: str(language_path)})
         self._las = las
 
-    def _base_preprocess(self, text: str) -> str:
-        if self._las_lowercase_if_not_byte_level and not getattr(
-            self.tokenizer, "byte_level", False
-        ):
-            return text.strip().lower()
-        return text
-
     def _las_preprocess(self, text: str) -> str:
         if self._las is None:
             return text
-        text = self._base_preprocess(text)
         _, tokens = self._las.best_language_encode(text)
         return tokens
 
     def _las_preprocess_batch(self, texts: list[str]) -> list[list[str]]:
         if self._las is None:
-            return [self._base_preprocess(t) for t in texts]
-        preprocessed = [self._base_preprocess(t) for t in texts]
-        _, encs = self._las.best_language_encode_batch(preprocessed)
+            return texts
+        _, encs = self._las.best_language_encode_batch(texts)
         rendered: list[list[str]] = []
-        for text, enc in zip(preprocessed, encs):
+        for text, enc in zip(texts, encs):
             if enc is None:
                 _, tokens = self._las.best_language_encode(text)
                 rendered.append(tokens)
@@ -172,6 +158,9 @@ def build_mmlu_tasks(langs: list[str]) -> list[str]:
 
 
 def build_belebele_tasks(langs: list[str]) -> list[str]:
+    if "fil" in langs:
+        langs.remove("fil")
+        langs.append("tgl")  # belebele uses 'tgl' for Filipino
     return [f"belebele_{lang}_Latn" for lang in langs]
 
 
@@ -236,38 +225,40 @@ def run_eval(cfg: DictConfig) -> None:
     timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
 
     model = cfg.model
-    base_model_args = f"pretrained={cfg.model_args.pretrained}"
+    if bool(cfg.eval_base.enabled):
+        base_model_args = f"pretrained={cfg.model_args.pretrained}"
 
-    logging.info(f"Evaluating base model: {model} with args: {base_model_args}")
-    r1, r2, r3 = run_eval_one_model(model, base_model_args, cfg)
+        logging.info(f"Evaluating base model: {model} with args: {base_model_args}")
+        r1, r2, r3 = run_eval_one_model(model, base_model_args, cfg)
 
-    output_path = output_dir / f"eval_results_base_{timestamp}.json"
-    with open(output_path, "w") as f:
-        json.dump(
-            {"mmlu": r1, "belebele": r2, "piqa": r3},
-            f,
-            indent=2,
-            default=handle_non_serializable,
+        output_path = output_dir / f"eval_results_base_{timestamp}.json"
+        with open(output_path, "w") as f:
+            json.dump(
+                {"mmlu": r1, "belebele": r2, "piqa": r3},
+                f,
+                indent=2,
+                default=handle_non_serializable,
+            )
+
+    if bool(cfg.eval_ft.enabled):
+        finetuned_model_args = f"pretrained={cfg.model_args.pretrained},peft={cfg.model_args.peft_original_tok}"
+        logging.info(
+            f"Evaluating finetuned model with original tokenizer: {model} with args: {finetuned_model_args}"
         )
+        r1, r2, r3 = run_eval_one_model(model, finetuned_model_args, cfg=cfg)
 
-    finetuned_model_args = f"pretrained={cfg.model_args.pretrained},peft={cfg.model_args.peft_original_tok}"
-    logging.info(
-        f"Evaluating finetuned model with original tokenizer: {model} with args: {finetuned_model_args}"
-    )
-    r1, r2, r3 = run_eval_one_model(model, finetuned_model_args, cfg=cfg)
-
-    output_path = output_dir / f"eval_results_ft_{timestamp}.json"
-    with open(output_path, "w") as f:
-        json.dump(
-            {
-                "mmlu": r1,
-                "belebele": r2,
-                "piqa": r3,
-            },
-            f,
-            indent=2,
-            default=handle_non_serializable,
-        )
+        output_path = output_dir / f"eval_results_ft_{timestamp}.json"
+        with open(output_path, "w") as f:
+            json.dump(
+                {
+                    "mmlu": r1,
+                    "belebele": r2,
+                    "piqa": r3,
+                },
+                f,
+                indent=2,
+                default=handle_non_serializable,
+            )
 
     finetuned_model_las_args = (
         f"pretrained={cfg.model_args.pretrained},peft={cfg.model_args.peft_las_tok}"
@@ -281,10 +272,6 @@ def run_eval(cfg: DictConfig) -> None:
                     cfg.custom_tokenizer.las_tokenizer_main_path
                 ),
                 "las_lang": str(cfg.custom_tokenizer.las_lang),
-                "las_byte_level": bool(cfg.custom_tokenizer.byte_level),
-                "las_lowercase_if_not_byte_level": bool(
-                    cfg.custom_tokenizer.lowercase_if_not_byte_level
-                ),
             },
         )
         model = lm
