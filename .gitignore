@@ -19,7 +19,7 @@ wandb/
 
 logs/
 finetuned_model/
-olmo3_las_tokenizers_new/
+olmo3_las_tokenizers_correct_base/
 eval_results/
 outputs/
 
