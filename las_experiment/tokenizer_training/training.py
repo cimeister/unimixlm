@@ -164,6 +164,9 @@ def train_language_specific_tokenizer(
             logging.error(
                 f"Files in {temp_output_dir}: {list(temp_output_dir.glob('*'))}"
             )
+        raise FileNotFoundError(
+            f"Language-specific tokenizer training failed for {lang}, file not found: {temp_tokenizer_path}"
+        )
 
     # Clean up temporary directory
     shutil.rmtree(temp_output_dir, ignore_errors=True)
