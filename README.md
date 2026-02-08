@@ -50,9 +50,9 @@ Config file: `config/tokenizer_training/default.yaml`
 ### 4. Output Structure
 ```
 {output_dir}/las-tokenizers-{model}-{langs}/
-├── base_tokenizer.json              # Shared vocabulary
-├── langspec_eng.json                  # English-specific probabilities
-├── langspec_fra.json                  # French-specific probabilities
+├── base_tokenizer.json                # Shared vocabulary
+├── langspec_yor_Latn.json             # Yoruba-specific probabilities
+├── langspec_fil_Latn.json             # Filipino-specific probabilities
 └── ...
 ```
 
