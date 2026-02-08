@@ -23,26 +23,35 @@ def _get_tokens_from_tokenizer_data(tokenizer_data: dict) -> list[str]:
     Handles both Unigram (list) and BPE (dict) vocab formats.
     For dict format, tokens are sorted by their ID values to preserve correct order.
 
+    This function reuses the format detection and extraction logic from
+    _load_vocab_from_hf_tokenizer in code.tokenizer_formatting_utils, but
+    operates on already-loaded tokenizer data and adds ID-based sorting for
+    BPE tokenizers (using the pattern from _get_hf_unigram_tokenizer_vocab).
+
     Args:
         tokenizer_data: Tokenizer JSON as dictionary
 
     Returns:
         List of tokens in order
     """
+    # Format detection and extraction logic from _load_vocab_from_hf_tokenizer
     vocab = tokenizer_data.get("model", {}).get("vocab")
     if vocab is None:
         raise ValueError("Tokenizer data missing 'model.vocab' field")
 
     if isinstance(vocab, list):
         # Unigram format: [["token", score], ...]
-        return [token for token, _score in vocab]
+        tokens = [token for token, _score in vocab]
     elif isinstance(vocab, dict):
         # BPE format: {"token": id, ...}
         # Sort by ID value to preserve token order
+        # (sorting pattern from _get_hf_unigram_tokenizer_vocab)
         sorted_items = sorted(vocab.items(), key=lambda x: x[1])
-        return [token for token, _id in sorted_items]
+        tokens = [token for token, _id in sorted_items]
     else:
         raise ValueError(f"Unsupported vocab format: {type(vocab)}")
+
+    return tokens
 
 
 def _validate_pretokenizer(
