@@ -11,7 +11,7 @@ import hydra
 from omegaconf import DictConfig
 import logging
 
-from las_experiment.tokenizer_training import run_tokenizer_training
+from las_experiment.tokenizer_training.training import run_tokenizer_training
 
 
 # ---------------------- Entry point ----------------------
@@ -37,7 +37,7 @@ def main(cfg: DictConfig) -> None:
         model_name=cfg.model.model_name,
         max_workers=cfg.execution.max_workers,
         training_cfg=cfg.training,
-        push_to_hf=cfg.hf.push,
+        is_push_to_hf=cfg.hf.push,
     )
 
 
