@@ -6,7 +6,7 @@ from collections import OrderedDict
 
 SPECIAL_TOKENS = OrderedDict([("bos_token", "<s>"), ("eos_token", "</s>"), ("pad_token","<pad>"), ("unk_token","<unk>")])
 NUM_TRIMMING_ITERATIONS = 3
-NUM_FINETUNE_EM_ITERATIONS = 1
+NUM_FINETUNE_EM_ITERATIONS = 10
 INITIAL_VOCAB_MULT_FACTOR = 5
 MIN_CHAR_OCCURENCE_THRESHOLD = 2
 MIN_TOKEN_PROB = 1e-12
