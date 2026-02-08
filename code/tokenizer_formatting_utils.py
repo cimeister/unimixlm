@@ -75,7 +75,7 @@ def _load_vocab_from_hf_tokenizer(file_path: str) -> List[str]:
         tokens = [item[0] for item in vocab_data if isinstance(item, list) and len(item) >= 1]
     elif isinstance(vocab_data, dict):
         # Format: {"token": id, ...}
-        tokens = list(vocab_data.keys())
+        tokens = sorted(vocab_data, key=vocab_data.get)
     else:
         raise ValueError(f"Unsupported vocab format in HF tokenizer file: {file_path}")
     
@@ -83,6 +83,7 @@ def _load_vocab_from_hf_tokenizer(file_path: str) -> List[str]:
 
 
 def _get_hf_unigram_tokenizer_vocab(tokenizer):
+    logger.warning("`_get_hf_unigram_tokenizer_vocab` is a deprecated function; use _load_vocab_from_hf_tokenizer instead")
     state = tokenizer.model.__getstate__()
     attributes = json.loads(state.decode("utf-8"))
     vocab = attributes["vocab"]

@@ -49,6 +49,7 @@ from code.tokenizer_formatting_utils import (
     load_tokenizer_with_mode,
     _build_unigramlm_hf_tokenizer_from_lprobs,
     _load_custom_vocab_from_file,
+    _load_vocab_from_hf_tokenizer,
      _write_sp_seed_vocab_file,
     _process_file_worker
 )
@@ -135,6 +136,7 @@ class StandardUnigramLMTokenizer:
         dataset_size_normalization: bool = True,
         use_intersection_pruning: bool = False,
         initial_vocab_tokens: Optional[str] = None,  # Path to file containing tokens
+        from_base_tokenizer: Optional[str] = None,
         #TODO: add check that this is a legal value 
         pruning_criterion: str = "exact_loss",  # "exact_loss", "approx_loss", "probability"
         use_sp_seed_vocab: bool = True,
@@ -163,6 +165,7 @@ class StandardUnigramLMTokenizer:
             initial_vocab_tokens: Path to file containing custom initial vocabulary tokens.
                 Supported formats: plain text (one token per line), JSON list, or HF tokenizer JSON.
                 If provided, replaces the HF-based vocabulary initialization.
+            from_base_tokenizer: Path to HF tokenizer JSON. Vocab from this tokenizer will be used.
             pruning_criterion: Loss function used for token pruning during EM training.
                 "exact_loss": Compute exact loss using alternative sequences (most accurate, slowest)
                 "approx_loss": Use approximate loss computation (good balance)
@@ -178,7 +181,8 @@ class StandardUnigramLMTokenizer:
         if not self.min_char_occurence_threshold:
             self.min_char_occurence_threshold = constants.MIN_CHAR_OCCURENCE_THRESHOLD
 
-        self.base_tokenizer: Optional[Tokenizer] = None
+        self.base_tokenizer = None
+        self.parent_tokenizer = None
         self.em_mode = em_mode
         self.num_iterations = num_iterations
         self.multigram = multigram
@@ -186,10 +190,13 @@ class StandardUnigramLMTokenizer:
         self.dataset_size_normalization = dataset_size_normalization
         self.use_intersection_pruning = use_intersection_pruning
         self.initial_vocab_tokens = initial_vocab_tokens
+        self.from_base_tokenizer = from_base_tokenizer
         self.pruning_criterion = pruning_criterion
         self.use_sp_seed_vocab = use_sp_seed_vocab
         self.use_sp_em = use_sp_em
 
+        if self.from_base_tokenizer and not os.path.exists(self.from_base_tokenizer):
+            raise FileNotFoundError(f"Base tokenizer file not found: {self.from_base_tokenizer}")
         # Validate parameters
         if self.initial_vocab_tokens and not os.path.exists(self.initial_vocab_tokens):
             raise FileNotFoundError(f"Initial vocabulary file not found: {self.initial_vocab_tokens}")
@@ -498,6 +505,10 @@ class StandardUnigramLMTokenizer:
                         
             return self.base_tokenizer
 
+        if self.from_base_tokenizer:
+            self.parent_tokenizer, self.byte_level = load_tokenizer_with_mode(self.from_base_tokenizer)
+            self._training_metadata.update({"parent_tokenizer_file": self.from_base_tokenizer})
+
         # Collect initial metadata
         self._training_metadata.update(
             self._collect_training_metadata(corpus_files, corpus_info)
@@ -520,10 +531,13 @@ class StandardUnigramLMTokenizer:
         
         # Different training approaches
         if self.em_mode == "bpe":
+            if self.from_base_tokenizer:
+                raise NotImplementedError
             result = self._train_bpe(corpus_files, output_path)
 
         elif self.em_mode == "hf" and not self.multigram:
-            # ============= HF Approach =============
+            if self.from_base_tokenizer:
+                raise NotImplementedError
             result = self._train_hf(corpus_files, output_path)
             
         elif self.multigram:
@@ -649,8 +663,8 @@ class StandardUnigramLMTokenizer:
         if hasattr(self, '_training_metadata') and "training_metrics" in self._training_metadata:
             self._training_metadata["training_metrics"]["initial_vocab_size"] = len(state.all_tokens)
 
-        target_vocab_size = self.vocab_size  # The final vocabulary size we are aiming for
         current_vocab_size = len(state.all_tokens) # Keep track of the current vocab size
+        target_vocab_size = self.vocab_size if not self.from_base_tokenizer else current_vocab_size # The final vocabulary size we are aiming for
         
         # This loop continues until the vocabulary is pruned down to the target size.
         pruning_iteration = 0
@@ -769,15 +783,19 @@ class StandardUnigramLMTokenizer:
         # SP runs an E-M steps one last time *after* the final vocabulary
         # has been selected, to get the final probabilities.
         logger.info("Running final EM pass on the final vocabulary...")
+        final_iters = constants.NUM_FINETUNE_EM_ITERATIONS if self.from_base_tokenizer else constants.NUM_SUB_ITERATIONS 
+        for sub_it in range(final_iters):
+            prev_lprobs, prev_lang_lprobs = copy.deepcopy(state.global_lprobs), copy.deepcopy(state.per_lang_lprobs)
+            
+            # Refactor 1: Extracted E+M step logic
+            (counts, 
+             lang_counts, 
+             unk_count, 
+             total_counts, 
+             observed_tokens) = self._run_em_iteration(state)
+
         prev_lprobs, prev_lang_lprobs = copy.deepcopy(state.global_lprobs), copy.deepcopy(state.per_lang_lprobs)
 
-        # Refactor 1: Use extracted E+M step
-        (counts, 
-         lang_counts, 
-         unk_count, 
-         total_counts, 
-         observed_tokens) = self._run_em_iteration(state)
-        
         # Final M-Step (Normalization)
         if state.per_lang:
              for lc in state.lang_codes:
@@ -1107,7 +1125,7 @@ class StandardUnigramLMTokenizer:
         
         # TODO: make adding baseline tokens optional if using custom vocabulary
         # TODO: check for char-level whether this should be done pre or post processing
-        baseline = self.baseline_tokens(corpus_files, self.byte_level, self.min_char_occurence_threshold)
+        baseline = self.baseline_tokens(corpus_files, self.byte_level, self.min_char_occurence_threshold) if not self.from_base_tokenizer else set()
         pinned = set(self.special_tokens) | baseline | {self.unk_token}
         if len(pinned) > self.vocab_size:
             raise ValueError(f"Number of pinned tokens ({len(pinned)}) exceeds vocabulary size ({self.vocab_size}). "
@@ -1146,7 +1164,13 @@ class StandardUnigramLMTokenizer:
 
     def _initial_vocab(self, train_files: List[str]) -> Set[str]:
         """Bootstrap an initial token set - either from custom vocab file or HF trainer."""
-        if self.initial_vocab_tokens:
+        if self.parent_tokenizer:
+            logger.info(f"Using vocabulary from base tokenizer loaded from {self.from_base_tokenizer}")
+            vocab = set(_load_vocab_from_hf_tokenizer(self.from_base_tokenizer))
+            logger.info(f"Initial vocabulary size: {len(vocab)}. Overwriting any input vocabulary size.")
+            self.vocab_size = len(vocab)
+
+        elif self.initial_vocab_tokens:
             # Use custom vocabulary from file
             logger.info(f"Loading custom initial vocabulary from {self.initial_vocab_tokens}")
             custom_tokens = _load_custom_vocab_from_file(self.initial_vocab_tokens)
@@ -1342,16 +1366,19 @@ class StandardUnigramLMTokenizer:
         self, lprobs: Dict[str, float]
     ) -> Tuple[List[Tuple[str, float]], int]:
         normalized_lprobs = self._log_normalize(lprobs, use_floor=True)
-        sorted_items = sorted(normalized_lprobs.items(), key=lambda x: x[1], reverse=True)
-        vocab_list = []
-        special = []
-        for tk, lp in sorted_items:
-            if tk in self.special_tokens:
-                special.append((tk, lp))
-            else:
-                vocab_list.append((tk, lp))
-        vocab_list = special + vocab_list
-        unk_id = next(i for i, (tk, _) in enumerate(vocab_list) if tk == self.unk_token)
+        if self.parent_tokenizer:
+            vocab_list = [(tk, normalized_lprobs[tk]) for tk in _load_vocab_from_hf_tokenizer(self.from_base_tokenizer)]
+        else:
+            sorted_items = sorted(normalized_lprobs.items(), key=lambda x: x[1], reverse=True)
+            vocab_list = []
+            special = []
+            for tk, lp in sorted_items:
+                if tk in self.special_tokens:
+                    special.append((tk, lp))
+                else:
+                    vocab_list.append((tk, lp))
+            vocab_list = special + vocab_list
+        unk_id = next((i for i, (tk, _) in enumerate(vocab_list) if tk == self.unk_token), None)
         return vocab_list, unk_id
 
     # ------------------------------------------------------------------
@@ -1387,6 +1414,8 @@ class StandardUnigramLMTokenizer:
             return "standard"
 
     def _get_pretokenizer(self):
+        if self.parent_tokenizer:
+            return self.parent_tokenizer.pre_tokenizer
         if self.base_tokenizer:
             logger.info("Using pretokenizer from base tokenizer")
             return self.base_tokenizer.pre_tokenizer
@@ -1401,6 +1430,8 @@ class StandardUnigramLMTokenizer:
             return None
 
     def _get_decoder(self):
+        if self.parent_tokenizer:
+            return self.parent_tokenizer.decoder
         if self.base_tokenizer:
             return self.base_tokenizer.decoder
         if self.byte_level:
