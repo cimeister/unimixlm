@@ -299,36 +299,46 @@ def run_tokenizer_training(
     logging.info(
         f"Training {len(corpus_info)} language-specific tokenizers in parallel..."
     )
-    futures = []
+    futures_by_lang = {}
     executor = ThreadPoolExecutor(max_workers=max_workers)
 
     for lang, corpus_file in corpus_info.items():
         # Save language-specific tokenizer in the same flat directory
         lang_tokenizer_path = tokenizers_dir / f"langspec_{lang}.json"
 
-        futures.append(
-            executor.submit(
-                train_language_specific_tokenizer,
-                lang=lang,
-                corpus_file=corpus_file,
-                base_tokenizer_path=base_tokenizer_path,
-                lang_output_path=lang_tokenizer_path,
-                vocab_size=len(model_tokenizer),
-                reestimation_em_mode=str(
-                    training_cfg.get("reestimation_em_mode", "soft")
-                ),
-                unk_token=unk_token,  # Use auto-detected value
-            )
+        future = executor.submit(
+            train_language_specific_tokenizer,
+            lang=lang,
+            corpus_file=corpus_file,
+            base_tokenizer_path=base_tokenizer_path,
+            lang_output_path=lang_tokenizer_path,
+            vocab_size=len(model_tokenizer),
+            reestimation_em_mode=str(
+                training_cfg.get("reestimation_em_mode", "soft")
+            ),
+            unk_token=unk_token,  # Use auto-detected value
         )
+        futures_by_lang[lang] = future
 
-    # Wait for all language-specific training to complete
-    for future in futures:
+    # Wait for all language-specific training to complete and collect failures
+    failures = []
+    for lang, future in futures_by_lang.items():
         try:
             future.result()
         except Exception as e:
-            logging.error(f"Language-specific training failed: {e}")
+            error_msg = f"Language-specific training failed for {lang}: {e}"
+            logging.error(error_msg)
+            failures.append((lang, e))
 
     executor.shutdown(wait=True)
+
+    # Only proceed if all trainings succeeded
+    if failures:
+        failure_summary = "\n".join([f"  - {lang}: {str(e)}" for lang, e in failures])
+        error_message = f"Failed to train {len(failures)} language-specific tokenizer(s):\n{failure_summary}"
+        logging.error(error_message)
+        raise RuntimeError(error_message)
+
     logging.info("All tokenizers trained successfully!")
     logging.info(f"Tokenizers directory: {tokenizers_dir}")
     logging.info("  - Base tokenizer: base_tokenizer.json")
