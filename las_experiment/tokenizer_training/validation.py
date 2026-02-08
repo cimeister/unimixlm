@@ -8,6 +8,7 @@ in terms of pre/post-tokenization components and token ordering.
 import json
 import logging
 from pathlib import Path
+from typing import Optional
 
 from tokenizers import Tokenizer
 from code.tokenizer_formatting_utils import _get_hf_unigram_tokenizer_vocab
@@ -145,7 +146,7 @@ def _validate_components(
 def validate_tokenizers(
     model_tokenizer_path: Path,
     base_tokenizer_path: Path,
-    lang_tokenizer_paths: dict[str, Path],
+    lang_tokenizer_paths: Optional[dict[str, Path]] = {},
 ) -> None:
     """
     Validate that all trained tokenizers have:
