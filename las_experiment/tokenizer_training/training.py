@@ -20,14 +20,13 @@ All tokenizers are validated and pushed to a single flat-structure HF repository
 
 import itertools
 import logging
-import shutil
-from concurrent.futures import ThreadPoolExecutor
 from pathlib import Path
 
 from datasets import load_dataset
 from transformers import AutoTokenizer
 
 from code.language_specific_unigramlm import LanguageSpecificUnigramLMTokenizer
+from code.standard_unigramlm import StandardUnigramLMTokenizer
 from las_experiment.tokenizer_training.validation import validate_tokenizers
 from las_experiment.tokenizer_training.utils import (
     push_to_hf,
@@ -39,7 +38,6 @@ def train_base_tokenizer(
     corpus_info: dict,
     model_tokenizer_path: str,
     base_output_path: Path,
-    vocab_size: int,
     em_mode: str = "soft",
     unk_token: str = None,
 ) -> None:
@@ -54,124 +52,21 @@ def train_base_tokenizer(
     """
 
     logging.info(f"Training base Unigram tokenizer on {len(corpus_info)} languages")
+    train_files = []
+    for lang_code, train_file in corpus_info.items():
+        train_files.append(train_file)
+    
+    if not train_files:
+        logging.error("No training files found")
+        return None
+    
+    # Create and train the tokenizer
 
-    # Create temporary directory for training
-    temp_output_dir = base_output_path.parent / "_temp_base"
-    temp_output_dir.mkdir(parents=True, exist_ok=True)
-
-    # Combine all corpus files into a single base corpus file
-    combined_corpus_path = temp_output_dir / "combined_corpus.txt"
-    logging.info(
-        f"Combining {len(corpus_info)} corpus files into {combined_corpus_path}"
+    base_tokenizer = StandardUnigramLMTokenizer(
+        em_mode=em_mode, 
+        from_base_tokenizer=model_tokenizer_path,
     )
-
-    with open(combined_corpus_path, "w", encoding="utf-8") as outfile:
-        for lang, corpus_file in corpus_info.items():
-            logging.info(f"  Adding corpus from {lang}: {corpus_file}")
-            with open(corpus_file, "r", encoding="utf-8") as infile:
-                for line in infile:
-                    outfile.write(line)
-
-    logging.info(f"Combined corpus created with data from {len(corpus_info)} languages")
-
-    # Train base tokenizer with combined corpus
-    las_tokenizer = LanguageSpecificUnigramLMTokenizer(
-        vocab_size=vocab_size,
-        reestimation_em_mode=em_mode,
-        unk_token=unk_token,
-    )
-
-    las_tokenizer.train(
-        corpus_info={"base": str(combined_corpus_path)},
-        base_tokenizer_path=str(model_tokenizer_path),
-        output_dir=str(temp_output_dir),
-        load_base_if_exists=True,
-        load_tokenizers_if_exists=False,  # Always retrain
-    )
-
-    # Move the trained tokenizer to the final location with correct name
-    # The file is saved as: langspec_{em_mode}_base.tokenizer.json
-    temp_tokenizer_path = temp_output_dir / f"langspec_{em_mode}_base.tokenizer.json"
-    if temp_tokenizer_path.exists():
-        shutil.move(str(temp_tokenizer_path), str(base_output_path))
-        logging.info(f"Base tokenizer saved to {base_output_path}")
-    else:
-        logging.error(f"Expected base tokenizer file not found: {temp_tokenizer_path}")
-        if temp_output_dir.exists():
-            logging.error(
-                f"Files in {temp_output_dir}: {list(temp_output_dir.glob('*'))}"
-            )
-        raise FileNotFoundError(
-            f"Base tokenizer training failed, file not found: {temp_tokenizer_path}"
-        )
-
-    # Clean up temporary directory
-    shutil.rmtree(temp_output_dir, ignore_errors=True)
-
-
-def train_language_specific_tokenizer(
-    *,
-    lang: str,
-    corpus_file: str,
-    base_tokenizer_path: Path,
-    vocab_size: int,
-    lang_output_path: Path,
-    reestimation_em_mode: str = "soft",
-    unk_token: str = None,
-) -> None:
-    """
-    Train a language-specific tokenizer by re-estimating token probabilities
-    from the shared base tokenizer for a single language.
-
-    The resulting tokenizer is saved to `lang_output_path`.
-
-    Always trains from scratch - does not load existing tokenizers.
-    """
-    logging.info(f"Training language-specific tokenizer for {lang}")
-
-    # Train the language-specific LAS tokenizer using the base.
-    # This re-estimates token probabilities based on the single-language corpus.
-    las_tokenizer = LanguageSpecificUnigramLMTokenizer(
-        vocab_size=vocab_size,
-        reestimation_em_mode=reestimation_em_mode,
-        unk_token=unk_token,
-    )
-
-    # Create temporary directory for training output
-    temp_output_dir = lang_output_path.parent / f"_temp_{lang}"
-    temp_output_dir.mkdir(parents=True, exist_ok=True)
-
-    las_tokenizer.train(
-        corpus_info={lang: corpus_file},
-        base_tokenizer_path=str(base_tokenizer_path),
-        output_dir=str(temp_output_dir),
-        load_base_if_exists=True,  # Always load the base we just trained
-        load_tokenizers_if_exists=False,  # Always retrain
-    )
-
-    # Find and move the language-specific tokenizer to the final location
-    # The file is saved as: langspec_{em_mode}_{lang}.tokenizer.json
-    temp_tokenizer_path = (
-        temp_output_dir / f"langspec_{reestimation_em_mode}_{lang}.tokenizer.json"
-    )
-    if temp_tokenizer_path.exists():
-        shutil.move(str(temp_tokenizer_path), str(lang_output_path))
-        logging.info(f"Saved {lang} tokenizer to {lang_output_path}")
-    else:
-        logging.error(f"Expected tokenizer file not found: {temp_tokenizer_path}")
-        # List files in temp directory for debugging
-        if temp_output_dir.exists():
-            logging.error(
-                f"Files in {temp_output_dir}: {list(temp_output_dir.glob('*'))}"
-            )
-        raise FileNotFoundError(
-            f"Language-specific tokenizer training failed for {lang}, file not found: {temp_tokenizer_path}"
-        )
-
-    # Clean up temporary directory
-    shutil.rmtree(temp_output_dir, ignore_errors=True)
-
-    logging.info(f"Finished training {lang}")
+    base_tokenizer.train(train_files, base_output_path, corpus_info=corpus_info)
 
 
 # ---------------------- FineWeb2-10K streaming / reading ----------------------
@@ -218,6 +113,7 @@ def run_tokenizer_training(
     langs,
     output_dir,
     lines_per_lang=10000,
+    train_new_base_tokenizer=True,
     hf_username="MultilingualUnigramLM",
     model_name="allenai/Olmo-3-1025-7B",
     max_workers=8,
@@ -287,59 +183,36 @@ def run_tokenizer_training(
     tokenizers_dir.mkdir(parents=True, exist_ok=True)
 
     # 4) Train the shared base Unigram tokenizer on ALL language corpora
-    base_tokenizer_path = tokenizers_dir / "base_tokenizer.json"
-    train_base_tokenizer(
-        corpus_info=corpus_info,
-        model_tokenizer_path=model_tokenizer_path,
-        base_output_path=base_tokenizer_path,
-        vocab_size=len(model_tokenizer),
-        em_mode=str(training_cfg.get("em_mode", "soft")),
-        unk_token=unk_token,  # Use auto-detected value
-    )
+    if train_new_base_tokenizer:
+        base_tokenizer_path = tokenizers_dir / "base_tokenizer.json"
+        train_base_tokenizer(
+            corpus_info=corpus_info,
+            model_tokenizer_path=str(model_tokenizer_path),
+            base_output_path=str(base_tokenizer_path),
+            em_mode=str(training_cfg.get("em_mode", "soft")),
+            unk_token=unk_token,  # Use auto-detected value
+        )
+        validate_tokenizers(model_tokenizer_path, base_tokenizer_path)
+    else:
+        base_tokenizer_path = model_tokenizer_path
 
     # 5) Train language-specific tokenizers in parallel
     # Each re-estimates token probabilities from the shared base
     logging.info(
         f"Training {len(corpus_info)} language-specific tokenizers in parallel..."
     )
-    futures_by_lang = {}
-    executor = ThreadPoolExecutor(max_workers=max_workers)
-
-    for lang, corpus_file in corpus_info.items():
-        # Save language-specific tokenizer in the same flat directory
-        lang_tokenizer_path = tokenizers_dir / f"langspec_{lang}.json"
-
-        future = executor.submit(
-            train_language_specific_tokenizer,
-            lang=lang,
-            corpus_file=corpus_file,
-            base_tokenizer_path=base_tokenizer_path,
-            lang_output_path=lang_tokenizer_path,
-            vocab_size=len(model_tokenizer),
-            reestimation_em_mode=str(training_cfg.get("reestimation_em_mode", "soft")),
-            unk_token=unk_token,  # Use auto-detected value
-        )
-        futures_by_lang[lang] = future
-
-    # Wait for all language-specific training to complete and collect failures
-    failures = []
-    for lang, future in futures_by_lang.items():
-        try:
-            future.result()
-        except Exception as e:
-            error_msg = f"Language-specific training failed for {lang}: {e}"
-            logging.error(error_msg)
-            failures.append((lang, e))
-
-    executor.shutdown(wait=True)
-
-    # Only proceed if all trainings succeeded
-    if failures:
-        failure_summary = "\n".join([f"  - {lang}: {str(e)}" for lang, e in failures])
-        error_message = f"Failed to train {len(failures)} language-specific tokenizer(s):\n{failure_summary}"
-        logging.error(error_message)
-        raise RuntimeError(error_message)
-
+    las_tokenizer = LanguageSpecificUnigramLMTokenizer(
+        reestimation_em_mode=str(training_cfg.get("em_mode", "soft")),
+        unk_token=unk_token,
+    )
+    las_tokenizer.train(
+        corpus_info=corpus_info,
+        base_tokenizer_path=str(base_tokenizer_path),
+        tokenizer_path_format=str(tokenizers_dir / "langspec_{lang_code}.json"),
+        load_base_if_exists=True,  # Always load the base we just trained
+        load_tokenizers_if_exists=False,  # Always retrain
+    )
+    
     logging.info("All tokenizers trained successfully!")
     logging.info(f"Tokenizers directory: {tokenizers_dir}")
     logging.info("  - Base tokenizer: base_tokenizer.json")
