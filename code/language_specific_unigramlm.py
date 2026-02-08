@@ -8,6 +8,7 @@ from pathlib import Path
 from typing import Dict, List
 import numpy as np
 import multiprocessing
+from concurrent.futures import ThreadPoolExecutor
 
 from tokenizers import Tokenizer
 
@@ -18,7 +19,7 @@ from code.tokenizer_formatting_utils import (
     _build_unigramlm_hf_tokenizer_from_lprobs, _get_hf_unigram_tokenizer_vocab, _write_sp_seed_vocab_file,
     write_hf_bytelevel_corpus
 )
-from code.constants import SPECIAL_TOKENS, MIN_TOKEN_LOG_PROB, SP_DEFAULT_ARGS
+from code.constants import SPECIAL_TOKENS, MIN_TOKEN_LOG_PROB, SP_DEFAULT_ARGS, NUM_FINETUNE_EM_ITERATIONS
 
 logger = logging.getLogger(__name__)
 
@@ -72,7 +73,7 @@ class LanguageSpecificUnigramLMTokenizer(StandardUnigramLMTokenizer):
         unk_token: str = SPECIAL_TOKENS["unk_token"],
         special_tokens=None,
         reestimation_em_mode: str = "soft",
-        num_iterations: int = 10,
+        num_iterations: int = NUM_FINETUNE_EM_ITERATIONS,
         byte_level: bool = False,
         whitespace_token_boundaries: bool = False
     ):
@@ -247,7 +248,8 @@ class LanguageSpecificUnigramLMTokenizer(StandardUnigramLMTokenizer):
         tokenizer_path_format: str | None = None,
         load_base_if_exists: bool = True,
         load_tokenizers_if_exists: bool = True,
-        use_sentencepiece: bool = True
+        use_sentencepiece: bool = True,
+        max_workers = None
     ):
         """
         Build / load the *shared* base tokenizer via the parent class,
@@ -286,6 +288,12 @@ class LanguageSpecificUnigramLMTokenizer(StandardUnigramLMTokenizer):
             if not self.verify_byte_level_vocabulary(self.base_tokenizer.get_vocab()):
                 logger.warning("Base vocabulary may not contain all necessary byte tokens for byte-level tokenization")
 
+        futures_by_lang = {}
+        if max_workers is None:
+            # at most 20
+            max_workers = min(min(20, multiprocessing.cpu_count() - 1), len(corpus_info))
+        if use_sentencepiece and max_workers > 1:
+            executor = ThreadPoolExecutor(max_workers=max_workers)
         # 2) one tokenizer per language
         for lang_code, train_file in corpus_info.items():
             # where to store / look for the tokenizer
@@ -301,93 +309,104 @@ class LanguageSpecificUnigramLMTokenizer(StandardUnigramLMTokenizer):
                 tok = Tokenizer.from_file(str(tk_path))
                 self.per_lang_tok[lang_code] = {
                     "tokenizer": tok,
-                    "scores":  _extract_log_scores(tok),
+                    "scores": _extract_log_scores(tok),
                     "path": str(tk_path),
                 }
                 logger.info(f"Loaded tokenizer for {lang_code} from {tk_path}")
                 continue
 
-            vocab_score_dict = _extract_log_scores(self.base_tokenizer)
+            if use_sentencepiece and max_workers > 1:
+                logging.info(f"Submitting job for {lang_code}")
+                future = executor.submit(self.per_lang_estimation,
+                                         lang_code=lang_code, 
+                                         train_file=train_file, 
+                                         tk_path=tk_path, 
+                                         use_sentencepiece=use_sentencepiece)
 
-            if use_sentencepiece:
-                # Use fast sentencepiece EM implementation
-                token_log_probs = self.train_with_sentencepiece_direct(
-                        corpus_file=train_file,
-                        vocab_dict=vocab_score_dict,
-                        num_iterations=self.num_reestimation_iterations
-                )
+                futures_by_lang[lang_code] = future
+
             else:
-            # ----------  EM training on the language corpus  ----------
-                em_trainer = EMUnigramTrainer(
-                    vocab=vocab_score_dict,
-                    unk_token=self.unk_token,
-                    special_tokens=self.special_tokens,
-                    em_mode=self.reestimation_em_mode,
-                    max_iterations=self.num_reestimation_iterations,
-                    whitespace_token_boundaries=self.whitespace_token_boundaries,
-                    pretokenizer=self._get_pretokenizer(),
-                    byte_level=self.byte_level
-                )
-                token_probs = em_trainer.train(train_file)  # token -> prob
-                token_log_probs = {tk: np.log(p) for tk, p in token_probs.items()}
+                tok, tk_path = self.per_lang_estimation(lang_code, train_file, tk_path, use_sentencepiece)
 
-            # ---------------------------------------------------------------------------
-            # DEBUGGERS
-            # ---------------------------------------------------------------------------
+                self.per_lang_tok[lang_code] = {
+                    "tokenizer": tok,
+                    "scores": _extract_log_scores(tok),
+                    "path": str(tk_path),
+                }
+        if futures_by_lang:
+            # Wait for all language-specific training to complete and collect failures
+            failures = []
+            for lang, future in futures_by_lang.items():
+                try:
+                    tok, tk_path = future.result()
+                except Exception as e:
+                    error_msg = f"Language-specific training failed for {lang}: {e}"
+                    logging.error(error_msg)
+                    failures.append((lang, e))
+                self.per_lang_tok[lang_code] = {
+                    "tokenizer": tok,
+                    "scores": _extract_log_scores(tok),
+                    "path": str(tk_path),
+                }
 
-            # common_keys = token_log_probs1.keys() & token_log_probs.keys()
-            # diffs = {k: abs(token_log_probs1[k] - token_log_probs[k]) for k in common_keys}
-            # top10 = sorted(diffs.items(), key=lambda x: x[1], reverse=True)[:20]
-            # for k, v in top10:
-            #     print(f"{k}: {token_log_probs1[k]} vs {token_log_probs[k]} (diff={v})")
-            # x = 0
-            # x += abs(np.exp(token_log_probs1[k]) - np.exp(token_log_probs[k]))
-            # print("TVD: ", x)
+            executor.shutdown(wait=True)
+            if failures:
+                failure_summary = "\n".join([f"  - {lang}: {str(e)}" for lang, e in failures])
+                error_message = f"Failed to train {len(failures)} language-specific tokenizer(s):\n{failure_summary}"
+                logging.error(error_message)
+                raise RuntimeError(error_message)
 
-            # ----------  HF tokenizer from these probabilities  ----------
-            logger.info(f"Internal unk token is {self.unk_token}")
-            tok = _build_unigramlm_hf_tokenizer_with_new_lprobs(self.base_tokenizer, token_log_probs, self.unk_token)
-            tok.save(str(tk_path))
-            
-            # Add metadata to language-specific tokenizer
-            lang_metadata = _create_base_metadata("LanguageSpecificUnigramLMTokenizer", "langspec")
-            lang_metadata["training_config"] = {
-                "vocab_size": self.vocab_size,
-                "reestimation_em_mode": self.reestimation_em_mode,
-                "byte_level": self.byte_level,
-                "language_code": lang_code,
-                "base_tokenizer_path": base_tokenizer_path,
-                "num_reestimation_iterations": self.num_reestimation_iterations
-            }
-            lang_metadata["corpus_info"] = {
-                "training_file": train_file,
-                "language_code": lang_code
-            }
-            
-            # Try to extract base tokenizer metadata
-            try:
-                with open(base_tokenizer_path, 'r') as f:
-                    base_data = json.load(f)
-                    if "tokenizer_metadata" in base_data:
-                        lang_metadata["base_tokenizer_metadata"] = base_data["tokenizer_metadata"]["training_config"]
-            except:
-                lang_metadata["base_tokenizer_metadata"] = {"em_mode": "unknown", "vocab_size": "unknown"}
-            
-            self._save_tokenizer_metadata_file(str(tk_path))
-
-            self.per_lang_tok[lang_code] = {
-                "tokenizer": tok,
-                "scores": _extract_log_scores(tok),
-                "path": str(tk_path),
-            }
-            logger.info(f"Saved tokenizer with metadata for {lang_code} to {tk_path}")
         return {
             "base_path": base_tokenizer_path,
             "language_paths": {k: v['path'] for k, v in self.per_lang_tok.items()}
         }
 
-    # ---------------------------------------------------------------- encode / decode helpers
+    def per_lang_estimation(self, lang_code, train_file, tk_path, use_sentencepiece):
+        vocab_score_dict = _extract_log_scores(self.base_tokenizer)
 
+        if use_sentencepiece:
+            # Use fast sentencepiece EM implementation
+            token_log_probs = self.train_with_sentencepiece_direct(
+                    corpus_file=train_file,
+                    vocab_dict=vocab_score_dict,
+                    num_iterations=self.num_reestimation_iterations
+            )
+        else:
+        # ----------  EM training on the language corpus  ----------
+            em_trainer = EMUnigramTrainer(
+                vocab=vocab_score_dict,
+                unk_token=self.unk_token,
+                special_tokens=self.special_tokens,
+                em_mode=self.reestimation_em_mode,
+                max_iterations=self.num_reestimation_iterations,
+                whitespace_token_boundaries=self.whitespace_token_boundaries,
+                pretokenizer=self._get_pretokenizer(),
+                byte_level=self.byte_level
+            )
+            token_probs = em_trainer.train(train_file)  # token -> prob
+            token_log_probs = {tk: np.log(p) for tk, p in token_probs.items()}
+
+        # ---------------------------------------------------------------------------
+        # DEBUGGERS
+        # ---------------------------------------------------------------------------
+
+        # common_keys = token_log_probs1.keys() & token_log_probs.keys()
+        # diffs = {k: abs(token_log_probs1[k] - token_log_probs[k]) for k in common_keys}
+        # top10 = sorted(diffs.items(), key=lambda x: x[1], reverse=True)[:20]
+        # for k, v in top10:
+        #     print(f"{k}: {token_log_probs1[k]} vs {token_log_probs[k]} (diff={v})")
+        # x = 0
+        # x += abs(np.exp(token_log_probs1[k]) - np.exp(token_log_probs[k]))
+        # print("TVD: ", x)
+
+        # ----------  HF tokenizer from these probabilities  ----------
+        logger.info(f"Internal unk token is {self.unk_token}")
+        tok = _build_unigramlm_hf_tokenizer_with_new_lprobs(self.base_tokenizer, token_log_probs, self.unk_token)
+        tok.save(str(tk_path))
+        logger.info(f"Saved tokenizer with metadata for {lang_code} to {tk_path}")
+        return tok, tk_path
+
+    # ---------------------------------------------------------------- encode / decode helpers
     def encode_lang(self, text: str, lang_code: str):
         if lang_code not in self.per_lang_tok:
             raise ValueError(f"No tokenizer for language '{lang_code}'.")
@@ -397,7 +416,6 @@ class LanguageSpecificUnigramLMTokenizer(StandardUnigramLMTokenizer):
         if lang_code not in self.per_lang_tok:
             raise ValueError(f"No tokenizer for language '{lang_code}'.")
         return self.per_lang_tok[lang_code]["tokenizer"].decode(ids)
-
 
     def best_language_encode(self, text: str):
         """
