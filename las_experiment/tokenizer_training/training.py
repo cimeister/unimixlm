@@ -65,6 +65,7 @@ def train_base_tokenizer(
     base_tokenizer = StandardUnigramLMTokenizer(
         em_mode=em_mode, 
         from_base_tokenizer=model_tokenizer_path,
+        unk_token=unk_token
     )
     base_tokenizer.train(train_files, base_output_path, corpus_info=corpus_info)
 
