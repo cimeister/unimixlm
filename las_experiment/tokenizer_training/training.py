@@ -331,14 +331,14 @@ def run_tokenizer_training(
             failures.append((lang, e))
 
     executor.shutdown(wait=True)
-    
+
     # Only proceed if all trainings succeeded
     if failures:
         failure_summary = "\n".join([f"  - {lang}: {str(e)}" for lang, e in failures])
         error_message = f"Failed to train {len(failures)} language-specific tokenizer(s):\n{failure_summary}"
         logging.error(error_message)
         raise RuntimeError(error_message)
-    
+
     logging.info("All tokenizers trained successfully!")
     logging.info(f"Tokenizers directory: {tokenizers_dir}")
     logging.info("  - Base tokenizer: base_tokenizer.json")
