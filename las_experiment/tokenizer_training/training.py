@@ -239,8 +239,8 @@ def run_tokenizer_training(
     Output structure:
     {output_dir}/las-tokenizers-{model}-{lang_codes}/
         ├── base_tokenizer.json
-        ├── langspec_en.json
-        ├── langspec_fr.json
+        ├── langspec_eng.json
+        ├── langspec_yor.json
         └── ...
     """
     output_dir = Path(output_dir)
@@ -316,9 +316,7 @@ def run_tokenizer_training(
             base_tokenizer_path=base_tokenizer_path,
             lang_output_path=lang_tokenizer_path,
             vocab_size=len(model_tokenizer),
-            reestimation_em_mode=str(
-                training_cfg.get("reestimation_em_mode", "soft")
-            ),
+            reestimation_em_mode=str(training_cfg.get("reestimation_em_mode", "soft")),
             unk_token=unk_token,  # Use auto-detected value
         )
         futures_by_lang[lang] = future
