@@ -204,6 +204,15 @@ def tokenize_all(text: str, group_name: str):
             }
         )
 
+    # Determine best language if there are 2+ languages
+    best_lang = None
+    if len(las_tok.per_lang_tok.keys()) >= 2:
+        try:
+            best_langs, _ = las_tok.best_language_encode_batch([text])
+            best_lang = best_langs[0]
+        except Exception:
+            pass
+
     # Per-language tokenizers
     lang_codes = sorted(las_tok.per_lang_tok.keys())
     for lang_code in lang_codes:
@@ -220,6 +229,7 @@ def tokenize_all(text: str, group_name: str):
                     "ids": list(enc.ids),
                     "decoded": decoded,
                     "kind": "langspec",
+                    "is_best": lang_code == best_lang,
                 }
             )
         except Exception as e:
@@ -230,37 +240,7 @@ def tokenize_all(text: str, group_name: str):
                     "ids": [],
                     "decoded": [],
                     "kind": "langspec",
-                }
-            )
-
-    # Best-language selection (only when 2+ languages)
-    if len(lang_codes) >= 2:
-        try:
-            best_langs, best_encs = las_tok.best_language_encode_batch([text])
-            best_lang = best_langs[0]
-            best_enc = best_encs[0]
-            # Extract actual text spans using offsets
-            decoded = [
-                text[start:end] if start < end else ""
-                for start, end in best_enc.offsets
-            ]
-            results.append(
-                {
-                    "label": f"Best Language ({best_lang})",
-                    "tokens": list(best_enc.tokens),
-                    "ids": list(best_enc.ids),
-                    "decoded": decoded,
-                    "kind": "best",
-                }
-            )
-        except Exception as e:
-            results.append(
-                {
-                    "label": "Best Language",
-                    "tokens": [f"[error: {e}]"],
-                    "ids": [],
-                    "decoded": [],
-                    "kind": "best",
+                    "is_best": False,
                 }
             )
 
@@ -279,8 +259,18 @@ def _display_token(token: str) -> str:
     return _SPACE_MARKER_RE.sub("\u2423", token)  # ␣
 
 
-def render_tokens_html(tokens: list[str], ids: list[int], decoded: list[str]) -> str:
-    """Return HTML with colour-coded token spans and custom hover tooltips."""
+def render_tokens_html(
+    tokens: list[str], ids: list[int], decoded: list[str], show_raw_tokens: bool = False
+) -> str:
+    """Return HTML with colour-coded token spans and custom hover tooltips.
+
+    Args:
+        tokens: Raw token strings
+        ids: Token IDs
+        decoded: Actual text each token represents
+        show_raw_tokens: If True, display raw tokens and show decoded text on hover.
+                        If False, display decoded text and show raw tokens on hover.
+    """
     # Group consecutive tokens with the same decoded text (multi-byte chars split across tokens)
     grouped = []
     i = 0
@@ -359,25 +349,49 @@ def render_tokens_html(tokens: list[str], ids: list[int], decoded: list[str]) ->
     parts: list[str] = [tooltip_css]
     for i, group in enumerate(grouped):
         bg = COLORS[i % len(COLORS)]
-        # Display the decoded (actual) text
-        display_text = group["decoded"].replace(" ", "␣")  # Show spaces as ␣
-        display = html.escape(display_text) if display_text else "[empty]"
 
-        # Build custom tooltip content
-        if len(group["tokens"]) == 1:
-            tooltip_html = (
-                f'<span class="tooltip-label">Raw:</span>{html.escape(repr(group["tokens"][0]))} '
-                f'<span class="tooltip-label">ID:</span>{group["ids"][0]} '
-                f'<span class="tooltip-label">Pos:</span>{group["pos"]}'
-            )
+        if show_raw_tokens:
+            # Display raw tokens, show decoded text in tooltip
+            if len(group["tokens"]) == 1:
+                display_text = _display_token(group["tokens"][0])
+                display = html.escape(display_text)
+                decoded_text = group["decoded"].replace(" ", "␣")
+                tooltip_html = (
+                    f'<span class="tooltip-label">Decoded:</span>{html.escape(decoded_text or "[empty]")} '
+                    f'<span class="tooltip-label">ID:</span>{group["ids"][0]} '
+                    f'<span class="tooltip-label">Pos:</span>{group["pos"]}'
+                )
+            else:
+                # Multiple raw tokens - show them all
+                display_text = " + ".join(_display_token(t) for t in group["tokens"])
+                display = html.escape(display_text)
+                decoded_text = group["decoded"].replace(" ", "␣")
+                id_list = ", ".join(str(i) for i in group["ids"])
+                tooltip_html = (
+                    f'<span class="tooltip-label">Decoded:</span>{html.escape(decoded_text or "[empty]")} '
+                    f'<span class="tooltip-label">IDs:</span>[{id_list}] '
+                    f'<span class="tooltip-label">Pos:</span>{group["pos"]}'
+                )
         else:
-            raw_list = ", ".join(f"{t!r}" for t in group["tokens"])
-            id_list = ", ".join(str(i) for i in group["ids"])
-            tooltip_html = (
-                f'<span class="tooltip-label">Raw:</span>[{html.escape(raw_list)}] '
-                f'<span class="tooltip-label">IDs:</span>[{id_list}] '
-                f'<span class="tooltip-label">Pos:</span>{group["pos"]}'
-            )
+            # Display decoded text, show raw tokens in tooltip (current behavior)
+            display_text = group["decoded"].replace(" ", "␣")  # Show spaces as ␣
+            display = html.escape(display_text) if display_text else "[empty]"
+
+            # Build custom tooltip content
+            if len(group["tokens"]) == 1:
+                tooltip_html = (
+                    f'<span class="tooltip-label">Raw:</span>{html.escape(repr(group["tokens"][0]))} '
+                    f'<span class="tooltip-label">ID:</span>{group["ids"][0]} '
+                    f'<span class="tooltip-label">Pos:</span>{group["pos"]}'
+                )
+            else:
+                raw_list = ", ".join(f"{t!r}" for t in group["tokens"])
+                id_list = ", ".join(str(i) for i in group["ids"])
+                tooltip_html = (
+                    f'<span class="tooltip-label">Raw:</span>[{html.escape(raw_list)}] '
+                    f'<span class="tooltip-label">IDs:</span>[{id_list}] '
+                    f'<span class="tooltip-label">Pos:</span>{group["pos"]}'
+                )
 
         parts.append(
             f'<span class="token-span" style="'
@@ -391,27 +405,38 @@ def render_tokens_html(tokens: list[str], ids: list[int], decoded: list[str]) ->
     return "".join(parts)
 
 
-def render_result_card(result: dict) -> str:
+def render_result_card(result: dict, show_raw_tokens: bool = False) -> str:
     """Wrap a single tokenizer result in a card div."""
     label = html.escape(result["label"])
     n_tokens = len(result["tokens"])
     token_html = render_tokens_html(
-        result["tokens"], result["ids"], result.get("decoded", result["tokens"])
+        result["tokens"],
+        result["ids"],
+        result.get("decoded", result["tokens"]),
+        show_raw_tokens,
     )
 
     kind_colors = {
         "bpe": "#4A90D9",
         "base": "#7B68EE",
         "langspec": "#2ECC71",
-        "best": "#E67E22",
     }
     badge_color = kind_colors.get(result["kind"], "#888")
+
+    # Add "BEST" indicator if this is the best language
+    best_badge = ""
+    if result.get("is_best", False):
+        best_badge = (
+            '<span style="background:#E67E22;color:#fff;padding:2px 8px;'
+            'border-radius:4px;font-size:13px;font-weight:600;margin-left:8px;">⭐ BEST</span>'
+        )
 
     return (
         f'<div style="border:1px solid #ddd;border-radius:8px;padding:12px;margin:8px 0;">'
         f'<div style="margin-bottom:6px;">'
         f'<span style="background:{badge_color};color:#fff;padding:2px 8px;'
         f'border-radius:4px;font-size:13px;font-weight:600;">{label}</span>'
+        f"{best_badge}"
         f'<span style="color:#888;font-size:12px;margin-left:8px;">'
         f"{n_tokens} tokens</span></div>"
         f'<div style="line-height:2;">{token_html}</div>'
@@ -419,7 +444,9 @@ def render_result_card(result: dict) -> str:
     )
 
 
-def render_all_results(text: str, group_name: str) -> str:
+def render_all_results(
+    text: str, group_name: str, show_raw_tokens: bool = False
+) -> str:
     """Tokenize and render all results as HTML cards."""
     if not text.strip():
         return '<p style="color:#888;">Enter some text above and click Tokenize.</p>'
@@ -428,7 +455,7 @@ def render_all_results(text: str, group_name: str) -> str:
     if not results:
         return '<p style="color:#888;">No results.</p>'
 
-    cards = [render_result_card(r) for r in results]
+    cards = [render_result_card(r, show_raw_tokens) for r in results]
     return "\n".join(cards)
 
 
@@ -456,6 +483,11 @@ def build_app() -> gr.Blocks:
                 label="Tokenizer group",
                 interactive=True,
             )
+            show_raw_toggle = gr.Checkbox(
+                value=False,
+                label="Show raw tokens (instead of decoded text)",
+                interactive=True,
+            )
 
         text_input = gr.Textbox(
             lines=4,
@@ -470,14 +502,21 @@ def build_app() -> gr.Blocks:
         # Auto-tokenize on text change
         text_input.change(
             fn=render_all_results,
-            inputs=[text_input, group_dd],
+            inputs=[text_input, group_dd, show_raw_toggle],
             outputs=output_html,
         )
 
         # Also tokenize when group changes
         group_dd.change(
             fn=render_all_results,
-            inputs=[text_input, group_dd],
+            inputs=[text_input, group_dd, show_raw_toggle],
+            outputs=output_html,
+        )
+
+        # Also tokenize when toggle changes
+        show_raw_toggle.change(
+            fn=render_all_results,
+            inputs=[text_input, group_dd, show_raw_toggle],
             outputs=output_html,
         )
 
