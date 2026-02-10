@@ -55,17 +55,15 @@ def train_base_tokenizer(
     train_files = []
     for lang_code, train_file in corpus_info.items():
         train_files.append(train_file)
-    
+
     if not train_files:
         logging.error("No training files found")
         return None
-    
+
     # Create and train the tokenizer
 
     base_tokenizer = StandardUnigramLMTokenizer(
-        em_mode=em_mode, 
-        from_base_tokenizer=model_tokenizer_path,
-        unk_token=unk_token
+        em_mode=em_mode, from_base_tokenizer=model_tokenizer_path, unk_token=unk_token
     )
     base_tokenizer.train(train_files, base_output_path, corpus_info=corpus_info)
 
@@ -213,7 +211,7 @@ def run_tokenizer_training(
         load_base_if_exists=True,  # Always load the base we just trained
         load_tokenizers_if_exists=False,  # Always retrain
     )
-    
+
     logging.info("All tokenizers trained successfully!")
     logging.info(f"Tokenizers directory: {tokenizers_dir}")
     logging.info("  - Base tokenizer: base_tokenizer.json")

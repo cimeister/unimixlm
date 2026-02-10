@@ -1,26 +1,29 @@
-import os, time, itertools
+import os
+import time
+import itertools
 import logging
 import json
 import argparse
 from tqdm import tqdm
 from multiprocessing import Pool, cpu_count
-from typing import Dict, Any, List, Tuple, Optional
+from typing import Dict, Any, Optional
 
 from pathlib import Path
+
 # New faster helpers (module‑level – put them near the top of the file)
 # ----------------------------------------------------------------------
-import ujson                # 2‑3× faster than stdlib json
+import ujson  # 2‑3× faster than stdlib json
 from code.utils import encode_text, load_tokenizer_from_config, mk_id
 
 logging.basicConfig(
-    level=logging.INFO,
-    format='%(asctime)s - %(name)s - %(levelname)s - %(message)s'
+    level=logging.INFO, format="%(asctime)s - %(name)s - %(levelname)s - %(message)s"
 )
 logger = logging.getLogger(__name__)
 
 # ---------- helper: disable inner Rust tokenizer thread-pools ----------
 _WORKER_TOKENIZER = None
-_WORKER_USE_BEST  = False
+_WORKER_USE_BEST = False
+
 
 def _init_worker(tokenizer, use_best):
     """
@@ -30,7 +33,8 @@ def _init_worker(tokenizer, use_best):
     os.environ["TOKENIZERS_PARALLELISM"] = "false"
     global _WORKER_TOKENIZER, _WORKER_USE_BEST
     _WORKER_TOKENIZER = tokenizer
-    _WORKER_USE_BEST  = use_best
+    _WORKER_USE_BEST = use_best
+
 
 # NEW helper ----------------------------------------------------------
 def _iter_batches(fin, batch_size: int):
@@ -40,6 +44,7 @@ def _iter_batches(fin, batch_size: int):
         if not batch:
             break
         yield batch
+
 
 def _process_batch_lines(lines):
     """
@@ -63,55 +68,65 @@ def _process_batch_lines(lines):
         if not txt or txt.isspace():
             continue
         unk_total += ids.count(unk_id)
-        rec = {"text": txt, "token_ids": ids, 'sample_id': mk_id(txt)}
+        rec = {"text": txt, "token_ids": ids, "sample_id": mk_id(txt)}
         if best is not None:
             rec["best_lang"] = best[i]
         json_parts.append(ujson.dumps(rec))
 
     return "\n".join(json_parts) + "\n", unk_total
 
+
 def _tokenize_file(
-        lang: str, split: str,
-        in_path: str, out_path: str,
-        tokenizer, use_best: bool,
-        batch_size: int = 4096, n_workers: int | None = None):
+    lang: str,
+    split: str,
+    in_path: str,
+    out_path: str,
+    tokenizer,
+    use_best: bool,
+    batch_size: int = 4096,
+    n_workers: int | None = None,
+):
 
     n_workers = n_workers or min(20, cpu_count() - 1)
     line_cnt = unk_cnt = 0
 
-    with open(in_path, "r", encoding="utf-8", errors="replace") as fin, \
-         open(out_path, "w", encoding="utf-8") as fout, \
-         Pool(n_workers,
-              initializer=_init_worker,
-              initargs=(tokenizer, use_best)) as pool:
-
+    with (
+        open(in_path, "r", encoding="utf-8", errors="replace") as fin,
+        open(out_path, "w", encoding="utf-8") as fout,
+        Pool(
+            n_workers, initializer=_init_worker, initargs=(tokenizer, use_best)
+        ) as pool,
+    ):
         for jsonl, unks in tqdm(
-                pool.imap_unordered(_process_batch_lines,
-                                    _iter_batches(fin, batch_size),
-                                    chunksize=1),
-                desc=f"{lang}-{split}"):
+            pool.imap_unordered(
+                _process_batch_lines, _iter_batches(fin, batch_size), chunksize=1
+            ),
+            desc=f"{lang}-{split}",
+        ):
             fout.write(jsonl)
-            line_cnt += jsonl.count("\n")      # one per record
-            unk_cnt  += unks
+            line_cnt += jsonl.count("\n")  # one per record
+            unk_cnt += unks
 
     return line_cnt, unk_cnt
 
 
 class CorpusTokenizer:
     """
-    A class for tokenizing corpora with various tokenizers 
-    
+    A class for tokenizing corpora with various tokenizers
+
     """
-    
-    def __init__(self, 
-                 corpus_info: Dict[str, Dict[str, Any]],
-                 tokenizers: Dict[str, Dict[str, Any]],
-                 output_dir: str = "",
-                 max_lines_per_file: Optional[int] = 10000,
-                 skip_if_exists: bool = True):
+
+    def __init__(
+        self,
+        corpus_info: Dict[str, Dict[str, Any]],
+        tokenizers: Dict[str, Dict[str, Any]],
+        output_dir: str = "",
+        max_lines_per_file: Optional[int] = 10000,
+        skip_if_exists: bool = True,
+    ):
         """
         Initialize the CorpusTokenizer.
-        
+
         Args:
             corpus_info: Dictionary mapping language codes to corpus information
             tokenizers: Dictionary mapping tokenizer names to tokenizer configurations
@@ -124,35 +139,34 @@ class CorpusTokenizer:
         self.output_dir = output_dir
         self.max_lines_per_file = max_lines_per_file
         self.skip_if_exists = skip_if_exists
-            
+
         # Load tokenizers
         self.tokenizers = self._load_tokenizers()
-        
+
         # Track tokenized files
         self.tokenized_files = {name: {} for name in self.tokenizers.keys()}
-    
+
     def _load_tokenizers(self) -> Dict[str, Any]:
         """
         Load all tokenizers from configurations.
-        
+
         Returns:
             Dictionary mapping tokenizer names to loaded tokenizer objects
         """
         loaded_tokenizers = {}
-        
+
         for name, config in self.tokenizer_configs.items():
             try:
                 tokenizer = load_tokenizer_from_config(config)
-                loaded_tokenizers[name] = {
-                    'tokenizer': tokenizer,
-                    'config': config
-                }
+                loaded_tokenizers[name] = {"tokenizer": tokenizer, "config": config}
                 logger.info(f"Loaded tokenizer '{name}'")
-                
+
             except Exception as e:
-                logger.error(f"Failed to load tokenizer '{name}' with config {config}: {str(e)}")
+                logger.error(
+                    f"Failed to load tokenizer '{name}' with config {config}: {str(e)}"
+                )
         return loaded_tokenizers
-    
+
     def tokenize_all(self):
 
         # ---------- determine total number of jobs ------------------------
@@ -164,11 +178,11 @@ class CorpusTokenizer:
         job_idx = 0  # 1-based progress counter
         # ==================================================================
         for tname, tdata in self.tokenizers.items():
-            tok      = tdata["tokenizer"]
-            cfg      = tdata["config"]
+            tok = tdata["tokenizer"]
+            cfg = tdata["config"]
             use_best = cfg.get("use_best_lang", True)
-            bs       = cfg.get("batch_size", 4096)   # lines per mini-task
-            workers  = cfg.get("workers")            # None → cpu_count()-1
+            bs = cfg.get("batch_size", 4096)  # lines per mini-task
+            workers = cfg.get("workers")  # None → cpu_count()-1
 
             unk_tok = getattr(tok, "unk_token")
             unk_id = tok.get_vocab().get(unk_tok)
@@ -192,7 +206,9 @@ class CorpusTokenizer:
                     tag = f"[{job_idx}/{total_jobs}] [{tname}] {lang}-{split}"
 
                     if not os.path.isfile(in_path):
-                        logger.warning(f"{tag}: input file {in_path} is missing – skipped")
+                        logger.warning(
+                            f"{tag}: input file {in_path} is missing – skipped"
+                        )
                         continue
 
                     out_path = lang_out / f"{split}.jsonl"
@@ -201,27 +217,31 @@ class CorpusTokenizer:
                         self.tokenized_files[tname][lang][split] = str(out_path)
                         continue
 
-                    logger.info(f"{tag}: starting tokenisation "
-                                f"(batch={bs}, workers={workers or 'auto'})")
+                    logger.info(
+                        f"{tag}: starting tokenisation "
+                        f"(batch={bs}, workers={workers or 'auto'})"
+                    )
                     t0 = time.perf_counter()
 
                     n_lines, n_unk = _tokenize_file(
-                        lang       = lang,
-                        split      = split,
-                        in_path    = in_path,
-                        out_path   = str(out_path),
-                        tokenizer  = tok,
-                        use_best   = use_best,
-                        batch_size = bs,
-                        n_workers  = workers,
+                        lang=lang,
+                        split=split,
+                        in_path=in_path,
+                        out_path=str(out_path),
+                        tokenizer=tok,
+                        use_best=use_best,
+                        batch_size=bs,
+                        n_workers=workers,
                     )
 
                     dt = time.perf_counter() - t0
                     if n_lines:
                         self.tokenized_files[tname][lang][split] = str(out_path)
 
-                    logger.info(f"{tag}: done in {dt:,.1f}s – "
-                                f"{n_lines:,} lines, {n_unk:,} UNK → {out_path}")
+                    logger.info(
+                        f"{tag}: done in {dt:,.1f}s – "
+                        f"{n_lines:,} lines, {n_unk:,} UNK → {out_path}"
+                    )
 
         return self.tokenized_files
 
@@ -229,41 +249,51 @@ class CorpusTokenizer:
 def load_config(config_path):
     """
     Load configuration from JSON file.
-    
+
     Args:
         config_path: Path to configuration file
-        
+
     Returns:
         Configuration dictionary
     """
-    with open(config_path, 'r', encoding='utf-8', errors="replace") as f:
+    with open(config_path, "r", encoding="utf-8", errors="replace") as f:
         return json.load(f)
 
 
 def main():
-    parser = argparse.ArgumentParser(description='Tokenize corpora with multiple tokenizers')
-    parser.add_argument('--config', type=str, required=True, help='Path to configuration JSON file')
-    parser.add_argument('--output_dir', type=str, default="", help='Base output directory')
-    parser.add_argument('--max_lines', type=int, default=10000, help='Maximum lines per file')
-    parser.add_argument('--no_skip', action='store_true', help='Do not skip existing files')
-    
+    parser = argparse.ArgumentParser(
+        description="Tokenize corpora with multiple tokenizers"
+    )
+    parser.add_argument(
+        "--config", type=str, required=True, help="Path to configuration JSON file"
+    )
+    parser.add_argument(
+        "--output_dir", type=str, default="", help="Base output directory"
+    )
+    parser.add_argument(
+        "--max_lines", type=int, default=10000, help="Maximum lines per file"
+    )
+    parser.add_argument(
+        "--no_skip", action="store_true", help="Do not skip existing files"
+    )
+
     args = parser.parse_args()
-    
+
     # Load configuration
     config = load_config(args.config)
-    
+
     # Create corpus tokenizer
     corpus_tokenizer = CorpusTokenizer(
-        corpus_info=config['corpus_info'],
-        tokenizers=config['tokenizers'],
+        corpus_info=config["corpus_info"],
+        tokenizers=config["tokenizers"],
         output_dir=args.output_dir,
         max_lines_per_file=args.max_lines,
-        skip_if_exists=not args.no_skip
+        skip_if_exists=not args.no_skip,
     )
-    
+
     # Tokenize all corpora
     results = corpus_tokenizer.tokenize_all()
-    
+
     # Print summary
     logger.info("\n===== Tokenization Summary =====")
     for tokenizer_name, lang_data in results.items():
