@@ -3,6 +3,7 @@ from __future__ import annotations
 
 import logging
 import os
+import json
 from pathlib import Path
 from typing import Dict, List
 import numpy as np
@@ -16,7 +17,7 @@ from code.standard_unigramlm import StandardUnigramLMTokenizer
 from code.utils import get_baseline_bytes
 from code.tokenizer_formatting_utils import (
     _build_unigramlm_hf_tokenizer_from_lprobs,
-    _get_hf_unigram_tokenizer_vocab,
+    _load_vocab_from_hf_tokenizer,
     _write_sp_seed_vocab_file,
     write_hf_bytelevel_corpus,
 )
@@ -43,8 +44,13 @@ def _extract_log_scores(tok: Tokenizer) -> Dict[str, float]:
     """
     Return dict {token -> log_score} from a HF Unigram tokenizer.
     """
-    vocab_tuples = _get_hf_unigram_tokenizer_vocab(tok)
-    return {tok: score for tok, score in vocab_tuples}
+    state = tok.model.__getstate__()
+    attributes = json.loads(state.decode("utf-8"))
+    vocab = attributes["vocab"]
+    if isinstance(vocab, dict):
+        # This is the format the BPE vocab comes in
+        return {tok: MIN_TOKEN_LOG_PROB for tok, _ in vocab.items()}
+    return {tok: score for tok, score in vocab}
 
 
 def _build_unigramlm_hf_tokenizer_with_new_lprobs(
@@ -53,8 +59,8 @@ def _build_unigramlm_hf_tokenizer_with_new_lprobs(
     """
     Turn a plain probability dictionary into a HF Unigram tokenizer.
     """
-    vocab_tuples = _get_hf_unigram_tokenizer_vocab(base_tokenizer)
-    tuples = [(t, max(new_log_probs[t], MIN_TOKEN_LOG_PROB)) for t, _ in vocab_tuples]
+    vocab = _load_vocab_from_hf_tokenizer(base_tokenizer)
+    tuples = [(t, max(new_log_probs[t], MIN_TOKEN_LOG_PROB)) for t in vocab]
 
     unk_id = base_tokenizer.get_vocab()[unk_token]
     tok = _build_unigramlm_hf_tokenizer_from_lprobs(
@@ -107,8 +113,7 @@ class LanguageSpecificUnigramLMTokenizer(StandardUnigramLMTokenizer):
         """
         # Load the base tokenizer using the parent class method
         super().load(base_path)
-        vocab_tuples = _get_hf_unigram_tokenizer_vocab(self.base_tokenizer)
-        base_vocab_order = [i for i, j in vocab_tuples]
+        base_vocab_order = _load_vocab_from_hf_tokenizer(self.base_tokenizer)
 
         # Initialize language info
         self.per_lang_tok = {}
@@ -117,8 +122,8 @@ class LanguageSpecificUnigramLMTokenizer(StandardUnigramLMTokenizer):
         if language_paths:
             for lang_code, lang_tok_path in language_paths.items():
                 tok = Tokenizer.from_file(lang_tok_path)
-                vocab_order_per_lang = _get_hf_unigram_tokenizer_vocab(tok)
-                assert [i for i, j in vocab_order_per_lang] == base_vocab_order
+                vocab_order_per_lang = _load_vocab_from_hf_tokenizer(tok)
+                assert vocab_order_per_lang == base_vocab_order
                 self.per_lang_tok[lang_code] = {
                     "tokenizer": tok,
                     "scores": _extract_log_scores(tok),
@@ -168,20 +173,16 @@ class LanguageSpecificUnigramLMTokenizer(StandardUnigramLMTokenizer):
             out_prefix = os.path.join(tmpdir, "model")
             vocab_path = os.path.join(tmpdir, "vocab.tsv")
             # 1. Prepare the vocabulary file
-            base_vocab_with_scores = _get_hf_unigram_tokenizer_vocab(
+            base_vocab = _load_vocab_from_hf_tokenizer(
                 self.base_tokenizer
             )
-            num_pieces = len(
-                [
-                    t
-                    for t, _ in base_vocab_with_scores
-                    if t not in set(self.special_tokens) | {self.unk_token}
-                ]
-            )  # exclude <unk>, <s>, </s>, <pad>, etc.
+            excluded = set(self.special_tokens) | {self.unk_token}  # exclude <unk>, <s>, </s>, <pad>, etc.
+            num_pieces = sum(1 for t in base_vocab if t not in excluded)
+ 
             initial_log_score = np.log(1.0 / num_pieces) if num_pieces > 0 else -10.0
 
             token_count = _write_sp_seed_vocab_file(
-                [(t, initial_log_score) for t, _ in base_vocab_with_scores],
+                [(t, initial_log_score) for t in base_vocab],
                 vocab_path,
                 self.unk_token,
             )
