@@ -18,29 +18,33 @@ from tokenizers.pre_tokenizers import ByteLevel
 from transformers import AutoTokenizer
 
 import logging
+
 logging.basicConfig(
-    level=logging.INFO,
-    format='%(asctime)s - %(name)s - %(levelname)s - %(message)s'
+    level=logging.INFO, format="%(asctime)s - %(name)s - %(levelname)s - %(message)s"
 )
 logger = logging.getLogger(__name__)
 
 
-def get_baseline_bytes() -> Tuple[Set[str], Dict[str,int]]:
+def get_baseline_bytes() -> Tuple[Set[str], Dict[str, int]]:
     alphabet = ByteLevel.alphabet()
-    return set(alphabet), {c:1 for c in alphabet}
+    return set(alphabet), {c: 1 for c in alphabet}
 
 
-def get_baseline_characters(training_data_files, character_coverage=0.9995, min_occurence_threshold=constants.MIN_CHAR_OCCURENCE_THRESHOLD):
+def get_baseline_characters(
+    training_data_files,
+    character_coverage=0.9995,
+    min_occurence_threshold=constants.MIN_CHAR_OCCURENCE_THRESHOLD,
+):
     """
     Get baseline characters from training data files, matching SentencePiece's approach.
-    
+
     Args:
         training_data_files: List of file paths to process
         character_coverage: Target character coverage ratio (between 0.0 and 1.0)
                            Default is 0.9995 which is SentencePiece's default
         min_occurence_threshold: Minimum number of occurrences for a character
                                 to be included regardless of coverage
-        
+
     Returns:
         Tuple of (chars_to_keep, char_freqs) where chars_to_keep includes:
         1. Characters that are part of the character_coverage set
@@ -48,85 +52,94 @@ def get_baseline_characters(training_data_files, character_coverage=0.9995, min_
     """
     # Use multiprocessing for faster file processing
     num_processes = min(multiprocessing.cpu_count() or 1, len(training_data_files), 20)
-    
+
     # Process files in parallel
     chars_by_file = {}
     total_char_counts = Counter()
-    
+
     with multiprocessing.Pool(processes=num_processes) as pool:
         results = pool.map(_count_worker, training_data_files)
-        
+
         # Aggregate results
         for file_path, counts in results:
             chars_by_file[file_path] = counts
             total_char_counts.update(counts)
-    
+
     # Calculate total character occurrences
     total_chars = sum(total_char_counts.values())
-    
+
     # Get relative frequencies
-    char_freqs = {char: count/total_chars for char, count in total_char_counts.items()}
-    
+    char_freqs = {
+        char: count / total_chars for char, count in total_char_counts.items()
+    }
+
     # Sort characters by frequency (descending)
     sorted_chars = sorted(total_char_counts.items(), key=lambda x: x[1], reverse=True)
-    
+
     # First set: Characters that meet the coverage threshold
     coverage_chars = set()
     cumulative_coverage = 0.0
     target_coverage = total_chars * character_coverage
-    
+
     for char, count in sorted_chars:
         coverage_chars.add(char)
         cumulative_coverage += count
-        
+
         # Stop once we reach the target coverage
         if cumulative_coverage >= target_coverage:
             break
-    
+
     # Second set: Characters that appear at least min_occurence_threshold times
-    frequency_chars = {char for char, count in total_char_counts.items() 
-                      if count >= min_occurence_threshold}
-    
+    frequency_chars = {
+        char
+        for char, count in total_char_counts.items()
+        if count >= min_occurence_threshold
+    }
+
     # Union of the two sets
     chars_to_keep = list(coverage_chars.union(frequency_chars))
-    
+
     # Calculate actual character coverage percentage
     covered_count = sum(total_char_counts[char] for char in coverage_chars)
     actual_coverage = covered_count / total_chars * 100.0
-    
+
     # Count chars included only due to frequency threshold
     freq_only_chars = frequency_chars - coverage_chars
     freq_only_count = len(freq_only_chars)
-    
+
     # Log coverage statistics
-    logger.info(f"Character coverage: {len(coverage_chars)}/{len(total_char_counts)} "
-                f"characters ({actual_coverage:.4f}%)")
+    logger.info(
+        f"Character coverage: {len(coverage_chars)}/{len(total_char_counts)} "
+        f"characters ({actual_coverage:.4f}%)"
+    )
     logger.info(f"Additional characters from frequency threshold: {freq_only_count}")
     logger.info(f"Total characters kept: {len(chars_to_keep)}")
-    logger.info(f"Characters not included: {len(total_char_counts) - len(chars_to_keep)}")
-    
+    logger.info(
+        f"Characters not included: {len(total_char_counts) - len(chars_to_keep)}"
+    )
+
     return chars_to_keep, char_freqs
 
 
 def _count_worker(file_path):
     """
     Worker function to count character/byte frequencies in a file.
-    
+
     Args:
         file_path: Path to the file to process
-        
+
     Returns:
         Tuple of (file_path, token_counts)
     """
     try:
         # Initialize token counter
         token_counts = Counter()
-        
+
         # Process the file
-        with open(file_path, 'r', encoding='utf-8', errors='replace') as f:
+        with open(file_path, "r", encoding="utf-8", errors="replace") as f:
             for line in f:
                 token_counts.update(line)
-        
+
         return file_path, token_counts
     except Exception as e:
         logger.error(f"Error processing {file_path}: {e}")
@@ -137,7 +150,7 @@ def compute_intersection_pruning_tokens(
     per_lang_losses: Dict[str, List[Tuple[str, float]]],
     k_drop: int,
     lang_codes: List[str],
-    under_consideration: Optional[Set[str]] = None
+    under_consideration: Optional[Set[str]] = None,
 ) -> Set[str]:
     """
     Find tokens to prune using rank-based intersection approach.
@@ -158,22 +171,25 @@ def compute_intersection_pruning_tokens(
     Returns the k_drop tokens with the smallest max-ranks (best worst-case performance).
     """
     import logging
+
     logger = logging.getLogger(__name__)
-    
+
     if k_drop <= 0:
         return set()
-    
+
     if not lang_codes or len(lang_codes) < 2:
         logger.warning("Intersection pruning requires at least 2 languages")
         return set()
-    
+
     # Determine tokens under consideration
     if under_consideration is None:
         under_consideration = set()
         for lang_losses in per_lang_losses.values():
             under_consideration.update(token for token, _ in lang_losses)
-    
-    logger.info(f"Computing intersection pruning for {len(under_consideration)} tokens across {len(lang_codes)} languages")
+
+    logger.info(
+        f"Computing intersection pruning for {len(under_consideration)} tokens across {len(lang_codes)} languages"
+    )
 
     # Rank tokens within each language based on pre-computed losses
     per_lang_ranks = {}  # lang -> {token: rank}
@@ -192,8 +208,10 @@ def compute_intersection_pruning_tokens(
         per_lang_ranks[lc] = token_to_rank
         total_under_consideration_in_lang = len(token_to_rank)
         missing_tokens = len(under_consideration) - total_under_consideration_in_lang
-        logger.info(f"Language {lc}: ranked {total_under_consideration_in_lang} tokens, {missing_tokens} missing (assigned rank 0)")
-    
+        logger.info(
+            f"Language {lc}: ranked {total_under_consideration_in_lang} tokens, {missing_tokens} missing (assigned rank 0)"
+        )
+
     # For each token, compute its maximum rank across all languages
     # Missing tokens get rank 0 (highest removal priority for loss-based systems)
     token_max_ranks = []  # (token, max_rank)
@@ -213,21 +231,27 @@ def compute_intersection_pruning_tokens(
         # Tokens missing from any language will have a rank of 0 contributing to their max
         max_rank = max(token_ranks)
         token_max_ranks.append((tk, max_rank))
-    
+
     # Sort by max rank (ascending = tokens with best worst-case rank)
     token_max_ranks.sort(key=lambda x: x[1])
-    
+
     # Select k_drop tokens with smallest max-ranks
     if len(token_max_ranks) < k_drop:
-        logger.warning(f"Only {len(token_max_ranks)} tokens available, but {k_drop} requested")
+        logger.warning(
+            f"Only {len(token_max_ranks)} tokens available, but {k_drop} requested"
+        )
         selected_tokens = set([tk for tk, _ in token_max_ranks])
     else:
         selected_tokens = set([tk for tk, _ in token_max_ranks[:k_drop]])
-    
+
     if selected_tokens:
-        selected_ranks = [max_rank for tk, max_rank in token_max_ranks[:len(selected_tokens)]]
-        logger.info(f"Intersection pruning: selected {len(selected_tokens)} tokens with max-ranks from {min(selected_ranks)} to {max(selected_ranks)}")
-    
+        selected_ranks = [
+            max_rank for tk, max_rank in token_max_ranks[: len(selected_tokens)]
+        ]
+        logger.info(
+            f"Intersection pruning: selected {len(selected_tokens)} tokens with max-ranks from {min(selected_ranks)} to {max(selected_ranks)}"
+        )
+
     return selected_tokens
 
 
@@ -239,11 +263,17 @@ def _as_batch(txt):
         return txt, False
     raise TypeError(type(txt))
 
+
 def _apply_trunc_pad(
-    ids_batch, toks_batch, offs_batch,
-    *,                      # keyword-only args below
-    truncation: bool, max_length: int | None,
-    padding: str | None, pad_id: int, pad_tok: str,
+    ids_batch,
+    toks_batch,
+    offs_batch,
+    *,  # keyword-only args below
+    truncation: bool,
+    max_length: int | None,
+    padding: str | None,
+    pad_id: int,
+    pad_tok: str,
     return_attention_mask: bool,
 ):
     """
@@ -254,8 +284,9 @@ def _apply_trunc_pad(
     out_ids, out_toks, out_offs = [], [], []
     masks = [] if return_attention_mask else None
 
-    for ids, toks, offs in zip(ids_batch, toks_batch,
-                               offs_batch or [None] * len(ids_batch)):
+    for ids, toks, offs in zip(
+        ids_batch, toks_batch, offs_batch or [None] * len(ids_batch)
+    ):
         # ---- 1) truncation ------------------------------------------
         if truncation and max_length:
             ids, toks = ids[:max_length], toks[:max_length]
@@ -265,7 +296,7 @@ def _apply_trunc_pad(
         # ---- 2) padding --------------------------------------------
         if padding == "max_length" and max_length:
             pad_len = max_length - len(ids)
-            ids  += [pad_id] * pad_len
+            ids += [pad_id] * pad_len
             toks += [pad_tok] * pad_len
             if offs is not None:
                 offs += [(0, 0)] * pad_len
@@ -294,7 +325,7 @@ def mk_id(raw: str) -> str:
     # 8-byte / 16-char hex digest, utf-8, replace errors
     digest = hashlib.blake2s(
         raw.encode("utf-8", "replace"),
-        digest_size=8                      # 64-bit
+        digest_size=8,  # 64-bit
     ).hexdigest()
     return digest
 
@@ -307,45 +338,58 @@ def encode_text(
     padding: Optional[str] = None,
     truncation: Union[bool, str] = False,
     max_length: Optional[int] = None,
-    stride: Optional[int] = None,                     # only honoured by HF path
-    return_offsets_mapping: bool=False,
-    return_attention_mask: bool=False,
-    return_special_tokens_mask: bool=False,
-    return_token_type_ids: bool=False,
-    return_tensors: Optional[str]=None,
-    return_word_ids: bool=False,
-    language: Optional[str]=None,
-    use_best_language: bool=True,
+    stride: Optional[int] = None,  # only honoured by HF path
+    return_offsets_mapping: bool = False,
+    return_attention_mask: bool = False,
+    return_special_tokens_mask: bool = False,
+    return_token_type_ids: bool = False,
+    return_tensors: Optional[str] = None,
+    return_word_ids: bool = False,
+    language: Optional[str] = None,
+    use_best_language: bool = True,
 ) -> Dict[str, Any]:
 
     batch_txt, was_single = _as_batch(text)
-    pad_token = tokenizer.pad_token if hasattr(tokenizer, "pad_token") else constants.SPECIAL_TOKENS["pad_token"]
+    pad_token = (
+        tokenizer.pad_token
+        if hasattr(tokenizer, "pad_token")
+        else constants.SPECIAL_TOKENS["pad_token"]
+    )
     pad_id = tokenizer.get_vocab()[pad_token]
 
     # ------------------------------------------------------------------#
     # ➊  Language-specific UnigramLM path                                #
     # ------------------------------------------------------------------#
     from code.language_specific_unigramlm import LanguageSpecificUnigramLMTokenizer
+
     if isinstance(tokenizer, LanguageSpecificUnigramLMTokenizer):
         if use_best_language:
             best_langs, enc_objects = tokenizer.best_language_encode_batch(batch_txt)
-            ids_batch  = [enc.ids    for enc in enc_objects]
+            ids_batch = [enc.ids for enc in enc_objects]
             toks_batch = [enc.tokens for enc in enc_objects]
-            offsets_b  = [enc.offsets for enc in enc_objects]
+            offsets_b = [enc.offsets for enc in enc_objects]
         else:
             if language is None:
-                raise ValueError("`language` must be provided when use_best_language=False")
-            enc_objects = tokenizer.language_info[language]["tokenizer"].encode_batch(batch_txt)
-            best_langs  = None
-            ids_batch   = [enc.ids    for enc in enc_objects]
-            toks_batch  = [enc.tokens for enc in enc_objects]
-            offsets_b   = [enc.offsets for enc in enc_objects]
+                raise ValueError(
+                    "`language` must be provided when use_best_language=False"
+                )
+            enc_objects = tokenizer.language_info[language]["tokenizer"].encode_batch(
+                batch_txt
+            )
+            best_langs = None
+            ids_batch = [enc.ids for enc in enc_objects]
+            toks_batch = [enc.tokens for enc in enc_objects]
+            offsets_b = [enc.offsets for enc in enc_objects]
 
         # ----- trunc / pad (helper unchanged) ---------------------------------
         ids_batch, toks_batch, masks, offsets_b = _apply_trunc_pad(
-            ids_batch, toks_batch, offsets_b,
-            truncation=truncation, max_length=max_length,
-            padding=padding, pad_id=pad_id,
+            ids_batch,
+            toks_batch,
+            offsets_b,
+            truncation=truncation,
+            max_length=max_length,
+            padding=padding,
+            pad_id=pad_id,
             pad_tok=pad_token,
             return_attention_mask=return_attention_mask,
         )
@@ -368,17 +412,25 @@ def encode_text(
     # ➋  Generic fast tokenizer path                                     #
     # ------------------------------------------------------------------#
     if hasattr(tokenizer, "encode_batch"):
-        encodings = tokenizer.encode_batch(batch_txt, add_special_tokens=add_special_tokens)
+        encodings = tokenizer.encode_batch(
+            batch_txt, add_special_tokens=add_special_tokens
+        )
 
-        ids_batch   = [enc.ids    for enc in encodings]
-        toks_batch  = [enc.tokens for enc in encodings]
-        word_ids_b  = [enc.word_ids() for enc in encodings] if return_word_ids else None
-        offsets_b  = [enc.offsets for enc in encodings] if return_offsets_mapping else None
+        ids_batch = [enc.ids for enc in encodings]
+        toks_batch = [enc.tokens for enc in encodings]
+        word_ids_b = [enc.word_ids() for enc in encodings] if return_word_ids else None
+        offsets_b = (
+            [enc.offsets for enc in encodings] if return_offsets_mapping else None
+        )
 
         ids_batch, toks_batch, masks, offsets_b = _apply_trunc_pad(
-            ids_batch, toks_batch, offsets_b,
-            truncation=truncation, max_length=max_length,
-            padding=padding, pad_id=pad_id,
+            ids_batch,
+            toks_batch,
+            offsets_b,
+            truncation=truncation,
+            max_length=max_length,
+            padding=padding,
+            pad_id=pad_id,
             pad_tok=pad_token,
             return_attention_mask=return_attention_mask,
         )
@@ -396,21 +448,23 @@ def encode_text(
         # ➌  Fallback to high-level HF __call__ (handles stride/overflow,…)
         # ------------------------------------------------------------------
         hf_kwargs = dict(
-            add_special_tokens   = add_special_tokens,
-            padding              = padding,
-            truncation           = truncation,
-            max_length           = max_length,
-            stride               = stride,
-            return_offsets_mapping    = return_offsets_mapping,
-            return_attention_mask     = return_attention_mask,
-            return_special_tokens_mask= return_special_tokens_mask,
-            return_token_type_ids     = return_token_type_ids,
-            return_tensors            = return_tensors,
+            add_special_tokens=add_special_tokens,
+            padding=padding,
+            truncation=truncation,
+            max_length=max_length,
+            stride=stride,
+            return_offsets_mapping=return_offsets_mapping,
+            return_attention_mask=return_attention_mask,
+            return_special_tokens_mask=return_special_tokens_mask,
+            return_token_type_ids=return_token_type_ids,
+            return_tensors=return_tensors,
         )
         enc = tokenizer(batch_txt, **hf_kwargs)
         result = enc.to_dict() if hasattr(enc, "to_dict") else dict(enc)
         if "tokens" not in result and hasattr(tokenizer, "convert_ids_to_tokens"):
-            result["tokens"] = [tokenizer.convert_ids_to_tokens(ids) for ids in result["input_ids"]]
+            result["tokens"] = [
+                tokenizer.convert_ids_to_tokens(ids) for ids in result["input_ids"]
+            ]
 
     # unwrap single example
     if was_single:
@@ -422,9 +476,9 @@ def encode_text(
 
 def proportional_corpus_iterator(
     filepaths: List[str],
-    total_bytes: int = 1_500_000_000,   # ~2GB, adjust if you want smaller
+    total_bytes: int = 1_500_000_000,  # ~2GB, adjust if you want smaller
     encoding: str = "utf-8",
-    min_chunk: int = 0,                 # set >0 if you want to force at least N bytes per file
+    min_chunk: int = 0,  # set >0 if you want to force at least N bytes per file
 ) -> Iterator[str]:
     """
     Yield lines from all files, where each file contributes
@@ -504,26 +558,25 @@ class SafeFormattingDict(dict):
 
 
 def load_tokenizer_from_config(config):
-    tokenizer_class = config.get('class', 'standard')
-    byte_level = config.get('byte_level', False)
-    
-    if tokenizer_class == 'standard':
+    tokenizer_class = config.get("class", "standard")
+    byte_level = config.get("byte_level", False)
+
+    if tokenizer_class == "standard":
         from code.standard_unigramlm import StandardUnigramLMTokenizer
-        tokenizer = StandardUnigramLMTokenizer(
-            byte_level=byte_level,
-            multigram=False
-        )
-        tokenizer.load(config['path'])
-        
-    elif tokenizer_class == 'langspec':
+
+        tokenizer = StandardUnigramLMTokenizer(byte_level=byte_level, multigram=False)
+        tokenizer.load(config["path"])
+
+    elif tokenizer_class == "langspec":
         from code.language_specific_unigramlm import LanguageSpecificUnigramLMTokenizer
+
         tokenizer = LanguageSpecificUnigramLMTokenizer(byte_level=byte_level)
-        tokenizer.load(config['base_path'], config.get('language_paths'))
-        
+        tokenizer.load(config["base_path"], config.get("language_paths"))
+
     else:
         # Try loading as a HuggingFace tokenizer
         try:
-            tokenizer = AutoTokenizer.from_pretrained(config['path'])
+            tokenizer = AutoTokenizer.from_pretrained(config["path"])
         except Exception as e:
             logger.info(f"Tried to load tokenizer via default method and could not {e}")
             raise
@@ -537,13 +590,13 @@ def tokmix_merge(
     special: List[str],
     pretokenizer: Any,
     decoder: Any = None,
-    pruning_criterion: str = "probability",      # "probability", "approx_loss", "exact_loss"
-    use_intersection_pruning: bool = False,      # True = intersection, False = average
-    byte_level: bool = False
+    pruning_criterion: str = "probability",  # "probability", "approx_loss", "exact_loss"
+    use_intersection_pruning: bool = False,  # True = intersection, False = average
+    byte_level: bool = False,
 ) -> Tokenizer:
     """
     Unified TokMix merge function supporting all combinations of pruning criteria and strategies.
-    
+
     Args:
         per_lang_tokenizers: Dict[lang, Dict[token, prob]] - per-language tokenizer probabilities
         k_final: Final vocabulary size
@@ -553,35 +606,43 @@ def tokmix_merge(
         pruning_criterion: What values to use for ranking ("probability", "approx_loss", "exact_loss")
         use_intersection_pruning: Selection strategy (intersection vs average-based)
         byte_level: Whether to use byte-level processing for exact loss computation
-    
+
     Returns:
         HuggingFace Tokenizer object
     """
-    from code.em_utils import _compute_alternatives_direct, _compute_loss_with_alternative_sequences
+    from code.em_utils import (
+        _compute_alternatives_direct,
+        _compute_loss_with_alternative_sequences,
+    )
     import math
-    
+
     lang_codes = list(per_lang_tokenizers.keys())
     n_langs = len(lang_codes)
     pinned = set(special)
-    
+
     # Get all unique tokens across languages
     all_tokens = set()
     for token_probs in per_lang_tokenizers.values():
         all_tokens.update(token_probs.keys())
     candidate_tokens = all_tokens - pinned
-    
-    logger.info(f"TokMix merge: {len(all_tokens)} total tokens, {len(candidate_tokens)} candidates, "
-               f"criterion={pruning_criterion}, intersection={use_intersection_pruning}")
-    
+
+    logger.info(
+        f"TokMix merge: {len(all_tokens)} total tokens, {len(candidate_tokens)} candidates, "
+        f"criterion={pruning_criterion}, intersection={use_intersection_pruning}"
+    )
+
     # Step 1: Compute per-language values based on pruning criterion
     per_lang_values = {}  # lang -> List[Tuple[token, value]]
-    
+
     if pruning_criterion == "probability":
         # Use probabilities directly
         for lang, token_probs in per_lang_tokenizers.items():
-            per_lang_values[lang] = [(token, prob) for token, prob in token_probs.items() 
-                                   if token in candidate_tokens]
-    
+            per_lang_values[lang] = [
+                (token, prob)
+                for token, prob in token_probs.items()
+                if token in candidate_tokens
+            ]
+
     elif pruning_criterion in ["approx_loss", "exact_loss"]:
         # Compute losses
         if pruning_criterion == "exact_loss":
@@ -589,35 +650,40 @@ def tokmix_merge(
             logger.info("Pre-computing alternative sequences...")
             per_lang_alternatives = {}
             for lang, token_probs in per_lang_tokenizers.items():
-                alternatives = _compute_alternatives_direct(token_probs, unk_token, byte_level=byte_level)
+                alternatives = _compute_alternatives_direct(
+                    token_probs, unk_token, byte_level=byte_level
+                )
                 per_lang_alternatives[lang] = alternatives
-        
+
         logger.info(f"Computing {pruning_criterion} values...")
         for lang, token_probs in per_lang_tokenizers.items():
             lang_values = []
             for token in candidate_tokens:
                 if token not in token_probs:
                     continue  # Skip tokens not in this language
-                    
+
                 if pruning_criterion == "approx_loss":
-                    # Use probability as implicit count: prob * log(prob) 
+                    # Use probability as implicit count: prob * log(prob)
                     # Positive values to match exact_loss semantics (higher = more important)
                     loss = token_probs[token] * math.log(max(token_probs[token], 1e-30))
                 else:  # exact_loss
                     # Use exact loss with alternatives
                     loss = _compute_loss_with_alternative_sequences(
-                        token, token_probs, per_lang_alternatives[lang], 
-                        token_probs, unk_token
+                        token,
+                        token_probs,
+                        per_lang_alternatives[lang],
+                        token_probs,
+                        unk_token,
                     )
                 lang_values.append((token, loss))
             per_lang_values[lang] = lang_values
-    
+
     # Step 2: Token selection based on strategy
     if use_intersection_pruning:
         # Use intersection-based selection
         tokens_to_keep_count = k_final - len(pinned)
         tokens_to_drop = len(candidate_tokens) - tokens_to_keep_count
-        
+
         if tokens_to_drop > 0:
             selected_to_remove = compute_intersection_pruning_tokens(
                 per_lang_values, tokens_to_drop, lang_codes, candidate_tokens
@@ -625,9 +691,9 @@ def tokmix_merge(
             kept_candidates = candidate_tokens - selected_to_remove
         else:
             kept_candidates = candidate_tokens
-            
+
         kept_tokens = list(special) + list(kept_candidates)
-        
+
     else:
         # Use average-based selection
         if pruning_criterion == "probability":
@@ -638,75 +704,73 @@ def tokmix_merge(
                     avg_values[token] += prob
             for token in avg_values:
                 avg_values[token] /= n_langs
-            
+
             # Sort by averaged probability (descending - higher prob = keep)
-            sorted_tokens = sorted(
-                avg_values.items(),
-                key=lambda x: x[1], 
-                reverse=True
-            )
+            sorted_tokens = sorted(avg_values.items(), key=lambda x: x[1], reverse=True)
         else:
-            # Average losses (original tokmix_merge_loss_based logic)  
+            # Average losses (original tokmix_merge_loss_based logic)
             avg_values = defaultdict(float)
             for lang_values in per_lang_values.values():
                 for token, loss in lang_values:
                     avg_values[token] += loss
             for token in avg_values:
                 avg_values[token] /= n_langs
-            
+
             # Sort by averaged loss (ascending - lower loss = less important = remove first)
             # But we want to KEEP tokens with highest removal loss, so reverse=True
-            sorted_tokens = sorted(
-                avg_values.items(),
-                key=lambda x: x[1], 
-                reverse=True
-            )
-        
+            sorted_tokens = sorted(avg_values.items(), key=lambda x: x[1], reverse=True)
+
         # Keep top tokens
         num_regular_tokens = max(0, k_final - len(special))
         kept_regular = [token for token, _ in sorted_tokens[:num_regular_tokens]]
         kept_tokens = list(special) + kept_regular
-    
+
     logger.info(f"Selected {len(kept_tokens)} tokens for final vocabulary")
-    
+
     # Step 3: Build final tokenizer with probability averaging
     # Always use probability averaging for final tokenizer construction
     avg_prob = defaultdict(float)
-    
+
     for token in kept_tokens:
         for lang_probs in per_lang_tokenizers.values():
             avg_prob[token] += lang_probs.get(token, 0.0)
         avg_prob[token] /= n_langs
-    
+
     # Normalize probabilities
     Z = sum(avg_prob[t] for t in kept_tokens if t not in pinned)
     lprobs_tuples = []
     for token in kept_tokens:
         if token in pinned:
-            # Special tokens keep their averaged probability  
+            # Special tokens keep their averaged probability
             p = max(avg_prob[token], constants.MIN_TOKEN_PROB)
         else:
             # Regular tokens get renormalized
             p = avg_prob[token] / Z if Z > 0 else constants.MIN_TOKEN_PROB
         lprobs_tuples.append((token, math.log(max(p, constants.MIN_TOKEN_PROB))))
-    
+
     # Build HF tokenizer
     unk_id = kept_tokens.index(unk_token)
-    return _build_unigramlm_hf_tokenizer_from_lprobs(lprobs_tuples, unk_id, pretokenizer=pretokenizer, decoder=decoder)
+    return _build_unigramlm_hf_tokenizer_from_lprobs(
+        lprobs_tuples, unk_id, pretokenizer=pretokenizer, decoder=decoder
+    )
 
 
 def _get_metadata_logging_path(output_path=None):
     logging_path = None
     if output_path:
         parent_dir = os.path.dirname(output_path)
-        base_name = os.path.splitext(os.path.basename(output_path))[0]  # remove extension
+        base_name = os.path.splitext(os.path.basename(output_path))[
+            0
+        ]  # remove extension
         metadata_dir = os.path.join(parent_dir, constants.METADATA_SUBDIR_NAME)
         os.makedirs(metadata_dir, exist_ok=True)
         logging_path = os.path.join(metadata_dir, base_name)
     return logging_path
 
 
-def _save_tokenizer_metadata(metadata_dir: str, tokenizer_path: str, metadata: Dict[str, Any]) -> str:
+def _save_tokenizer_metadata(
+    metadata_dir: str, tokenizer_path: str, metadata: Dict[str, Any]
+) -> str:
     """
     Save metadata to a separate .metadata.json file alongside the tokenizer.
 
@@ -727,13 +791,19 @@ def _save_tokenizer_metadata(metadata_dir: str, tokenizer_path: str, metadata: D
         if base_name.endswith(".json"):
             meta_name = base_name[:-5] + ".metadata.json"
         else:
-            meta_name = base_name + ".metadata.json" 
+            meta_name = base_name + ".metadata.json"
 
         metadata_path = os.path.join(metadata_dir, meta_name)
 
         # Save metadata to separate file
-        with open(metadata_path, 'w', encoding='utf-8') as f:
-            json.dump(metadata_with_ref, f, indent=2, ensure_ascii=False, separators=(',', ': '))
+        with open(metadata_path, "w", encoding="utf-8") as f:
+            json.dump(
+                metadata_with_ref,
+                f,
+                indent=2,
+                ensure_ascii=False,
+                separators=(",", ": "),
+            )
 
         logger.debug(f"Successfully saved metadata to {metadata_path}")
         return metadata_path
@@ -753,17 +823,17 @@ def _create_base_metadata(tokenizer_class: str, tokenizer_type: str) -> Dict[str
             "tokenizer_class": str(tokenizer_class),
             "tokenizer_type": str(tokenizer_type),
             "environment_info": {
-                "python_version": str(sys.version).replace('\n', ' ').strip(),
+                "python_version": str(sys.version).replace("\n", " ").strip(),
                 "platform": str(platform.platform()),
-                "num_processes": int(multiprocessing.cpu_count())
-            }
+                "num_processes": int(multiprocessing.cpu_count()),
+            },
         }
-    except Exception as e:
+    except Exception:
         # Fallback to minimal metadata if environment info fails
         return {
             "version": "1.0",
             "created_at": datetime.utcnow().isoformat() + "Z",
             "tokenizer_class": str(tokenizer_class),
             "tokenizer_type": str(tokenizer_type),
-            "environment_info": {}
+            "environment_info": {},
         }

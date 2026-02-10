@@ -4,7 +4,14 @@ import re
 from collections import OrderedDict
 
 
-SPECIAL_TOKENS = OrderedDict([("bos_token", "<s>"), ("eos_token", "</s>"), ("pad_token","<pad>"), ("unk_token","<unk>")])
+SPECIAL_TOKENS = OrderedDict(
+    [
+        ("bos_token", "<s>"),
+        ("eos_token", "</s>"),
+        ("pad_token", "<pad>"),
+        ("unk_token", "<unk>"),
+    ]
+)
 NUM_TRIMMING_ITERATIONS = 3
 NUM_FINETUNE_EM_ITERATIONS = 10
 INITIAL_VOCAB_MULT_FACTOR = 5
@@ -20,7 +27,7 @@ _RNG = random.Random(42)
 _SP_BYTE_ANY_RE = re.compile(r"<0x([0-9A-F]{2})>")
 _SP_SPACE = "▁"
 # --- SentencePiece Pruning Schedule Parameters TODO: make passable params ---
-NUM_SUB_ITERATIONS = 2 
+NUM_SUB_ITERATIONS = 2
 SHRINKING_FACTOR = 0.75  # SP's default vocabulary shrinking factor
 METADATA_SUBDIR_NAME = "metadata"
 
@@ -48,13 +55,15 @@ def _build_gpt2_byte_maps():
 _BYTE_TO_UNI, _UNI_TO_BYTE = _build_gpt2_byte_maps()
 _HF_SPACE = _BYTE_TO_UNI[32]  # typically "Ġ"
 
-SP_DEFAULT_ARGS = ["--model_type=unigram",
-                    "--train_extremely_large_corpus=true",
-                    "--normalization_rule_name=identity",
-                    "--remove_extra_whitespaces=false",
-                    "--allow_whitespace_only_pieces=true",
-                    "--unk_id=0",
-                    "--add_dummy_prefix=false",
-                    "--split_by_whitespace=false",  # handled by write_hf_bytelevel_corpus 
-                    "--split_by_unicode_script=false",
-                    "--split_by_number=false"]
+SP_DEFAULT_ARGS = [
+    "--model_type=unigram",
+    "--train_extremely_large_corpus=true",
+    "--normalization_rule_name=identity",
+    "--remove_extra_whitespaces=false",
+    "--allow_whitespace_only_pieces=true",
+    "--unk_id=0",
+    "--add_dummy_prefix=false",
+    "--split_by_whitespace=false",  # handled by write_hf_bytelevel_corpus
+    "--split_by_unicode_script=false",
+    "--split_by_number=false",
+]
