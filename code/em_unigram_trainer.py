@@ -1,4 +1,3 @@
-import os
 import logging
 
 from code.em_utils import _accumulate_usage
@@ -6,16 +5,25 @@ from code.constants import MIN_TOKEN_PROB
 
 logger = logging.getLogger(__name__)
 
+
 class EMUnigramTrainer:
     """
     EM-based trainer for a fixed vocabulary Unigram distribution.
     Uses the same EM approach as StandardUnigramLMTokenizer for consistency.
     """
 
-    def __init__(self, vocab, unk_token="<unk>", special_tokens=None,
-                 max_iterations=20, em_mode="hard", convergence_threshold=1e-6, 
-                 whitespace_token_boundaries=True, 
-                 pretokenizer=None, byte_level=False):
+    def __init__(
+        self,
+        vocab,
+        unk_token="<unk>",
+        special_tokens=None,
+        max_iterations=20,
+        em_mode="hard",
+        convergence_threshold=1e-6,
+        whitespace_token_boundaries=True,
+        pretokenizer=None,
+        byte_level=False,
+    ):
         """
         Args:
             vocab: dict(token -> ID), the shared vocabulary.
@@ -34,7 +42,7 @@ class EMUnigramTrainer:
         self.whitespace_token_boundaries = whitespace_token_boundaries
         self.pretokenizer = pretokenizer
         self.byte_level = byte_level
-        
+
         # Ensure em_mode is valid
         if self.em_mode not in ["hard", "soft"]:
             logger.warning(f"Invalid em_mode '{em_mode}', defaulting to 'hard'")
@@ -74,63 +82,68 @@ class EMUnigramTrainer:
         # EM loop
         prev_p_token = None
         for iteration in range(self.max_iterations):
-            logger.info(f"EM iteration {iteration+1}/{self.max_iterations}")
-            
+            logger.info(f"EM iteration {iteration + 1}/{self.max_iterations}")
+
             # Reset usage counts for E-step
             usage_counts = {tk: 0.0 for tk in self.vocab}
-            
+
             # Save current parameters for convergence check
             if iteration > 0:
                 prev_p_token = p_token.copy()
-            
+
             # E-step: directly use _accumulate_usage from utils
             # This function handles parallelization internally
             c_dict, total_subwords = _accumulate_usage(
-                corpus_file, 
+                corpus_file,
                 p_token,
-                self.unk_token, 
+                self.unk_token,
                 num_processes=num_processes,
                 mode=self.em_mode,
                 whitespace_boundaries=self.whitespace_token_boundaries,
                 pretokenizer=self.pretokenizer,
-                byte_level=self.byte_level
+                byte_level=self.byte_level,
             )
             # Update counts
             usage_counts.update(c_dict)
             unk_occ = usage_counts[self.unk_token]
-            unk_percent = unk_occ/total_subwords
-            logger.info(f"{unk_occ} UNK counts out of {total_subwords} total subwords ({unk_percent:.5f}%)")
-            
+            unk_percent = unk_occ / total_subwords
+            logger.info(
+                f"{unk_occ} UNK counts out of {total_subwords} total subwords ({unk_percent:.5f}%)"
+            )
+
             # M-step: Update token probabilities based on counts
             if total_subwords > 0:
                 for tk in p_token:
-                    p_token[tk] = usage_counts[tk] / total_subwords 
+                    p_token[tk] = usage_counts[tk] / total_subwords
             else:
                 logger.warning("No usage => fallback to uniform distribution.")
                 for tk in self.vocab:
                     p_token[tk] = 1.0 / len(self.vocab)
-            
+
             # Check for convergence
             if prev_p_token and iteration > 0:
                 diffs = [abs(p_token[tk] - prev_p_token[tk]) for tk in self.vocab]
                 total_diff = sum(diffs)
-                logger.info(f"Iteration {iteration+1} parameter change: {total_diff:.8f}")
-                
+                logger.info(
+                    f"Iteration {iteration + 1} parameter change: {total_diff:.8f}"
+                )
+
                 if total_diff < self.convergence_threshold:
-                    logger.info(f"Converged at iteration {iteration+1}, total_diff={total_diff:.8g}")
+                    logger.info(
+                        f"Converged at iteration {iteration + 1}, total_diff={total_diff:.8g}"
+                    )
                     break
 
-        total_prob = sum(p_token.values()) 
+        total_prob = sum(p_token.values())
         if total_prob > 0:
-            p_token = {tk: prob/total_prob for tk, prob in p_token.items()}
+            p_token = {tk: prob / total_prob for tk, prob in p_token.items()}
 
         # Keep probabilities positive
         for tk in self.vocab:
             p_token[tk] = max(p_token[tk], MIN_TOKEN_PROB)
-        
+
         # TODO: rescale other probs
         logger.info(f"Resetting UNK prob to {p_token[self.unk_token]}")
         logger.info(f"EM training completed with {self.max_iterations} iterations")
-        
+
         return p_token
-    
