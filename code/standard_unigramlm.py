@@ -718,7 +718,7 @@ class StandardUnigramLMTokenizer:
             processed_file_paths = None
             # Register a cleanup function to remove the dirpectory when the program exits.
             atexit.register(shutil.rmtree, self._temp_dir, ignore_errors=True)
-            text_files = corpus_files if not per_lang else list(corpus_info.values())
+            text_files = list(corpus_info.values()) if per_lang else corpus_files
 
             num_workers = min(min(os.cpu_count() or 1, 20), len(text_files))
             logger.info(f"Using {num_workers} worker processes.")
@@ -756,7 +756,7 @@ class StandardUnigramLMTokenizer:
             state.all_tokens
         )  # Keep track of the current vocab size
         target_vocab_size = (
-            self.vocab_size if not self.from_base_tokenizer else current_vocab_size
+            current_vocab_size if self.from_base_tokenizer else self.vocab_size
         )  # The final vocabulary size we are aiming for
 
         # This loop continues until the vocabulary is pruned down to the target size.
@@ -1364,12 +1364,13 @@ class StandardUnigramLMTokenizer:
         # TODO: make adding baseline tokens optional if using custom vocabulary
         # TODO: check for char-level whether this should be done pre or post processing
         baseline = (
-            self.baseline_tokens(
+            set()
+            if self.from_base_tokenizer
+            else self.baseline_tokens(
                 corpus_files, self.byte_level, self.min_char_occurence_threshold
             )
-            if not self.from_base_tokenizer
-            else set()
         )
+
         pinned = set(self.special_tokens) | baseline | {self.unk_token}
         if len(pinned) > self.vocab_size:
             raise ValueError(
@@ -1407,7 +1408,7 @@ class StandardUnigramLMTokenizer:
         )
 
         return EMState(
-            corpus_files=corpus_files if not self.use_sp_em else processed_corpus_files,
+            corpus_files=processed_corpus_files if self.use_sp_em else corpus_files,
             per_lang=per_lang,
             lang_codes=lang_codes,
             all_tokens=all_tokens,
@@ -1725,6 +1726,7 @@ class StandardUnigramLMTokenizer:
 
     def _get_pretokenizer(self):
         if self.parent_tokenizer:
+            logger.info("Using pretokenizer from parent tokenizer")
             return self.parent_tokenizer.pre_tokenizer
         if self.base_tokenizer:
             logger.info("Using pretokenizer from base tokenizer")
@@ -1743,14 +1745,18 @@ class StandardUnigramLMTokenizer:
 
     def _get_decoder(self):
         if self.parent_tokenizer:
+            logger.info("Using decoder from parent tokenizer")
             return self.parent_tokenizer.decoder
         if self.base_tokenizer:
+            logger.info("Using decoder from base tokenizer")
             return self.base_tokenizer.decoder
         if self.byte_level:
+            logger.info("Using byte-level decoder")
             return decoders.ByteLevel()
         elif self.whitespace_token_boundaries:
             raise NotImplementedError
         else:
+            logger.info("No HF decoder founc")
             return None
 
     # ------------------------------------------------------------------
@@ -2052,34 +2058,27 @@ def train_tokmix(
     # Collect source tokenizer metadata
     source_metadata = {}
     for lang, path in per_lang_paths.items():
-        try:
-            with open(path, "r") as f:
-                tok_data = json.load(f)
-                if "tokenizer_metadata" in tok_data:
-                    source_metadata[lang] = {
-                        "path": path,
-                        "em_mode": tok_data["tokenizer_metadata"][
-                            "training_config"
-                        ].get("em_mode"),
-                        "vocab_size": tok_data["tokenizer_metadata"][
-                            "training_config"
-                        ].get("vocab_size"),
-                    }
-                else:
-                    source_metadata[lang] = {
-                        "path": path,
-                        "em_mode": "unknown",
-                        "vocab_size": "unknown",
-                    }
-        except:
-            source_metadata[lang] = {
-                "path": path,
-                "em_mode": "unknown",
-                "vocab_size": "unknown",
-            }
+        with open(path, "r") as f:
+            tok_data = json.load(f)
+            if "tokenizer_metadata" in tok_data:
+                source_metadata[lang] = {
+                    "path": path,
+                    "em_mode": tok_data["tokenizer_metadata"]["training_config"].get(
+                        "em_mode"
+                    ),
+                    "vocab_size": tok_data["tokenizer_metadata"]["training_config"].get(
+                        "vocab_size"
+                    ),
+                }
+            else:
+                source_metadata[lang] = {
+                    "path": path,
+                    "em_mode": "unknown",
+                    "vocab_size": "unknown",
+                }
 
     tkzs = {lg: StandardUnigramLMTokenizer() for lg in per_lang_paths}
-    # TODO: figure out nicer way to set pretokenizer/decoder from a base tokenizer
+    # TODO: use standard method to set pretokenizer/decoder from a base tokenizer
     pretokenizer, decoder = None, None
     for lg, path in per_lang_paths.items():
         tkzs[lg].load(path)
