@@ -5,7 +5,8 @@ import math
 from tokenizers import Tokenizer
 from tokenizers.models import Unigram
 from tokenizers.pre_tokenizers import ByteLevel, Sequence
-from typing import List, Tuple, Any
+from pathlib import Path
+from typing import List, Tuple, Any, Union
 import code.constants as constants
 
 
@@ -65,17 +66,17 @@ def set_special_tokens(tokenizer):
             setattr(tokenizer, token_name + "_id", vocab[token])
 
 
-def _load_vocab_from_hf_tokenizer(file_path: str) -> List[str]:
+def _load_vocab_from_hf_tokenizer(
+    tokenizer_or_path: Union[str, Path, Tokenizer]
+) -> List[str]:
     """Load vocabulary from HuggingFace tokenizer JSON file."""
-    with open(file_path, "r", encoding="utf-8") as f:
-        data = json.load(f)
-
-    if "model" not in data or "vocab" not in data["model"]:
-        raise ValueError(
-            f"File does not appear to be a HuggingFace tokenizer: {file_path}"
-        )
-
-    vocab_data = data["model"]["vocab"]
+    if isinstance(tokenizer_or_path, str) or isinstance(tokenizer_or_path, Path):
+        tokenizer = Tokenizer.from_file(tokenizer_or_path)
+    else:
+        tokenizer = tokenizer_or_path
+    state = tokenizer.model.__getstate__()
+    attributes = json.loads(state.decode("utf-8"))
+    vocab_data = attributes["vocab"]
     if isinstance(vocab_data, list):
         # Format: [["token", score], ...]
         tokens = [
@@ -85,7 +86,7 @@ def _load_vocab_from_hf_tokenizer(file_path: str) -> List[str]:
         # Format: {"token": id, ...}
         tokens = sorted(vocab_data, key=vocab_data.get)
     else:
-        raise ValueError(f"Unsupported vocab format in HF tokenizer file: {file_path}")
+        raise ValueError(f"Unsupported vocab format in HF tokenizer")
 
     return tokens
 
