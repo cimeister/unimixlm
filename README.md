@@ -25,6 +25,7 @@ Config file: `config/tokenizer_training/default.yaml`
 - **data.output_dir**: Output directory for trained tokenizers
 - **data.lines_per_lang**: Training corpus size per language (default: 10,000)
 - **training.em_mode**: EM algorithm for tokenizer training (`soft`, `hard`, `hf`)
+- **training.train_new_base_tokenizer**: Whether to train a new shared base tokenizer; when `false`, skip base tokenizer training and only run language-specific re-estimation using an existing `base_tokenizer.json`.
 - **hf.username**: HuggingFace username for pushing tokenizers
 - **model.model_name**: Base model for initialization (default: `allenai/Olmo-3-1025-7B`)
 
