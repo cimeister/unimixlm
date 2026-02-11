@@ -24,11 +24,9 @@ Config file: `config/tokenizer_training/default.yaml`
 - **languages.langs**: Language codes to train (e.g., `yor_Latn`, `fil_Latn`)
 - **data.output_dir**: Output directory for trained tokenizers
 - **data.lines_per_lang**: Training corpus size per language (default: 10,000)
-- **training.em_mode**: EM algorithm for base tokenizer (`soft`, `hard`, `hf`)
-- **training.reestimation_em_mode**: EM algorithm for language-specific re-estimation
-- **execution.max_workers**: Parallel workers for training (default: 8)
+- **training.em_mode**: EM algorithm for tokenizer training (`soft`, `hard`, `hf`)
 - **hf.username**: HuggingFace username for pushing tokenizers
-- **model.name**: Base model for initialization (default: `allenai/Olmo-3-1025-7B`)
+- **model.model_name**: Base model for initialization (default: `allenai/Olmo-3-1025-7B`)
 
 ## How It Works
 
@@ -67,7 +65,7 @@ Config file: `config/tokenizer_training/default.yaml`
 
 ```bash
 # Change EM algorithm
-python run_las_tok_training.py training.em_mode=hard training.reestimation_em_mode=soft
+python run_las_tok_training.py training.em_mode=hard
 
 # Disable HuggingFace push
 python run_las_tok_training.py hf.push=false
