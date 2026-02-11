@@ -53,7 +53,7 @@ def train_base_tokenizer(
 
     logging.info(f"Training base Unigram tokenizer on {len(corpus_info)} languages")
     train_files = []
-    for lang_code, train_file in corpus_info.items():
+    for _, train_file in corpus_info.items():
         train_files.append(train_file)
 
     if not train_files:
@@ -115,7 +115,6 @@ def run_tokenizer_training(
     train_new_base_tokenizer=True,
     hf_username="MultilingualUnigramLM",
     model_name="allenai/Olmo-3-1025-7B",
-    max_workers=8,
     training_cfg=None,
     is_push_to_hf=True,
 ):

@@ -33,9 +33,9 @@ def main(cfg: DictConfig) -> None:
         langs,
         output_dir=cfg.data.output_dir,
         lines_per_lang=cfg.data.lines_per_lang,
+        train_new_base_tokenizer=cfg.training.train_new_base_tokenizer,
         hf_username=cfg.hf.username,
         model_name=cfg.model.model_name,
-        max_workers=cfg.execution.max_workers,
         training_cfg=cfg.training,
         is_push_to_hf=cfg.hf.push,
     )
