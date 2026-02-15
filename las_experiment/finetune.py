@@ -11,7 +11,6 @@ from transformers import (
     AutoModelForCausalLM,
     Trainer,
     TrainingArguments,
-    DataCollatorForLanguageModeling,
 )
 import wandb
 from peft import LoraConfig, get_peft_model, TaskType
@@ -34,88 +33,30 @@ def resolve_fineweb2_dataset(size: str) -> str:
 class TokenizedTextDataset(Dataset):
     def __init__(self, texts, tokenizer, dataset_cfg, encode_fn=None):
         max_seq_len = dataset_cfg.get("max_seq_len", 4096)
-        align_to_max_seq_len = bool(dataset_cfg.get("align_to_max_seq_len", True))
-        drop_last_pack = bool(dataset_cfg.get("drop_last_pack", False))
-        pack_dataset = bool(dataset_cfg.get("pack_dataset", False))
-        add_eos_between_samples = bool(
-            dataset_cfg.get("add_eos_between_samples", False)
-        )
-
-        if pack_dataset and max_seq_len is None:
-            raise ValueError("max_seq_len must be set when pack_dataset=True")
 
         self.examples = []
 
-        eos_id = tokenizer.eos_token_id
-        pad_id = tokenizer.pad_token_id or eos_id or 0
-        if pack_dataset:
+        pad_id = tokenizer.pad_token_id or tokenizer.eos_token_id or 0
+
+        for t in texts:
             if encode_fn:
-                tokenized = [encode_fn(t) for t in texts]
+                ids = encode_fn(t)
             else:
-                tokenized = [
-                    tokenizer(t, truncation=False, padding=False)["input_ids"]
-                    for t in texts
-                ]
+                ids = tokenizer(t, truncation=False, padding=False)["input_ids"]
 
-            packed_blocks = []
-            current = []
-            for ids in tokenized:
-                if add_eos_between_samples and eos_id is not None:
-                    if not ids or ids[-1] != eos_id:
-                        ids.append(eos_id)
-                while ids:
-                    space = max_seq_len - len(current)
-                    if space <= 0:
-                        packed_blocks.append(current)
-                        current = []
-                        continue
-                    if len(ids) <= space:
-                        current.extend(ids)
-                        ids = []
-                    else:
-                        current.extend(ids[:space])
-                        ids = ids[space:]
-                        packed_blocks.append(current)
-                        current = []
-            if current and not drop_last_pack:
-                packed_blocks.append(current)
+            ids = ids[:max_seq_len]
+            pad_len = max_seq_len - len(ids)
+            attention_mask = [1] * len(ids) + [0] * pad_len
+            labels = list(ids) + [-100] * pad_len
+            ids = ids + [pad_id] * pad_len
 
-            for block in packed_blocks:
-                pad_len = max_seq_len - len(block)
-                attn = [1] * len(block) + [0] * pad_len
-                block = block + [pad_id] * pad_len
-                self.examples.append({"input_ids": block, "attention_mask": attn})
-        else:
-            for t in texts:
-                if encode_fn:
-                    ids = encode_fn(t)
-                    if align_to_max_seq_len:
-                        ids = ids[:max_seq_len]
-                        pad_len = max_seq_len - len(ids)
-                        attention_mask = [1] * len(ids) + [0] * pad_len
-                        ids = ids + [pad_id] * pad_len
-                    else:
-                        attention_mask = [1] * len(ids)
-                    self.examples.append(
-                        {
-                            "input_ids": ids,
-                            "attention_mask": attention_mask,
-                        }
-                    )
-                else:
-                    enc = tokenizer(
-                        t,
-                        truncation=align_to_max_seq_len,
-                        max_length=max_seq_len if align_to_max_seq_len else None,
-                        padding="max_length" if align_to_max_seq_len else False,
-                        return_attention_mask=True,
-                    )
-                    self.examples.append(
-                        {
-                            "input_ids": enc["input_ids"],
-                            "attention_mask": enc.get("attention_mask"),
-                        }
-                    )
+            self.examples.append(
+                {
+                    "input_ids": ids,
+                    "attention_mask": attention_mask,
+                    "labels": labels,
+                }
+            )
 
     def __len__(self):
         return len(self.examples)
@@ -266,8 +207,6 @@ def run_finetune(cfg):
     train_dataset, eval_dataset = torch.utils.data.random_split(
         dataset, [train_size, val_size], generator=generator
     )
-    data_collator = DataCollatorForLanguageModeling(tokenizer=tokenizer, mlm=False)
-
     # ---- LoRA ----
     lora_targets = (
         [m.strip() for m in cfg.lora.target_modules.split(",")]
@@ -301,8 +240,6 @@ def run_finetune(cfg):
         model=model,
         train_dataset=train_dataset,
         eval_dataset=eval_dataset,
-        tokenizer=tokenizer,
-        data_collator=data_collator,
         args=training_args,
     )
 
