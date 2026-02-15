@@ -8,7 +8,13 @@ langs:
   - yor
 
 output_dir: ./finetuned_model
-las_tokenizer_path: null
+
+# LAS tokenizer configuration
+# Set las_tokenizer_path to use LAS tokenizers, or null to use original tokenizer
+las_tokenizer_path: /home/USER/unimixlm/olmo3_las_tokenizers/las-tokenizers-Olmo-3-1025-7B-yor
+# las_mode: "base" to use base_tokenizer.json to tokenize all data,
+# or "per_language" to use language-specific tokenizers (langspec_{lang}.json) for a subset in each language
+las_mode: "base"
 
 epochs: 1
 batch_size: 4
@@ -19,7 +25,3 @@ val_fraction: 0.01
 dataset:
   size: 10M
   max_seq_len: 1024
-  pack_dataset: true
-  align_to_max_seq_len: true
-  add_eos_between_samples: true
-  drop_last_pack: false
