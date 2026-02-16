@@ -2,6 +2,7 @@
 # Finetuning LLMs on FineWeb2 5M/10M tokens (multilingual)
 
 import logging
+import math
 import os
 from pathlib import Path
 import torch
@@ -63,11 +64,14 @@ class TokenizedTextDataset(Dataset):
             labels = list(ids) + [-100] * pad_len
             ids = ids + [pad_token_id] * pad_len
 
+            num_bytes = len(t.encode("utf-8"))
+
             self.examples.append(
                 {
                     "input_ids": ids,
                     "attention_mask": attention_mask,
                     "labels": labels,
+                    "num_bytes": num_bytes,
                 }
             )
 
@@ -80,6 +84,79 @@ class TokenizedTextDataset(Dataset):
 
 def count_training_tokens(texts, tokenizer: Tokenizer):
     return sum(len(tokenizer.encode(t, add_special_tokens=False).ids) for t in texts)
+
+
+class BpBTrainer(Trainer):
+    """Trainer subclass that computes bits-per-byte (BpB) during evaluation.
+
+    BpB = total_NLL / (total_bytes * ln(2)), accumulated across all eval batches.
+    This is tokenizer-agnostic, unlike per-token perplexity.
+    """
+
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+        self._bpb_total_nll = 0.0
+        self._bpb_total_bytes = 0
+        self._tracking_bpb = False
+        # Prevent the default collator from stripping num_bytes
+        # (Trainer removes columns not in the model's forward signature).
+        self._set_signature_columns_if_needed()
+        if "num_bytes" not in self._signature_columns:
+            self._signature_columns.append("num_bytes")
+
+    def compute_loss(self, model, inputs, **kwargs):
+        inputs.pop("num_bytes", None)
+        return super().compute_loss(model, inputs, **kwargs)
+
+    def prediction_step(self, model, inputs, prediction_loss_only, ignore_keys=None):
+        num_bytes = inputs.pop("num_bytes", None)
+        labels = inputs.get("labels")
+
+        loss, logits, labels_out = super().prediction_step(
+            model, inputs, prediction_loss_only, ignore_keys=ignore_keys
+        )
+
+        if self._tracking_bpb and loss is not None and labels is not None:
+            # Labels are shifted inside the model: position i predicts position i+1.
+            # Count non-padding loss tokens (same shift the model applies).
+            num_loss_tokens = (labels[:, 1:] != -100).sum().item()
+            self._bpb_total_nll += loss.item() * num_loss_tokens
+            if num_bytes is not None:
+                self._bpb_total_bytes += num_bytes.sum().item()
+
+        return loss, logits, labels_out
+
+    def evaluation_loop(
+        self,
+        dataloader,
+        description,
+        prediction_loss_only=None,
+        ignore_keys=None,
+        metric_key_prefix="eval",
+    ):
+        self._bpb_total_nll = 0.0
+        self._bpb_total_bytes = 0
+        self._tracking_bpb = True
+
+        output = super().evaluation_loop(
+            dataloader,
+            description,
+            prediction_loss_only=prediction_loss_only,
+            ignore_keys=ignore_keys,
+            metric_key_prefix=metric_key_prefix,
+        )
+
+        self._tracking_bpb = False
+
+        if self._bpb_total_bytes > 0:
+            bpb = self._bpb_total_nll / (self._bpb_total_bytes * math.log(2))
+            output.metrics[f"{metric_key_prefix}_bpb"] = bpb
+            logging.info(
+                f"BpB ({metric_key_prefix}): {bpb:.4f} "
+                f"(total_nll={self._bpb_total_nll:.2f}, total_bytes={self._bpb_total_bytes})"
+            )
+
+        return output
 
 
 def load_las_tokenizer_with_eos_pad(path, model_tokenizer):
@@ -314,7 +391,7 @@ def run_finetune(cfg):
         learning_rate=cfg.learning_rate,
         gradient_accumulation_steps=cfg.gradient_accumulation_steps,
     )
-    trainer = Trainer(
+    trainer = BpBTrainer(
         model=model,
         train_dataset=train_dataset,
         eval_dataset=eval_dataset,
