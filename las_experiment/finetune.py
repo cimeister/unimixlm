@@ -51,6 +51,12 @@ class TokenizedTextDataset(Dataset):
             # 2. Truncate to max context length
             ids = ids[:max_seq_len]
 
+            # Compute bytes from the truncated tokens (not the original text)
+            # so the byte count matches what the model actually trains on.
+            num_bytes = len(
+                tokenizer.decode(ids, skip_special_tokens=True).encode("utf-8")
+            )
+
             # 3. Append EOS to mark end-of-sequence for samples shorter than
             #    the full context. Samples that fill the context are left as-is
             #    (the next sample boundary acts as an implicit stop).
@@ -63,8 +69,6 @@ class TokenizedTextDataset(Dataset):
             attention_mask = [1] * len(ids) + [0] * pad_len
             labels = list(ids) + [-100] * pad_len
             ids = ids + [pad_token_id] * pad_len
-
-            num_bytes = len(t.encode("utf-8"))
 
             self.examples.append(
                 {
@@ -98,11 +102,6 @@ class BpBTrainer(Trainer):
         self._bpb_total_nll = 0.0
         self._bpb_total_bytes = 0
         self._tracking_bpb = False
-        # Prevent the default collator from stripping num_bytes
-        # (Trainer removes columns not in the model's forward signature).
-        self._set_signature_columns_if_needed()
-        if "num_bytes" not in self._signature_columns:
-            self._signature_columns.append("num_bytes")
 
     def compute_loss(self, model, inputs, **kwargs):
         inputs.pop("num_bytes", None)
@@ -148,12 +147,24 @@ class BpBTrainer(Trainer):
 
         self._tracking_bpb = False
 
-        if self._bpb_total_bytes > 0:
-            bpb = self._bpb_total_nll / (self._bpb_total_bytes * math.log(2))
+        # Aggregate NLL and byte counts across all processes (each process
+        # only accumulates its own eval shard). Uses accelerate's reduce,
+        # the same infrastructure the Trainer uses for distributed metrics.
+        total_nll = torch.tensor(self._bpb_total_nll, device=self.args.device)
+        total_bytes = torch.tensor(
+            float(self._bpb_total_bytes), device=self.args.device
+        )
+        total_nll = self.accelerator.reduce(total_nll, reduction="sum")
+        total_bytes = self.accelerator.reduce(total_bytes, reduction="sum")
+        total_nll = total_nll.item()
+        total_bytes = int(total_bytes.item())
+
+        if total_bytes > 0:
+            bpb = total_nll / (total_bytes * math.log(2))
             output.metrics[f"{metric_key_prefix}_bpb"] = bpb
             logging.info(
                 f"BpB ({metric_key_prefix}): {bpb:.4f} "
-                f"(total_nll={self._bpb_total_nll:.2f}, total_bytes={self._bpb_total_bytes})"
+                f"(total_nll={total_nll:.2f}, total_bytes={total_bytes})"
             )
 
         return output
@@ -381,6 +392,7 @@ def run_finetune(cfg):
     training_args = TrainingArguments(
         num_train_epochs=cfg.epochs,
         per_device_train_batch_size=cfg.batch_size,
+        remove_unused_columns=False,
         save_strategy="epoch",
         eval_strategy="steps",
         eval_steps=50,
