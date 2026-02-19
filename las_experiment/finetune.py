@@ -35,7 +35,7 @@ class TokenizedTextDataset(Dataset):
     def __init__(
         self,
         texts,
-        encode_fn,
+        tokenizer: Tokenizer,
         dataset_cfg,
         pad_token_id,
         eos_token_id,
@@ -45,7 +45,7 @@ class TokenizedTextDataset(Dataset):
         self.examples = []
 
         for t in texts:
-            ids = encode_fn(t)
+            ids = tokenizer.encode(t, add_special_tokens=False).ids
 
             # 2. Truncate to max context length
             ids = ids[:max_seq_len]
@@ -78,8 +78,8 @@ class TokenizedTextDataset(Dataset):
         return self.examples[idx]
 
 
-def count_training_tokens(texts, encode_fn):
-    return sum(len(encode_fn(t)) for t in texts)
+def count_training_tokens(texts, tokenizer: Tokenizer):
+    return sum(len(tokenizer.encode(t, add_special_tokens=False).ids) for t in texts)
 
 
 def load_las_tokenizer_with_eos_pad(path, model_tokenizer):
@@ -153,13 +153,7 @@ def run_finetune(cfg):
     las_dir = Path(cfg.las_tokenizer_path) if cfg.las_tokenizer_path else None
 
     if las_mode == "original":
-
-        def _orig_encode(text):
-            return model_tokenizer(
-                text, truncation=False, padding=False, add_special_tokens=False
-            )["input_ids"]
-
-        encode_fn_for_lang = {lang: _orig_encode for lang in langs}
+        tokenizer_for_lang = {lang: model_tokenizer.backend_tokenizer for lang in langs}
         pad_token_id = model_tokenizer.pad_token_id
         eos_token_id = model_tokenizer.eos_token_id
 
@@ -170,11 +164,7 @@ def run_finetune(cfg):
         base_tok, pad_token_id, eos_token_id = load_las_tokenizer_with_eos_pad(
             las_dir / "base_tokenizer.json", model_tokenizer
         )
-
-        def _base_encode(text):
-            return base_tok.encode(text, add_special_tokens=False).ids
-
-        encode_fn_for_lang = {lang: _base_encode for lang in langs}
+        tokenizer_for_lang = {lang: base_tok for lang in langs}
 
     elif las_mode == "langspec":
         if not las_dir:
@@ -189,18 +179,7 @@ def run_finetune(cfg):
 
         # get pad_token_id and eos_token_id from the first tokenizer (they should all be the same)
         _, pad_token_id, eos_token_id = next(iter(lang_toks.values()))
-        # filter to just the Tokenizer objects for encoding
-        lang_toks = {lang: t[0] for lang, t in lang_toks.items()}
-
-        def _make_lang_encode(tok):
-            def _encode(text):
-                return tok.encode(text, add_special_tokens=False).ids
-
-            return _encode
-
-        encode_fn_for_lang = {
-            lang: _make_lang_encode(lang_toks[lang]) for lang in langs
-        }
+        tokenizer_for_lang = {lang: t[0] for lang, t in lang_toks.items()}
 
     else:
         raise ValueError(
@@ -244,7 +223,11 @@ def run_finetune(cfg):
             f"Original tokenization [{lang}]: {len(orig_ids)} tokens, ids={orig_ids[:30]}"
         )
         if las_mode != "original":
-            las_ids = encode_fn_for_lang[lang](sample_text)
+            las_ids = (
+                tokenizer_for_lang[lang]
+                .encode(sample_text, add_special_tokens=False)
+                .ids
+            )
             logging.info(
                 f"LAS ({las_mode}) tokenization [{lang}]: {len(las_ids)} tokens, ids={las_ids[:30]}"
             )
@@ -262,7 +245,7 @@ def run_finetune(cfg):
 
     # ---- Token accounting ----
     lang_token_counts = {
-        lang: count_training_tokens(lang_texts[lang], encode_fn_for_lang[lang])
+        lang: count_training_tokens(lang_texts[lang], tokenizer_for_lang[lang])
         for lang in langs
     }
     total_train_tokens = sum(lang_token_counts.values())
@@ -282,7 +265,7 @@ def run_finetune(cfg):
     for lang in langs:
         ds = TokenizedTextDataset(
             lang_texts[lang],
-            encode_fn_for_lang[lang],
+            tokenizer_for_lang[lang],
             cfg.dataset,
             pad_token_id=pad_token_id,
             eos_token_id=eos_token_id,
