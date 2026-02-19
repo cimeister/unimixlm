@@ -14,9 +14,9 @@ output_dir: ./finetuned_model
 # LAS tokenizer configuration
 # las_mode: "original" = use the model's original tokenizer (no LAS)
 #           "base"     = use base_tokenizer.json for all languages
-#           "langspec" = use langspec_{lang}.json per language
+#           "langspec" = use langspec_{lang}_Latn.json per language
 las_mode: "langspec"
-# Path to directory containing base_tokenizer.json and langspec_{lang}.json files.
+# Path to directory containing base_tokenizer.json and langspec_{lang}_Latn.json files.
 # Required for las_mode "base" or "langspec", ignored for "original".
 las_tokenizer_path: /home/as3623/unimixlm/olmo3_las_tokenizers/las-tokenizers-Olmo-3-1025-7B-fil_yor
 model_tokenizer_path: /home/as3623/unimixlm/olmo3_las_tokenizers/model_tokenizer
