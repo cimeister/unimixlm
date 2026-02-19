@@ -15,8 +15,7 @@ from transformers import (
 )
 import wandb
 from peft import LoraConfig, get_peft_model, TaskType
-from code.standard_unigramlm import StandardUnigramLMTokenizer
-from code.language_specific_unigramlm import LanguageSpecificUnigramLMTokenizer
+from tokenizers import Tokenizer
 
 logging.basicConfig(level=logging.INFO)
 
@@ -36,22 +35,17 @@ class TokenizedTextDataset(Dataset):
     def __init__(
         self,
         texts,
-        tokenizer,
+        encode_fn,
         dataset_cfg,
         pad_token_id,
         eos_token_id,
-        encode_fn=None,
     ):
         max_seq_len = dataset_cfg.max_seq_len
 
         self.examples = []
 
         for t in texts:
-            # 1. Tokenize: use LAS encode_fn if provided, otherwise the model tokenizer
-            if encode_fn:
-                ids = encode_fn(t)
-            else:
-                ids = tokenizer(t, truncation=False, padding=False)["input_ids"]
+            ids = encode_fn(t)
 
             # 2. Truncate to max context length
             ids = ids[:max_seq_len]
@@ -84,100 +78,26 @@ class TokenizedTextDataset(Dataset):
         return self.examples[idx]
 
 
-def count_training_tokens(texts, tokenizer, encode_fn=None):
-    if encode_fn:
-        return sum(len(encode_fn(t)) for t in texts)
-    return sum(tokenizer(t, return_tensors="pt")["input_ids"].numel() for t in texts)
+def count_training_tokens(texts, encode_fn):
+    return sum(len(encode_fn(t)) for t in texts)
 
 
-def load_tokenizer_for_mode(
-    las_mode, langs, tokenizer, model_tokenizer_path, las_tokenizer_path
-):
-    """Load tokenizer encode functions, pad_token_id, and eos_token_id for the given LAS mode.
+def load_las_tokenizer_with_eos_pad(path, model_tokenizer):
+    """Load a LAS tokenizer JSON file and resolve pad/eos token IDs.
 
     Args:
-        las_mode: "original", "base", or "langspec"
-        langs: list of language codes
-        tokenizer: the model's AutoTokenizer (used for token lookups and original-mode encoding)
-        model_tokenizer_path: Path to the model tokenizer directory
-        las_tokenizer_path: Path to the LAS tokenizer directory (required for base/langspec)
+        path: Path to a tokenizer JSON file (base or language-specific).
+        model_tokenizer: The model's AutoTokenizer, used to look up pad/eos token strings.
 
     Returns:
-        (encode_fn_for_lang, pad_token_id, eos_token_id)
-        - encode_fn_for_lang: dict {lang: callable(text) -> List[int] or None}
-        - pad_token_id: int
-        - eos_token_id: int
+        (tokenizer, pad_token_id, eos_token_id) tuple.
     """
-    las_tokenizer_dir = Path(las_tokenizer_path) if las_tokenizer_path else None
-
-    if las_mode == "original":
-        encode_fn_for_lang = {lang: None for lang in langs}
-        pad_token_id = tokenizer.pad_token_id
-        eos_token_id = tokenizer.eos_token_id
-
-    elif las_mode == "base":
-        if not las_tokenizer_dir:
-            raise ValueError("las_tokenizer_path required for las_mode='base'")
-
-        base_las = StandardUnigramLMTokenizer(
-            vocab_size=tokenizer.vocab_size,
-            from_base_tokenizer=str(model_tokenizer_path / "tokenizer.json"),
-        )
-        base_las.load(str(las_tokenizer_dir / "base_tokenizer.json"))
-
-        pad_token_id = base_las.base_tokenizer.token_to_id(tokenizer.pad_token)
-        eos_token_id = base_las.base_tokenizer.token_to_id(tokenizer.eos_token)
-        if pad_token_id is None:
-            pad_token_id = eos_token_id
-
-        def _base_encode(text):
-            return base_las.encode(text)
-
-        encode_fn_for_lang = {lang: _base_encode for lang in langs}
-
-    elif las_mode == "langspec":
-        if not las_tokenizer_dir:
-            raise ValueError("las_tokenizer_path required for las_mode='langspec'")
-        las = LanguageSpecificUnigramLMTokenizer(vocab_size=tokenizer.vocab_size)
-        lang_paths = {
-            lang: str(las_tokenizer_dir / f"langspec_{lang}_Latn.json")
-            for lang in langs
-        }
-        las.load(str(model_tokenizer_path / "tokenizer.json"), lang_paths)
-
-        pad_token_id = las.base_tokenizer.token_to_id(tokenizer.pad_token)
-        eos_token_id = las.base_tokenizer.token_to_id(tokenizer.eos_token)
-        if pad_token_id is None:
-            pad_token_id = eos_token_id
-
-        def _make_lang_encode(lang_code):
-            def _encode(text):
-                return las.encode_lang(text, lang_code).ids
-
-            return _encode
-
-        encode_fn_for_lang = {lang: _make_lang_encode(lang) for lang in langs}
-
-    else:
-        raise ValueError(
-            f"Unknown las_mode: {las_mode}. Use 'original', 'base', or 'langspec'."
-        )
-
+    tok = Tokenizer.from_file(str(path))
+    pad_token_id = tok.token_to_id(model_tokenizer.pad_token)
+    eos_token_id = tok.token_to_id(model_tokenizer.eos_token)
     if pad_token_id is None:
-        raise ValueError(
-            f"Could not resolve pad_token_id for las_mode='{las_mode}'. "
-            f"pad_token='{tokenizer.pad_token}' not found in the active tokenizer."
-        )
-    if eos_token_id is None:
-        raise ValueError(
-            f"Could not resolve eos_token_id for las_mode='{las_mode}'. "
-            f"eos_token='{tokenizer.eos_token}' not found in the active tokenizer."
-        )
-    logging.info(
-        f"Active tokenizer ({las_mode}): pad_token_id={pad_token_id}, eos_token_id={eos_token_id}"
-    )
-
-    return encode_fn_for_lang, pad_token_id, eos_token_id
+        pad_token_id = eos_token_id
+    return tok, pad_token_id, eos_token_id
 
 
 def infer_lora_targets(model_type: str):
@@ -216,10 +136,10 @@ def run_finetune(cfg):
         )
     model_tokenizer_path = Path(cfg.model_tokenizer_path)
 
-    tokenizer = AutoTokenizer.from_pretrained(model_tokenizer_path)
+    model_tokenizer = AutoTokenizer.from_pretrained(model_tokenizer_path)
 
-    if tokenizer.pad_token is None:
-        tokenizer.pad_token = tokenizer.eos_token
+    if model_tokenizer.pad_token is None:
+        model_tokenizer.pad_token = model_tokenizer.eos_token
 
     model = AutoModelForCausalLM.from_pretrained(
         model_name,
@@ -230,8 +150,75 @@ def run_finetune(cfg):
 
     # ---- LAS tokenizer mode ----
     las_mode = str(cfg.las_mode)
-    encode_fn_for_lang, pad_token_id, eos_token_id = load_tokenizer_for_mode(
-        las_mode, langs, tokenizer, model_tokenizer_path, cfg.las_tokenizer_path
+    las_dir = Path(cfg.las_tokenizer_path) if cfg.las_tokenizer_path else None
+
+    if las_mode == "original":
+
+        def _orig_encode(text):
+            return model_tokenizer(
+                text, truncation=False, padding=False, add_special_tokens=False
+            )["input_ids"]
+
+        encode_fn_for_lang = {lang: _orig_encode for lang in langs}
+        pad_token_id = model_tokenizer.pad_token_id
+        eos_token_id = model_tokenizer.eos_token_id
+
+    elif las_mode == "base":
+        if not las_dir:
+            raise ValueError("las_tokenizer_path required for las_mode='base'")
+
+        base_tok, pad_token_id, eos_token_id = load_las_tokenizer_with_eos_pad(
+            las_dir / "base_tokenizer.json", model_tokenizer
+        )
+
+        def _base_encode(text):
+            return base_tok.encode(text, add_special_tokens=False).ids
+
+        encode_fn_for_lang = {lang: _base_encode for lang in langs}
+
+    elif las_mode == "langspec":
+        if not las_dir:
+            raise ValueError("las_tokenizer_path required for las_mode='langspec'")
+
+        lang_toks = {
+            lang: load_las_tokenizer_with_eos_pad(
+                las_dir / f"langspec_{lang}_Latn.json", model_tokenizer
+            )
+            for lang in langs
+        }
+
+        # get pad_token_id and eos_token_id from the first tokenizer (they should all be the same)
+        _, pad_token_id, eos_token_id = next(iter(lang_toks.values()))
+        # filter to just the Tokenizer objects for encoding
+        lang_toks = {lang: t[0] for lang, t in lang_toks.items()}
+
+        def _make_lang_encode(tok):
+            def _encode(text):
+                return tok.encode(text, add_special_tokens=False).ids
+
+            return _encode
+
+        encode_fn_for_lang = {
+            lang: _make_lang_encode(lang_toks[lang]) for lang in langs
+        }
+
+    else:
+        raise ValueError(
+            f"Unknown las_mode: {las_mode}. Use 'original', 'base', or 'langspec'."
+        )
+
+    if pad_token_id is None:
+        raise ValueError(
+            f"Could not resolve pad_token_id for las_mode='{las_mode}'. "
+            f"pad_token='{model_tokenizer.pad_token}' not found in the active tokenizer."
+        )
+    if eos_token_id is None:
+        raise ValueError(
+            f"Could not resolve eos_token_id for las_mode='{las_mode}'. "
+            f"eos_token='{model_tokenizer.eos_token}' not found in the active tokenizer."
+        )
+    logging.info(
+        f"Active tokenizer ({las_mode}): pad_token_id={pad_token_id}, eos_token_id={eos_token_id}"
     )
 
     # ---- Load FineWeb2 multilingual splits ----
@@ -250,15 +237,16 @@ def run_finetune(cfg):
             )
         logging.info(f"Example text [{lang}]: {texts[0][:200]}...")
         sample_text = texts[0]
-        orig_ids = tokenizer(sample_text, truncation=False, padding=False)["input_ids"]
+        orig_ids = model_tokenizer(
+            sample_text, truncation=False, padding=False, add_special_tokens=False
+        )["input_ids"]
         logging.info(
-            f"Original tokenization (no special chars) [{lang}]: {len(orig_ids)} tokens, ids={orig_ids[:30]}"
+            f"Original tokenization [{lang}]: {len(orig_ids)} tokens, ids={orig_ids[:30]}"
         )
-        enc_fn = encode_fn_for_lang[lang]
-        if enc_fn is not None:
-            las_ids = enc_fn(sample_text)
+        if las_mode != "original":
+            las_ids = encode_fn_for_lang[lang](sample_text)
             logging.info(
-                f"LAS ({las_mode}) tokenization (no special chars) [{lang}]: {len(las_ids)} tokens, ids={las_ids[:30]}"
+                f"LAS ({las_mode}) tokenization [{lang}]: {len(las_ids)} tokens, ids={las_ids[:30]}"
             )
         lang_texts[lang] = texts
 
@@ -274,9 +262,7 @@ def run_finetune(cfg):
 
     # ---- Token accounting ----
     lang_token_counts = {
-        lang: count_training_tokens(
-            lang_texts[lang], tokenizer, encode_fn=encode_fn_for_lang[lang]
-        )
+        lang: count_training_tokens(lang_texts[lang], encode_fn_for_lang[lang])
         for lang in langs
     }
     total_train_tokens = sum(lang_token_counts.values())
@@ -296,9 +282,8 @@ def run_finetune(cfg):
     for lang in langs:
         ds = TokenizedTextDataset(
             lang_texts[lang],
-            tokenizer,
+            encode_fn_for_lang[lang],
             cfg.dataset,
-            encode_fn=encode_fn_for_lang[lang],
             pad_token_id=pad_token_id,
             eos_token_id=eos_token_id,
         )
