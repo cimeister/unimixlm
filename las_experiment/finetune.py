@@ -232,7 +232,6 @@ def run_finetune(cfg):
     model = AutoModelForCausalLM.from_pretrained(
         model_name,
         trust_remote_code=True,
-        device_map="auto",
         dtype=torch.bfloat16 if torch.cuda.is_available() else torch.float32,
     )
 
@@ -322,7 +321,8 @@ def run_finetune(cfg):
         lang_texts[lang] = texts
 
     # ---- WandB ----
-    if cfg.logger.enabled:
+    is_main_process = int(os.environ.get("LOCAL_RANK", 0)) == 0
+    if cfg.logger.enabled and is_main_process:
         wandb.init(
             project=cfg.logger.project,
             entity=cfg.logger.entity,
@@ -340,7 +340,7 @@ def run_finetune(cfg):
     logging.info(f"Total training tokens: {total_train_tokens}")
     for lang, count in lang_token_counts.items():
         logging.info(f"Training tokens [{lang}]: {count}")
-    if cfg.logger.enabled and wandb.run:
+    if cfg.logger.enabled and is_main_process and wandb.run:
         wandb.log(
             {
                 "train/total_tokens": total_train_tokens,
@@ -391,7 +391,7 @@ def run_finetune(cfg):
     # ---- Trainer ----
     training_args = TrainingArguments(
         num_train_epochs=cfg.epochs,
-        per_device_train_batch_size=cfg.batch_size,
+        per_device_train_batch_size=cfg.per_device_batch_size,
         remove_unused_columns=False,
         save_strategy="epoch",
         eval_strategy="steps",
