@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-# Finetuning LLMs on FineWeb2 5M/10M tokens (multilingual)
+# Finetuning LLMs on FineWeb2 5M/10M/200M tokens (multilingual)
 
 import logging
 import math
@@ -27,8 +27,10 @@ def resolve_fineweb2_dataset(size: str) -> str:
         return "MultilingualUnigramLM/FineWeb2-5M"
     elif size == "10M":
         return "MultilingualUnigramLM/FineWeb2-10M"
+    elif size == "200M":
+        return "MultilingualUnigramLM/FineWeb2-200M-gpt2-tks"
     else:
-        raise ValueError(f"Invalid FineWeb2 size: {size} (use '5M' or '10M')")
+        raise ValueError(f"Invalid FineWeb2 size: {size} (use '5M', '10M' or '200M')")
 
 
 # ---------------------- Dataset helper ----------------------
@@ -395,7 +397,7 @@ def run_finetune(cfg):
         remove_unused_columns=False,
         save_strategy="epoch",
         eval_strategy="steps",
-        eval_steps=50,
+        eval_steps=5,
         logging_strategy="steps",
         logging_steps=1,
         report_to=["wandb"] if cfg.logger.enabled else [],
