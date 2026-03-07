@@ -11,7 +11,7 @@ from omegaconf import DictConfig
 import logging
 from pathlib import Path
 
-from las_experiment.finetune import run_finetune
+from las_experiment.finetune import run_finetune, parse_langs
 
 
 @hydra.main(config_path="config/finetune", config_name="default", version_base="1.3")
@@ -23,7 +23,8 @@ def main(cfg: DictConfig) -> None:
     )
 
     # Auto-name output_dir and wandb run
-    langs = "-".join(cfg.langs)
+    lang_codes, _ = parse_langs(cfg.langs)
+    langs = "-".join(lang_codes)
     dataset_size = str(cfg.dataset.size)
     base_output_dir = Path(cfg.output_dir)
 
