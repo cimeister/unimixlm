@@ -29,6 +29,7 @@ from tqdm import tqdm
 logger = logging.getLogger(__name__)
 
 DEFAULT_LANGUAGES = [
+    "eng_Latn",
     "zsm_Latn",
     "sna_Latn",
     "nya_Latn",
@@ -44,6 +45,8 @@ DEFAULT_LANGUAGES = [
 ]
 
 SOURCE_DATASET = "HuggingFaceFW/fineweb-2"
+SOURCE_DATASET_EN = "HuggingFaceFW/fineweb"
+ENGLISH_LANG = "eng_Latn"
 TOKENIZER_NAME = "gpt2"
 
 
@@ -57,12 +60,19 @@ def stream_language_data(
     Tokens are counted using the provided tokenizer. If adding the last document
     would exceed the target, it is truncated at the token boundary.
     """
-    ds_stream = load_dataset(
-        SOURCE_DATASET,
-        name=lang,
-        split="train",
-        streaming=True,
-    )
+    if lang == ENGLISH_LANG:
+        ds_stream = load_dataset(
+            SOURCE_DATASET_EN,
+            split="train",
+            streaming=True,
+        )
+    else:
+        ds_stream = load_dataset(
+            SOURCE_DATASET,
+            name=lang,
+            split="train",
+            streaming=True,
+        )
 
     texts: list[str] = []
     token_count = 0
