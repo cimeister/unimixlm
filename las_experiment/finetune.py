@@ -42,9 +42,9 @@ def parse_langs(raw_langs):
     for lang, proportion in items:
         if lang in lang_proportions:
             raise ValueError(f"Duplicate language: '{lang}'")
-        if proportion < 0.0 or proportion > 1.0:
+        if proportion <= 0.0 or proportion > 1.0:
             raise ValueError(
-                f"Proportion for '{lang}' must be in [0, 1], got {proportion}"
+                f"Proportion for '{lang}' must be in (0, 1], got {proportion}"
             )
         lang_codes.append(lang)
         lang_proportions[lang] = proportion
