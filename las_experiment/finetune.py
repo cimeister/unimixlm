@@ -4,6 +4,7 @@
 import logging
 import math
 import os
+import random
 from pathlib import Path
 import torch
 from torch.utils.data import ConcatDataset, Dataset
@@ -19,6 +20,35 @@ from peft import LoraConfig, get_peft_model, TaskType
 from tokenizers import Tokenizer
 
 logging.basicConfig(level=logging.INFO)
+
+
+def parse_langs(raw_langs):
+    """Parse langs config.
+
+    Accepts either:
+      - a dict  {lang: proportion, ...}  (e.g. ``langs: {yor: 0.2, fil: 1.0}``)
+      - a list of plain strings           (e.g. ``langs: [yor, fil]``, proportion defaults to 1.0)
+    """
+    from omegaconf import DictConfig
+
+    lang_codes = []
+    lang_proportions = {}
+
+    if isinstance(raw_langs, (dict, DictConfig)):
+        items = [(str(k), float(v)) for k, v in raw_langs.items()]
+    else:
+        items = [(str(entry), 1.0) for entry in raw_langs]
+
+    for lang, proportion in items:
+        if lang in lang_proportions:
+            raise ValueError(f"Duplicate language: '{lang}'")
+        if proportion < 0.0 or proportion > 1.0:
+            raise ValueError(
+                f"Proportion for '{lang}' must be in [0, 1], got {proportion}"
+            )
+        lang_codes.append(lang)
+        lang_proportions[lang] = proportion
+    return lang_codes, lang_proportions
 
 
 def resolve_fineweb2_dataset(size: str) -> str:
@@ -212,7 +242,13 @@ def run_finetune(cfg):
     if not cfg.langs:
         raise ValueError("No languages specified in cfg.langs")
 
-    langs = cfg.langs
+    langs, lang_proportions = parse_langs(cfg.langs)
+    lang_table = "\n".join(
+        f"  {lang:<10} {prop:>6.0%}" for lang, prop in lang_proportions.items()
+    )
+    logging.info(
+        f"Language config:\n{'  Language   Proportion'}\n{'  ' + '-' * 21}\n{lang_table}"
+    )
     dataset_size = cfg.dataset.size
     model_name = cfg.model.model_name
     output_dir = Path(cfg.output_dir)
@@ -319,6 +355,18 @@ def run_finetune(cfg):
                 f"LAS ({las_mode}) tokenization [{lang}]: {len(las_ids)} tokens, ids={las_ids[:30]}"
             )
         lang_texts[lang] = texts
+
+    # ---- Subsample texts per language ----
+    rng = random.Random(cfg.seed)
+    for lang in langs:
+        proportion = lang_proportions[lang]
+        if proportion < 1.0:
+            texts = lang_texts[lang]
+            k = max(1, int(len(texts) * proportion))
+            lang_texts[lang] = rng.sample(texts, k)
+            logging.info(
+                f"Subsampled {lang}: {len(texts)} -> {k} texts (proportion={proportion})"
+            )
 
     # ---- WandB ----
     is_main_process = int(os.environ.get("LOCAL_RANK", 0)) == 0
