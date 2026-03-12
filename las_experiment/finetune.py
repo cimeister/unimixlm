@@ -293,16 +293,27 @@ def run_finetune(cfg):
         if not las_dir:
             raise ValueError("las_tokenizer_path required for las_mode='langspec'")
 
+        # English is a special case: use the original model tokenizer
+        non_eng_langs = [lang for lang in langs if lang != "eng"]
+
         lang_toks = {
             lang: load_las_tokenizer_with_eos_pad(
                 las_dir / f"langspec_{lang}_Latn.json", model_tokenizer
             )
-            for lang in langs
+            for lang in non_eng_langs
         }
 
-        # get pad_token_id and eos_token_id from the first tokenizer (they should all be the same)
-        _, pad_token_id, eos_token_id = next(iter(lang_toks.values()))
         tokenizer_for_lang = {lang: t[0] for lang, t in lang_toks.items()}
+
+        if "eng" in langs:
+            tokenizer_for_lang["eng"] = model_tokenizer.backend_tokenizer
+
+        if lang_toks:
+            _, pad_token_id, eos_token_id = next(iter(lang_toks.values()))
+        else:
+            # eng-only: fall back to model tokenizer IDs
+            pad_token_id = model_tokenizer.pad_token_id
+            eos_token_id = model_tokenizer.eos_token_id
 
     else:
         raise ValueError(
