@@ -18,6 +18,7 @@ from transformers import (
 import wandb
 from peft import LoraConfig, get_peft_model, TaskType
 from tokenizers import Tokenizer
+from tqdm import tqdm
 
 logging.basicConfig(level=logging.INFO)
 
@@ -72,54 +73,57 @@ class TokenizedTextDataset(Dataset):
         dataset_cfg,
         pad_token_id,
         eos_token_id,
+        encode_batch_size=10000,
     ):
         max_seq_len = dataset_cfg.max_seq_len
 
         self.examples = []
+        self.total_tokens = 0
 
-        for t in texts:
-            ids = tokenizer.encode(t, add_special_tokens=False).ids
+        for i in tqdm(range(0, len(texts), encode_batch_size), desc="Tokenizing"):
+            batch = texts[i : i + encode_batch_size]
+            encodings = tokenizer.encode_batch(batch, add_special_tokens=False)
 
-            # 2. Truncate to max context length
-            ids = ids[:max_seq_len]
+            for enc in encodings:
+                ids = enc.ids
+                self.total_tokens += len(ids)
 
-            # Compute bytes from the truncated tokens (not the original text)
-            # so the byte count matches what the model actually trains on.
-            num_bytes = len(
-                tokenizer.decode(ids, skip_special_tokens=True).encode("utf-8")
-            )
+                # 2. Truncate to max context length
+                ids = ids[:max_seq_len]
 
-            # 3. Append EOS to mark end-of-sequence for samples shorter than
-            #    the full context. Samples that fill the context are left as-is
-            #    (the next sample boundary acts as an implicit stop).
-            if len(ids) < max_seq_len:
-                ids = ids + [eos_token_id]
+                # Compute bytes from the truncated tokens (not the original text)
+                # so the byte count matches what the model actually trains on.
+                num_bytes = len(
+                    tokenizer.decode(ids, skip_special_tokens=True).encode("utf-8")
+                )
 
-            # 4. Pad to max_seq_len. Padded positions get attention_mask=0
-            #    and labels=-100 so they are ignored in loss computation.
-            pad_len = max_seq_len - len(ids)
-            attention_mask = [1] * len(ids) + [0] * pad_len
-            labels = list(ids) + [-100] * pad_len
-            ids = ids + [pad_token_id] * pad_len
+                # 3. Append EOS to mark end-of-sequence for samples shorter than
+                #    the full context. Samples that fill the context are left as-is
+                #    (the next sample boundary acts as an implicit stop).
+                if len(ids) < max_seq_len:
+                    ids = ids + [eos_token_id]
 
-            self.examples.append(
-                {
-                    "input_ids": ids,
-                    "attention_mask": attention_mask,
-                    "labels": labels,
-                    "num_bytes": num_bytes,
-                }
-            )
+                # 4. Pad to max_seq_len. Padded positions get attention_mask=0
+                #    and labels=-100 so they are ignored in loss computation.
+                pad_len = max_seq_len - len(ids)
+                attention_mask = [1] * len(ids) + [0] * pad_len
+                labels = list(ids) + [-100] * pad_len
+                ids = ids + [pad_token_id] * pad_len
+
+                self.examples.append(
+                    {
+                        "input_ids": ids,
+                        "attention_mask": attention_mask,
+                        "labels": labels,
+                        "num_bytes": num_bytes,
+                    }
+                )
 
     def __len__(self):
         return len(self.examples)
 
     def __getitem__(self, idx):
         return self.examples[idx]
-
-
-def count_training_tokens(texts, tokenizer: Tokenizer):
-    return sum(len(tokenizer.encode(t, add_special_tokens=False).ids) for t in texts)
 
 
 class BpBTrainer(Trainer):
@@ -392,11 +396,19 @@ def run_finetune(cfg):
             notes=cfg.logger.notes,
         )
 
-    # ---- Token accounting ----
-    lang_token_counts = {
-        lang: count_training_tokens(lang_texts[lang], tokenizer_for_lang[lang])
-        for lang in langs
-    }
+    # ---- Dataset + token accounting (single pass) ----
+    per_lang_datasets = []
+    lang_token_counts = {}
+    for lang in langs:
+        ds = TokenizedTextDataset(
+            lang_texts[lang],
+            tokenizer_for_lang[lang],
+            cfg.dataset,
+            pad_token_id=pad_token_id,
+            eos_token_id=eos_token_id,
+        )
+        lang_token_counts[lang] = ds.total_tokens
+        per_lang_datasets.append(ds)
     total_train_tokens = sum(lang_token_counts.values())
     logging.info(f"Total training tokens: {total_train_tokens}")
     for lang, count in lang_token_counts.items():
@@ -408,18 +420,6 @@ def run_finetune(cfg):
                 **{f"train/tokens_{lang}": c for lang, c in lang_token_counts.items()},
             }
         )
-
-    # ---- Dataset ----
-    per_lang_datasets = []
-    for lang in langs:
-        ds = TokenizedTextDataset(
-            lang_texts[lang],
-            tokenizer_for_lang[lang],
-            cfg.dataset,
-            pad_token_id=pad_token_id,
-            eos_token_id=eos_token_id,
-        )
-        per_lang_datasets.append(ds)
     dataset = (
         ConcatDataset(per_lang_datasets)
         if len(per_lang_datasets) > 1
