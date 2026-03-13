@@ -238,7 +238,7 @@ def run_finetune(cfg):
     model = AutoModelForCausalLM.from_pretrained(
         model_name,
         trust_remote_code=True,
-        dtype=torch.bfloat16 if torch.cuda.is_available() else torch.float32,
+        torch_dtype=torch.bfloat16 if torch.cuda.is_available() else torch.float32,
     )
 
     # ---- LAS tokenizer mode ----
@@ -404,6 +404,10 @@ def run_finetune(cfg):
         bf16=True,
         learning_rate=cfg.learning_rate,
         gradient_accumulation_steps=cfg.gradient_accumulation_steps,
+        lr_scheduler_type="cosine",
+        warmup_ratio=0.05,
+        weight_decay=0.01,
+        seed=cfg.seed,
     )
     trainer = BpBTrainer(
         model=model,
