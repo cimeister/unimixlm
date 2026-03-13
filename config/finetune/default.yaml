@@ -5,8 +5,8 @@ defaults:
   - _self_
 
 langs:
-  - yor
-  - fil
+  fil: 1.0
+  eng: 0.2
 
 output_dir: ./finetuned_model
 
@@ -18,16 +18,16 @@ output_dir: ./finetuned_model
 las_mode: "langspec"
 # Path to directory containing base_tokenizer.json and langspec_{lang}_Latn.json files.
 # Required for las_mode "base" or "langspec", ignored for "original".
-las_tokenizer_path: /home/USER/unimixlm/olmo3_las_tokenizers/las-tokenizers-Olmo-3-1025-7B-fil_yor
+las_tokenizer_path: /home/USER/unimixlm/olmo3_las_tokenizers/las-tokenizers-Olmo-3-1025-7B-fil
 model_tokenizer_path: /home/USER/unimixlm/olmo3_las_tokenizers/model_tokenizer
 
 seed: 42
 epochs: 1
 per_device_batch_size: 4
 gradient_accumulation_steps: 8
-learning_rate: 5e-4
-val_fraction: 0.01
+learning_rate: 2e-4
+val_fraction: 0.001
 
 dataset:
-  size: 10M
+  size: 100M  # Options: 5M 10M 100M
   max_seq_len: 1024
