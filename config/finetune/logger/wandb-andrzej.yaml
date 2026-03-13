@@ -3,6 +3,6 @@ name: wandb-andrzej
 enabled: true
 project: "unimixlm"
 entity: "therootof3"
-run_name: ${model.model_name}-lr${learning_rate}-packed
+run_name: ${model.model_name}-${las_mode}-lr${learning_rate}
 tags: []
 notes: null
