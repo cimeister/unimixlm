@@ -5,15 +5,19 @@ date
 
 mkdir -p logs
 
-langs=(yor ibo fil lit swh zsm ron ind yor)
+langs=(ibo fil lit swh zsm ron ind yor)
 
 for lang in "${langs[@]}"; do
-	CUDA_VISIBLE_DEVICES=1 \
+	CUDA_VISIBLE_DEVICES=0 \
         python3 run_finetune.py \
-            '~langs' '+langs={'"${lang}"': 1.0, eng: 0.2}' \
+            '+langs={'"${lang}"': 0.8, eng: 0.2}' \
             "las_mode=original" \
-            "dataset.size=10M" \
-        &> "logs/${lang}_orig_10M.txt"
+            "dataset.size=100M" \
+        &> "logs/${lang}_orig_100M.txt"
+
+    hf repo create MultilingualUnigramLM/ft-olmo3-7b-fineweb100M-${lang}
+    hf upload MultilingualUnigramLM/ft-olmo3-7b-fineweb100M-${lang} ./finetuned_model/ft_${lang}-eng_100M --repo-type model
+
 done
 
 date

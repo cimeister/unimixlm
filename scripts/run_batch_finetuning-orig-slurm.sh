@@ -17,9 +17,12 @@ mkdir -p logs
 echo "Running finetuning for lang=${lang} (task ${SLURM_ARRAY_TASK_ID})"
 
 python3 run_finetune.py \
-    '~langs' '+langs={'"${lang}"': 1.0, eng: 0.2}' \
+    '+langs={'"${lang}"': 0.8, eng: 0.2}' \
     "las_mode=original" \
     "dataset.size=100M" \
-    &> "logs/${lang}_orig_10M.txt"
+    &> "logs/${lang}_orig_100M.txt"
+
+hf repo create MultilingualUnigramLM/ft-olmo3-7b-fineweb100M-${lang}
+hf upload MultilingualUnigramLM/ft-olmo3-7b-fineweb100M-${lang} ./finetuned_model/ft_${lang}-eng_100M --repo-type model
 
 date
