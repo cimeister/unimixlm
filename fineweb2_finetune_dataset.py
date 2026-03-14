@@ -47,7 +47,7 @@ DEFAULT_LANGUAGES = [
 SOURCE_DATASET = "HuggingFaceFW/fineweb-2"
 SOURCE_DATASET_EN = "HuggingFaceFW/fineweb"
 ENGLISH_LANG = "eng_Latn"
-TOKENIZER_NAME = "gpt2"
+TOKENIZER_NAME = "allenai/OLMo-3-1025-7B"
 
 
 def stream_language_data(
@@ -212,7 +212,7 @@ def parse_args() -> argparse.Namespace:
         "--target-tokens",
         type=int,
         default=5_000_000,
-        help="Target number of GPT-2 tokens per language (default: 5000000)",
+        help="Target number of tokens per language (default: 5000000)",
     )
     parser.add_argument(
         "--languages",

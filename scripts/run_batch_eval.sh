@@ -5,9 +5,7 @@ date
 
 mkdir -p logs
 
-# langs=(ibo fil lit swh zsm ron ind) 
-# langs=(ibo fil lit) 
-langs=(swh zsm ron ind)
+langs=(ibo fil lit swh zsm ron ind yor)
 
 for lang in "${langs[@]}"; do
 	CUDA_VISIBLE_DEVICES=0 PYTHONUNBUFFERED=1 \

@@ -59,7 +59,7 @@ def resolve_fineweb2_dataset(size: str) -> str:
     elif size == "10M":
         return "MultilingualUnigramLM/FineWeb2-10M"
     elif size == "100M":
-        return "MultilingualUnigramLM/FineWeb2-100M-gpt2-toks"
+        return "MultilingualUnigramLM/FineWeb2-100M-olmo3-7b-toks"
     else:
         raise ValueError(f"Invalid FineWeb2 size: {size} (use '5M', '10M' or '100M')")
 

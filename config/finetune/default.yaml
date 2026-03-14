@@ -1,12 +1,12 @@
 defaults:
   - model: olmo3-1025-7b
-  - logger: wandb-andrzej
+  - logger: wandb-unimix
   - lora: r16-k32
   - _self_
 
-langs:
-  fil: 1.0
-  eng: 0.2
+# langs:
+#   fil: 1.0
+#   eng: 0.2
 
 output_dir: ./finetuned_model
 
@@ -15,7 +15,7 @@ output_dir: ./finetuned_model
 # las_mode: "original" = use the model's original tokenizer (no LAS)
 #           "base"     = use base_tokenizer.json for all languages
 #           "langspec" = use langspec_{lang}_Latn.json per language
-las_mode: "langspec"
+las_mode: "original"
 # Path to directory containing base_tokenizer.json and langspec_{lang}_Latn.json files.
 # Required for las_mode "base" or "langspec", ignored for "original".
 las_tokenizer_path: /home/as3623/unimixlm/olmo3_las_tokenizers/las-tokenizers-Olmo-3-1025-7B-fil
@@ -23,7 +23,7 @@ model_tokenizer_path: /home/as3623/unimixlm/olmo3_las_tokenizers/model_tokenizer
 
 seed: 42
 epochs: 1
-per_device_batch_size: 4
+per_device_batch_size: 6
 gradient_accumulation_steps: 8
 learning_rate: 2e-4
 val_fraction: 0.001

@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 
-langs=(ibo fil lit swh zsm ron ind) 
+langs=(ibo fil lit swh zsm ron ind yor)
 
 
 for lang in "${langs[@]}"; do
