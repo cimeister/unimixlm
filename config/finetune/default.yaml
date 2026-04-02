@@ -18,8 +18,8 @@ output_dir: ./finetuned_model
 las_mode: "original"
 # Path to directory containing base_tokenizer.json and langspec_{lang}_Latn.json files.
 # Required for las_mode "base" or "langspec", ignored for "original".
-las_tokenizer_path: /home/as3623/unimixlm/olmo3_las_tokenizers/las-tokenizers-Olmo-3-1025-7B-fil
-model_tokenizer_path: /home/as3623/unimixlm/olmo3_las_tokenizers/model_tokenizer
+las_tokenizer_path: ./olmo3_las_tokenizers/las-tokenizers-Olmo-3-1025-7B-fil
+model_tokenizer_path: ./olmo3_las_tokenizers/model_tokenizer
 
 seed: 42
 epochs: 1

@@ -42,6 +42,7 @@ DEFAULT_LANGUAGES = [
     "ibo_Latn",
     "swh_Latn",
     "yor_Latn",
+    "deu_Latn",
 ]
 
 SOURCE_DATASET = "HuggingFaceFW/fineweb-2"
