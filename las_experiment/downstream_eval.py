@@ -17,7 +17,7 @@ from lm_eval.utils import handle_non_serializable
 
 import logging
 
-from code.language_specific_unigramlm import LanguageSpecificUnigramLMTokenizer
+from tokenizers import Tokenizer
 
 
 class LasTokenizerHFLM(HFLM):
@@ -26,58 +26,48 @@ class LasTokenizerHFLM(HFLM):
         pretrained: str,
         las_tokenizer_main_path: str,
         las_lang: str,
+        las_mode: str = "langspec",
         **kwargs,
     ) -> None:
         self._las_tokenizer_path = Path(las_tokenizer_main_path)
         self._las_lang = las_lang
-        self._las = None
+        self._las_mode = las_mode
+        self._las_tokenizer = None
 
         super().__init__(pretrained=pretrained, **kwargs)
         self._init_las_tokenizer()
 
     def _init_las_tokenizer(self) -> None:
+        if self._las_mode == "original":
+            self._las_tokenizer = None
+            return
+
         if not self._las_tokenizer_path:
             raise ValueError(
-                "las_tokenizer_path must be set when custom tokenizer is enabled."
+                "las_tokenizer_path must be set when las_mode is not 'original'."
             )
 
-        base_path = self._las_tokenizer_path / "base.tokenizer.json"
-        language_path = (
-            self._las_tokenizer_path
-            / f"langspec_soft_{self._las_lang}_Latn.tokenizer.json"
-        )
+        if self._las_mode == "base":
+            path = self._las_tokenizer_path / "base_tokenizer.json"
+            if not path.exists():
+                raise FileNotFoundError(f"LAS base tokenizer not found: {path}")
+            self._las_tokenizer = Tokenizer.from_file(str(path))
 
-        if not base_path.exists():
-            raise FileNotFoundError(f"LAS base tokenizer not found: {base_path}")
-        if not language_path.exists():
-            raise FileNotFoundError(
-                f"LAS language-specific tokenizer not found: {language_path}"
+        elif self._las_mode == "langspec":
+            if self._las_lang == "eng":
+                self._las_tokenizer = None
+                return
+            path = self._las_tokenizer_path / f"langspec_{self._las_lang}_Latn.json"
+            if not path.exists():
+                raise FileNotFoundError(
+                    f"LAS language-specific tokenizer not found: {path}"
+                )
+            self._las_tokenizer = Tokenizer.from_file(str(path))
+
+        else:
+            raise ValueError(
+                f"Unknown las_mode: {self._las_mode}. Use 'original', 'base', or 'langspec'."
             )
-
-        las = LanguageSpecificUnigramLMTokenizer(
-            vocab_size=len(self.tokenizer),
-        )
-        las.load(str(base_path), {self._las_lang: str(language_path)})
-        self._las = las
-
-    def _las_preprocess(self, text: str) -> str:
-        if self._las is None:
-            return text
-        _, tokens = self._las.best_language_encode(text)
-        return tokens
-
-    def _las_preprocess_batch(self, texts: list[str]) -> list[list[str]]:
-        if self._las is None:
-            return texts
-        _, encs = self._las.best_language_encode_batch(texts)
-        rendered: list[list[str]] = []
-        for text, enc in zip(texts, encs):
-            if enc is None:
-                _, tokens = self._las.best_language_encode(text)
-                rendered.append(tokens)
-            else:
-                rendered.append(enc.tokens)
-        return rendered
 
     def tok_encode(
         self,
@@ -86,20 +76,17 @@ class LasTokenizerHFLM(HFLM):
         left_truncate_len: int | None = None,
         **kwargs,
     ) -> list[int]:
-        tokens = self._las_preprocess(string)
-        if isinstance(tokens, str):
+        if self._las_tokenizer is None:
             return super().tok_encode(
-                tokens,
+                string,
                 add_special_tokens=add_special_tokens,
                 left_truncate_len=left_truncate_len,
                 **kwargs,
             )
-        ids = self.tokenizer.convert_tokens_to_ids(tokens)
-        if isinstance(ids, int):
-            ids = [ids]
+        ids = self._las_tokenizer.encode(string, add_special_tokens=False).ids
         if left_truncate_len is not None:
             ids = ids[-left_truncate_len:]
-        return ids
+        return list(ids)
 
     def tok_batch_encode(
         self,
@@ -108,33 +95,29 @@ class LasTokenizerHFLM(HFLM):
         left_truncate_len: int | None = None,
         truncation: bool = False,
     ) -> tuple[torch.Tensor, torch.Tensor]:
-        processed = self._las_preprocess_batch(strings)
-        if processed and isinstance(processed[0], str):
+        if self._las_tokenizer is None:
             return super().tok_batch_encode(
-                processed,
+                strings,
                 padding_side=padding_side,
                 left_truncate_len=left_truncate_len,
                 truncation=truncation,
             )
-        token_ids = []
-        for tokens in processed:
-            ids = self.tokenizer.convert_tokens_to_ids(tokens)
-            if isinstance(ids, int):
-                ids = [ids]
-            if left_truncate_len is not None:
-                ids = ids[-left_truncate_len:]
-            token_ids.append(ids)
-        if truncation and left_truncate_len is None:
+        encodings = self._las_tokenizer.encode_batch(strings, add_special_tokens=False)
+        token_ids = [list(enc.ids) for enc in encodings]
+        if left_truncate_len is not None:
+            token_ids = [ids[-left_truncate_len:] for ids in token_ids]
+        if truncation:
             max_len = getattr(self.tokenizer, "model_max_length", None)
             if max_len and max_len > 0:
                 token_ids = [ids[-max_len:] for ids in token_ids]
-
+        old_padding_side = self.tokenizer.padding_side
         self.tokenizer.padding_side = padding_side
         batch = self.tokenizer.pad(
             {"input_ids": token_ids},
             padding=True,
             return_tensors="pt",
         )
+        self.tokenizer.padding_side = old_padding_side
         return batch["input_ids"], batch["attention_mask"]
 
 
@@ -158,9 +141,9 @@ def build_mmlu_tasks(langs: list[str]) -> list[str]:
 
 
 def build_belebele_tasks(langs: list[str]) -> list[str]:
-    if "fil" in langs:
-        langs.remove("fil")
-        langs.append("tgl")  # belebele uses 'tgl' for Filipino
+    langs = [
+        ("tgl" if la == "fil" else la) for la in langs
+    ]  # belebele uses 'tgl' for Filipino
     return [f"belebele_{lang}_Latn" for lang in langs]
 
 
@@ -168,7 +151,7 @@ def build_piqa_tasks(langs: list[str]) -> list[str]:
     return [f"global_piqa_completions_{lang}_latn" for lang in langs]
 
 
-def run_eval_one_model(model, model_args, cfg: DictConfig) -> None:
+def run_eval_one_model(model, model_args, cfg: DictConfig) -> tuple:
     langs = list(cfg.eval_langs)
 
     tasks_list = list(cfg.tasks)
@@ -225,8 +208,9 @@ def run_eval(cfg: DictConfig) -> None:
     timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
 
     model = cfg.model
+    dtype = cfg.get("dtype", "auto")
     if bool(cfg.eval_base.enabled):
-        base_model_args = f"pretrained={cfg.model_args.pretrained}"
+        base_model_args = f"pretrained={cfg.model_args.pretrained},dtype={dtype}"
 
         logging.info(f"Evaluating base model: {model} with args: {base_model_args}")
         r1, r2, r3 = run_eval_one_model(model, base_model_args, cfg)
@@ -241,7 +225,7 @@ def run_eval(cfg: DictConfig) -> None:
             )
 
     if bool(cfg.eval_ft.enabled):
-        finetuned_model_args = f"pretrained={cfg.model_args.pretrained},peft={cfg.model_args.peft_original_tok}"
+        finetuned_model_args = f"pretrained={cfg.model_args.pretrained},peft={cfg.model_args.peft_original_tok},dtype={dtype}"
         logging.info(
             f"Evaluating finetuned model with original tokenizer: {model} with args: {finetuned_model_args}"
         )
@@ -260,9 +244,7 @@ def run_eval(cfg: DictConfig) -> None:
                 default=handle_non_serializable,
             )
 
-    finetuned_model_las_args = (
-        f"pretrained={cfg.model_args.pretrained},peft={cfg.model_args.peft_las_tok}"
-    )
+    finetuned_model_las_args = f"pretrained={cfg.model_args.pretrained},peft={cfg.model_args.peft_las_tok},dtype={dtype}"
 
     if cfg.get("custom_tokenizer") and cfg.custom_tokenizer.enabled:
         lm = LasTokenizerHFLM.create_from_arg_string(
@@ -272,6 +254,7 @@ def run_eval(cfg: DictConfig) -> None:
                     cfg.custom_tokenizer.las_tokenizer_main_path
                 ),
                 "las_lang": str(cfg.custom_tokenizer.las_lang),
+                "las_mode": str(cfg.custom_tokenizer.get("las_mode", "langspec")),
             },
         )
         model = lm
