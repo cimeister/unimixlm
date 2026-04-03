@@ -20,7 +20,7 @@ tasks:
   - belebele
   - piqa
 
-batch_size: auto
+batch_size: "auto:4"
 dtype: bfloat16
 log_samples: false
 

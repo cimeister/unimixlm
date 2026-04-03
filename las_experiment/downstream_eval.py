@@ -148,6 +148,9 @@ def build_belebele_tasks(langs: list[str]) -> list[str]:
 
 
 def build_piqa_tasks(langs: list[str]) -> list[str]:
+    langs = [
+        ("tgl" if la == "fil" else la) for la in langs
+    ]  # global_piqa uses 'tgl' for Filipino
     return [f"global_piqa_completions_{lang}_latn" for lang in langs]
 
 
