@@ -1,15 +1,60 @@
-# Default configuration for olmo_fineweb2 tokenizer training
+# config/code_tokenizer_training/default.yaml
+#
+# Hydra configuration for run_las_code_tok_training.py
+# -------------------------------------------------------
+# All 30 programming languages from The-Stack-10K are listed below.
+# Comment out or override on the CLI to train a subset:
+#
+#   python run_las_code_tok_training.py \
+#       languages.langs="[python,rust,go]"
 
-defaults:
-  - languages: yor
-  - hf: multilingualunigramlm
-  - model: olmo3-1025-7b
-  - _self_
+languages:
+  langs:
+    - assembly
+    - batchfile
+    - c++
+    - c
+    - c-sharp
+    - cmake
+    - css
+    - dockerfile
+    - fortran
+    - go
+    - haskell
+    - html
+    - java
+    - javascript
+    - julia
+    - lua
+    - makefile
+    - markdown
+    - perl
+    - php
+    - powershell
+    - python
+    - ruby
+    - rust
+    - scala
+    - shell
+    - sql
+    - tex
+    - typescript
+    - visual-basic
 
 data:
-  output_dir: ./olmo3_las_tokenizers
-  lines_per_lang: 10000
+  output_dir: ./output/code_tokenizers
+  # Character budget per language corpus streamed from The-Stack-10K.
+  # ~5 MB gives good EM signal; reduce for quick experiments.
+  char_budget: 5000000
+
+model:
+  # Seed tokenizer – byte-level models (GPT-2, StarCoder) recommended for code.
+  model_name: allenai/OLMo-2-1124-7B
 
 training:
-  em_mode: soft # EM mode for tokenizer training ("soft", "hard", "hf")
-  train_new_base_tokenizer: true # Set to false to skip base training and use model tokenizer directly
+  train_new_base_tokenizer: true
+  em_mode: soft   # "soft" | "hard"
+
+hf:
+  username: MultilingualUnigramLM
+  push: true

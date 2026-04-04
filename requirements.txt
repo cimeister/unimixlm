@@ -115,6 +115,8 @@ networkx==3.4.2
 nltk==3.9.1
 nodeenv==1.10.0
 numpy==2.2.4
+
+# CUDA (keep only if GPU node supports CUDA 12.8)
 nvidia-cublas-cu12==12.8.4.1
 nvidia-cuda-cupti-cu12==12.8.90
 nvidia-cuda-nvrtc-cu12==12.8.93
@@ -130,6 +132,7 @@ nvidia-nccl-cu12==2.27.5
 nvidia-nvjitlink-cu12==12.8.93
 nvidia-nvshmem-cu12==3.3.20
 nvidia-nvtx-cu12==12.8.90
+
 omegaconf==2.3.0
 openai==2.15.0
 orjson==3.11.7
@@ -218,7 +221,6 @@ textual==7.3.0
 thinc==8.3.10
 threadpoolctl==3.6.0
 tiktoken==0.12.0
--e git+https://github.com/Ahmetcanyvz/tokenizers.git@3afc67f12e19725ac7167e4be999d8c28ad8f22a#egg=tokenizers&subdirectory=../../tokenizers/bindings/python
 tomli==2.2.1
 tomlkit==0.13.3
 torch==2.9.1

@@ -1,27 +1,38 @@
-*.out
-data/
-*.tar.gz
-hf_cache/
-old_*
-code/old_*
-__pycache__
-*.log
-*/.ipynb_checkpoints/
-configs/
-data_50k/
-data_80k/
-data_80k_byte/
-results/
-.venv/
+# Byte-compiled / optimized / DLL files
+__pycache__/
+*.py[cod]
+*$py.class
 
+# Virtual environments
+venvs/
 venv/
-wandb/
+.env/
+.env.*
 
-logs/
-finetuned_model/
-olmo3_las_tokenizers/
-eval_results/
+# Outputs and results
+output/
 outputs/
+results/
+*.log
 
-lm-evaluation-harness/
-trainer_output/
+# Jupyter Notebooks checkpoints
+.ipynb_checkpoints/
+
+# System files
+.DS_Store
+Thumbs.db
+
+# Hugging Face cache
+.cache/
+hf_data/
+
+# Tokenizer / temp files
+*.tmp
+*.bak
+*.swp
+*.swo
+
+# Python packaging
+*.egg-info/
+dist/
+build/
