@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# Fine-tune OLMo-2-7B on code with LAS langspec tokenizers.
+# Fine-tune OLMo-3-7B on code with LAS langspec tokenizers.
 # Launches one language per GPU (8 GPUs, Tier 1 languages prioritised by data size).
 #
 # Runs both "original" (BPE baseline) and "langspec" (LAS code tokenizer) modes
@@ -25,7 +25,7 @@ for i in "${!code_langs[@]}"; do
         python3 run_finetune.py \
             --config-name=code_default \
             "+langs={${lang}: 0.8, python: 0.2}" \
-            "las_tokenizer_path=./code_las_tokenizers/las-code-tokenizers-OLMo-2-1124-7B" \
+            "las_tokenizer_path=./olmo3_las_tokenizers/las-code-tokenizers-OLMo-3-1025-7B" \
             "dataset.size=100M" \
             "las_mode=langspec" \
         &> "logs/${lang}_code_las_100M.txt" &
@@ -60,13 +60,13 @@ echo "=== Uploading results to HuggingFace ==="
 
 for lang in "${code_langs[@]}"; do
     # LAS langspec
-    hf repo create "MultilingualUnigramLM/ft-code-las-olmo2-7b-thestack100M-${lang}" 2>/dev/null || true
-    hf upload "MultilingualUnigramLM/ft-code-las-olmo2-7b-thestack100M-${lang}" \
+    hf repo create "MultilingualUnigramLM/ft-code-las-olmo3-7b-thestack100M-${lang}" 2>/dev/null || true
+    hf upload "MultilingualUnigramLM/ft-code-las-olmo3-7b-thestack100M-${lang}" \
         "./finetuned_model/ft-code-las-langspec_${lang}-python_100M" --repo-type model
 
     # Original
-    hf repo create "MultilingualUnigramLM/ft-code-olmo2-7b-thestack100M-${lang}" 2>/dev/null || true
-    hf upload "MultilingualUnigramLM/ft-code-olmo2-7b-thestack100M-${lang}" \
+    hf repo create "MultilingualUnigramLM/ft-code-olmo3-7b-thestack100M-${lang}" 2>/dev/null || true
+    hf upload "MultilingualUnigramLM/ft-code-olmo3-7b-thestack100M-${lang}" \
         "./finetuned_model/ft-code_${lang}-python_100M" --repo-type model
 done
 

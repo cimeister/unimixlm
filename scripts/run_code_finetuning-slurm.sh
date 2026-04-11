@@ -5,7 +5,7 @@
 #SBATCH --gres=gpu:a100:1
 #SBATCH --array=0-7
 #
-# Fine-tune OLMo-2-7B on code with LAS langspec tokenizers (SLURM array).
+# Fine-tune OLMo-3-7B on code with LAS langspec tokenizers (SLURM array).
 # Each array task handles one programming language.
 # Tier 1 languages prioritised by The Stack data size.
 
@@ -27,14 +27,14 @@ echo "Running LAS code finetuning for lang=${lang} (task ${SLURM_ARRAY_TASK_ID})
 python3 run_finetune.py \
     --config-name=code_default \
     "+langs={${lang}: 0.8, python: 0.2}" \
-    "las_tokenizer_path=./code_las_tokenizers/las-code-tokenizers-OLMo-2-1124-7B" \
+    "las_tokenizer_path=./olmo3_las_tokenizers/las-code-tokenizers-OLMo-3-1025-7B" \
     "dataset.size=100M" \
     "las_mode=langspec" \
     &> "logs/${lang}_code_las_100M.txt"
 
 # Upload LAS results
-hf repo create "MultilingualUnigramLM/ft-code-las-olmo2-7b-thestack100M-${lang}" 2>/dev/null || true
-hf upload "MultilingualUnigramLM/ft-code-las-olmo2-7b-thestack100M-${lang}" \
+hf repo create "MultilingualUnigramLM/ft-code-las-olmo3-7b-thestack100M-${lang}" 2>/dev/null || true
+hf upload "MultilingualUnigramLM/ft-code-las-olmo3-7b-thestack100M-${lang}" \
     "./finetuned_model/ft-code-las-langspec_${lang}-python_100M" --repo-type model
 
 # ─── Original tokenizer baseline ─────────────────────────────────────────────
@@ -47,8 +47,8 @@ python3 run_finetune.py \
     &> "logs/${lang}_code_orig_100M.txt"
 
 # Upload original results
-hf repo create "MultilingualUnigramLM/ft-code-olmo2-7b-thestack100M-${lang}" 2>/dev/null || true
-hf upload "MultilingualUnigramLM/ft-code-olmo2-7b-thestack100M-${lang}" \
+hf repo create "MultilingualUnigramLM/ft-code-olmo3-7b-thestack100M-${lang}" 2>/dev/null || true
+hf upload "MultilingualUnigramLM/ft-code-olmo3-7b-thestack100M-${lang}" \
     "./finetuned_model/ft-code_${lang}-python_100M" --repo-type model
 
 date

@@ -63,7 +63,7 @@ Existing datasets on HuggingFace:
 
 ### Code (The Stack)
 
-Creates **one HF repo per language**: `{user}/LangMap-TheStack-{lang}-{size}-olmo2`.
+Creates **one HF repo per language**: `{user}/LangMap-TheStack-{lang}-{size}`.
 
 ```bash
 # Create 100M-token datasets for Tier 1 languages
@@ -77,6 +77,19 @@ python thestack_finetune_dataset.py \
     --hf-user MultilingualUnigramLM \
     --target-tokens 5000000 \
     --languages rust
+```
+
+**Existing datasets on HuggingFace** (100M tokens each):
+`python`, `javascript`, `java`, `c`, `go`, `typescript`
+
+**Missing datasets** — `cpp` and `csharp` had empty uploads and need to be re-created on HPC:
+
+```bash
+# Re-create cpp and csharp datasets (run on HPC cluster)
+python thestack_finetune_dataset.py \
+    --hf-user MultilingualUnigramLM \
+    --target-tokens 100000000 \
+    --languages cpp csharp
 ```
 
 **Language data availability** (The Stack sizes, for 100M token feasibility):
@@ -222,7 +235,7 @@ Config: `config/finetune/code_default.yaml`
 
 | Parameter | NL Default | Code Default | Notes |
 |-----------|-----------|-------------|-------|
-| Model | OLMo-3-1025-7B | OLMo-2-1124-7B | |
+| Model | OLMo-3-1025-7B | OLMo-3-1025-7B | |
 | LoRA | r=16, alpha=32 | r=16, alpha=32 | Override: `lora=r64-k128` |
 | Batch size | 48 (6x8) | 48 (6x8) | per_device x grad_accum |
 | Learning rate | 2e-4 | 2e-4 | |
@@ -285,7 +298,7 @@ Based on ~4,500 tok/s throughput for LoRA r=16, ~2,750 tok/s for LoRA r=64 with 
 
 | Model | LoRA r=16, 1 epoch | LoRA r=64, 5 epochs (unfrozen) |
 |-------|-------------------|-------------------------------|
-| OLMo-2-7B | ~6-7 hrs | ~50-55 hrs |
+| OLMo-3-7B | ~6-7 hrs | ~50-55 hrs |
 | CodeLlama-7B | ~6-7 hrs | ~50-55 hrs |
 | StarCoder2-7B (GQA) | ~5.5-6.5 hrs | ~45-50 hrs |
 | DeepSeek-Coder-6.7B | ~5.5-6.5 hrs | ~45-50 hrs |
@@ -350,7 +363,7 @@ unimixlm/
 │   ├── finetune/
 │   │   ├── default.yaml             # NL finetuning config
 │   │   ├── code_default.yaml        # Code finetuning config
-│   │   ├── model/                   # Model configs (olmo3, olmo2)
+│   │   ├── model/                   # Model configs (olmo3)
 │   │   ├── lora/                    # LoRA configs (r16-k32, r32-k64, r64-k128)
 │   │   ├── code_langs/              # Language cluster presets
 │   │   └── logger/                  # WandB configs
@@ -392,8 +405,8 @@ unimixlm/
 
 ### Datasets
 - NL: `MultilingualUnigramLM/FineWeb2-{5M,10M,100M}`
-- Code: `MultilingualUnigramLM/LangMap-TheStack-{lang}-{size}-olmo2`
+- Code: `MultilingualUnigramLM/LangMap-TheStack-{lang}-{size}`
 
 ### Finetuned Models
 - NL: `MultilingualUnigramLM/ft-las-olmo3-7b-fineweb100M-{lang}`
-- Code: `MultilingualUnigramLM/ft-code-las-olmo2-7b-thestack100M-{lang}`
+- Code: `MultilingualUnigramLM/ft-code-las-olmo3-7b-thestack100M-{lang}`

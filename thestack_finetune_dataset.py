@@ -1,11 +1,11 @@
 """Create and push per-language code finetuning datasets to HuggingFace Hub.
 
 Streams source code from bigcode/the-stack for specified programming languages,
-collects up to a target token count per language (counted with the OLMo-2 tokenizer),
+collects up to a target token count per language (counted with the OLMo-3 tokenizer),
 sanitises the code, saves as parquet, and pushes each language to its own HF repo.
 
-HF repo naming: {hf_user}/LangMap-TheStack-{lang}-{size_label}-olmo2
-  e.g. MultilingualUnigramLM/LangMap-TheStack-rust-100M-olmo2
+HF repo naming: {hf_user}/LangMap-TheStack-{lang}-{size_label}
+  e.g. MultilingualUnigramLM/LangMap-TheStack-rust-100M
 
 Usage examples:
     # Build and push 100M-token datasets for Tier 1 languages
@@ -60,7 +60,7 @@ SAFE_LANG_NAME: dict[str, str] = {
 }
 
 SOURCE_DATASET = "bigcode/the-stack"
-TOKENIZER_NAME = "allenai/OLMo-2-1124-7B"
+TOKENIZER_NAME = "allenai/OLMo-3-1025-7B"
 
 # Sanitisation limits (same as code_tokenizer_training.py).
 MAX_LINE_LENGTH: int = 2_000
@@ -165,7 +165,7 @@ def _build_readme(lang: str, safe: str, token_count: int, target: int) -> str:
         f"    - split: train\n"
         f"      path: data/{safe}-*.parquet\n"
         f"---\n\n"
-        f"# LangMap-TheStack-{safe}-{_human_size(target)}-olmo2\n\n"
+        f"# LangMap-TheStack-{safe}-{_human_size(target)}\n\n"
         f"Code finetuning dataset for **{lang}** streamed from "
         f"[bigcode/the-stack](https://huggingface.co/datasets/bigcode/the-stack).\n\n"
         f"- **Tokens collected**: {token_count:,} (target: {target:,})\n"
@@ -219,7 +219,7 @@ def build_and_push_dataset(
 
     for lang in languages:
         safe = safe_name(lang)
-        hf_repo = f"{hf_user}/LangMap-TheStack-{safe}-{size_label}-olmo2"
+        hf_repo = f"{hf_user}/LangMap-TheStack-{safe}-{size_label}"
 
         try:
             api.create_repo(
@@ -251,7 +251,7 @@ def verify_dataset(hf_user: str, lang: str, target_tokens: int, num_samples: int
     """Load and print sample entries from a pushed dataset."""
     safe = safe_name(lang)
     size_label = _human_size(target_tokens)
-    hf_repo = f"{hf_user}/LangMap-TheStack-{safe}-{size_label}-olmo2"
+    hf_repo = f"{hf_user}/LangMap-TheStack-{safe}-{size_label}"
 
     ds = load_dataset(hf_repo, split="train")
     logger.info("Loaded %s from %s (%d total examples)", lang, hf_repo, len(ds))

@@ -7,7 +7,7 @@ output_path: ./eval_results/code_${model_lang}
 
 model: hf
 model_args:
-  pretrained: "allenai/OLMo-2-1124-7B"
+  pretrained: "allenai/Olmo-3-1025-7B"
   peft_original_tok: "./finetuned_model/ft-code_${model_lang}_100M"
   peft_las_tok: "./finetuned_model/ft-code-las-langspec_${model_lang}_100M"
 
@@ -36,4 +36,4 @@ custom_tokenizer:
   las_lang: ${model_lang}
   las_mode: langspec
   las_domain: code
-  las_tokenizer_main_path: "./code_las_tokenizers/las-code-tokenizers-OLMo-2-1124-7B"
+  las_tokenizer_main_path: "./olmo3_las_tokenizers/las-code-tokenizers-OLMo-3-1025-7B"

@@ -68,12 +68,12 @@ def resolve_code_dataset(lang: str, size: str) -> str:
     """Resolve a per-language code dataset HF repo name.
 
     Each language has its own repo:
-      MultilingualUnigramLM/LangMap-TheStack-{lang}-{size}-olmo2
+      MultilingualUnigramLM/LangMap-TheStack-{lang}-{size}
     """
     size = size.upper()
     if size not in {"5M", "10M", "100M"}:
         raise ValueError(f"Invalid code dataset size: {size} (use '5M', '10M' or '100M')")
-    return f"MultilingualUnigramLM/LangMap-TheStack-{lang}-{size}-olmo2"
+    return f"MultilingualUnigramLM/LangMap-TheStack-{lang}-{size}"
 
 
 # ---------------------- Dataset helper ----------------------

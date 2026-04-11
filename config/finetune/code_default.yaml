@@ -1,5 +1,5 @@
 defaults:
-  - model: olmo2-1124-7b
+  - model: olmo3-1025-7b
   - logger: wandb-unimix
   - lora: r16-k32
   - _self_
@@ -22,8 +22,9 @@ output_dir: ./finetuned_model
 las_mode: "langspec"
 # Path to directory containing base_tokenizer.json and langspec_{lang}.json files.
 # Download from: MultilingualUnigramLM/las-code-tokenizers-OLMo-2-1124-7B-ass_bat_c_plus27
-las_tokenizer_path: ./code_las_tokenizers/las-code-tokenizers-OLMo-2-1124-7B
-model_tokenizer_path: ./code_las_tokenizers/model_tokenizer
+# NOTE: Code tokenizers were trained on OLMo-2 vocabulary but finetuning uses OLMo-3 (same arch).
+las_tokenizer_path: ./olmo3_las_tokenizers/las-code-tokenizers-OLMo-3-1025-7B
+model_tokenizer_path: ./olmo3_las_tokenizers/model_tokenizer
 
 # Embedding unfreezing: when true, embed_tokens and lm_head parameters are
 # made trainable alongside LoRA adapters. Recommended for code finetuning
