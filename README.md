@@ -13,14 +13,20 @@ git switch suchir-code-tok
 # OR if already cloned:
 git submodule update --init --recursive
 
-# Run setup (installs deps, builds tokenizers + sentencepiece)
+# Option A: Run setup inside an existing conda/virtualenv (recommended)
+conda activate myenv          # or: source .venv/bin/activate
 bash setup.sh
+
+# Option B: Let setup.sh create a venv for you
+bash setup.sh --create-venv
 
 # Login to HuggingFace (needed for dataset access and model upload)
 huggingface-cli login
 ```
 
-`setup.sh` handles everything: Python dependencies, Rust tokenizers build, and SentencePiece C++ build with warm-start support. See comments in the script for details.
+`setup.sh` handles everything: Python dependencies, Rust install, tokenizers build (via maturin), and SentencePiece C++ build with warm-start support.
+
+**Important**: The tokenizers build step (`maturin develop`) requires an active virtualenv or conda environment. If neither is detected, the script warns you. Use `--create-venv` to have it create one, or activate your own env first. If both `VIRTUAL_ENV` and `CONDA_PREFIX` are set, the script automatically unsets `CONDA_PREFIX` to avoid the maturin conflict.
 
 ## Overview
 
