@@ -86,6 +86,7 @@ python thestack_finetune_dataset.py \
 
 ```bash
 # Re-create cpp and csharp datasets (run on HPC cluster)
+# Both safe names (cpp, csharp) and original names (c++, c-sharp) are accepted.
 python thestack_finetune_dataset.py \
     --hf-user MultilingualUnigramLM \
     --target-tokens 100000000 \

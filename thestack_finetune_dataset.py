@@ -71,6 +71,20 @@ def safe_name(lang: str) -> str:
     return SAFE_LANG_NAME.get(lang, lang)
 
 
+# Reverse mapping: safe name -> The Stack directory name.
+# Needed when the user passes safe names (e.g. "cpp") on the CLI but
+# The Stack uses the original names (e.g. "c++") as data_dir.
+UNSAFE_LANG_NAME: dict[str, str] = {v: k for k, v in SAFE_LANG_NAME.items()}
+
+
+def stack_dir_name(lang: str) -> str:
+    """Return the data_dir name used by The Stack for a language.
+
+    Accepts both original names ("c++") and safe names ("cpp").
+    """
+    return UNSAFE_LANG_NAME.get(lang, lang)
+
+
 def _human_size(n_tokens: int) -> str:
     """Return a short human label like '5M' or '100M' for the target token count."""
     if n_tokens >= 1_000_000_000:
@@ -108,12 +122,14 @@ def stream_language_data(
     Tokens are counted using the provided tokenizer. If adding the last file
     would exceed the target, it is truncated at the token boundary.
     """
+    # The Stack uses original names as data directories (e.g. "c++", "c-sharp")
+    # but the user may pass safe names (e.g. "cpp", "csharp") on the CLI.
+    dir_name = stack_dir_name(lang)
     ds_stream = load_dataset(
         SOURCE_DATASET,
-        data_dir=f"data/{lang}",
+        data_dir=f"data/{dir_name}",
         split="train",
         streaming=True,
-        trust_remote_code=True,
     )
 
     texts: list[str] = []
