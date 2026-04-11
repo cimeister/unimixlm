@@ -16,39 +16,44 @@ code_langs=(python javascript java c cpp csharp go typescript)
 
 lang="${code_langs[$SLURM_ARRAY_TASK_ID]}"
 
+# Default rehearsal is Python; for Python itself use JavaScript.
+if [ "$lang" = "python" ]; then rehearsal="javascript"; else rehearsal="python"; fi
+
 hostname
 date
 mkdir -p logs
 
-echo "Running LAS code finetuning for lang=${lang} (task ${SLURM_ARRAY_TASK_ID})"
+echo "Running code finetuning for lang=${lang}, rehearsal=${rehearsal} (task ${SLURM_ARRAY_TASK_ID})"
 
 # ─── LAS langspec mode ───────────────────────────────────────────────────────
 
 python3 run_finetune.py \
     --config-name=code_default \
-    "+langs={${lang}: 0.8, python: 0.2}" \
+    "+langs={${lang}: 0.8, ${rehearsal}: 0.2}" \
     "las_tokenizer_path=./olmo3_las_tokenizers/las-code-tokenizers-OLMo-3-1025-7B" \
     "dataset.size=100M" \
     "las_mode=langspec" \
     &> "logs/${lang}_code_las_100M.txt"
 
 # Upload LAS results
+las_dir="./finetuned_model/ft-code-las-langspec_${lang}-${rehearsal}_100M"
 hf repo create "MultilingualUnigramLM/ft-code-las-olmo3-7b-thestack100M-${lang}" 2>/dev/null || true
 hf upload "MultilingualUnigramLM/ft-code-las-olmo3-7b-thestack100M-${lang}" \
-    "./finetuned_model/ft-code-las-langspec_${lang}-python_100M" --repo-type model
+    "$las_dir" --repo-type model
 
 # ─── Original tokenizer baseline ─────────────────────────────────────────────
 
 python3 run_finetune.py \
     --config-name=code_default \
-    "+langs={${lang}: 0.8, python: 0.2}" \
+    "+langs={${lang}: 0.8, ${rehearsal}: 0.2}" \
     "las_mode=original" \
     "dataset.size=100M" \
     &> "logs/${lang}_code_orig_100M.txt"
 
 # Upload original results
+orig_dir="./finetuned_model/ft-code_${lang}-${rehearsal}_100M"
 hf repo create "MultilingualUnigramLM/ft-code-olmo3-7b-thestack100M-${lang}" 2>/dev/null || true
 hf upload "MultilingualUnigramLM/ft-code-olmo3-7b-thestack100M-${lang}" \
-    "./finetuned_model/ft-code_${lang}-python_100M" --repo-type model
+    "$orig_dir" --repo-type model
 
 date
