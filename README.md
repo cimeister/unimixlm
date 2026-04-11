@@ -70,7 +70,7 @@ Creates **one HF repo per language**: `{user}/LangMap-TheStack-{lang}-{size}`.
 python thestack_finetune_dataset.py \
     --hf-user MultilingualUnigramLM \
     --target-tokens 100000000 \
-    --languages python javascript java c cpp csharp go typescript
+    --languages python javascript java c cpp csharp html php css markdown typescript go
 
 # Smaller dataset for quick experiments
 python thestack_finetune_dataset.py \
