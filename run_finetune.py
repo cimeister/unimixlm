@@ -28,11 +28,19 @@ def main(cfg: DictConfig) -> None:
     dataset_size = str(cfg.dataset.size)
     base_output_dir = Path(cfg.output_dir)
 
-    mode_prefix = {
-        "original": "ft",
-        "base": "ft-las-base",
-        "langspec": "ft-las-langspec",
-    }[cfg.las_mode]
+    domain = str(cfg.get("domain", "natural_language"))
+    if domain == "code":
+        mode_prefix = {
+            "original": "ft-code",
+            "base": "ft-code-las-base",
+            "langspec": "ft-code-las-langspec",
+        }[cfg.las_mode]
+    else:
+        mode_prefix = {
+            "original": "ft",
+            "base": "ft-las-base",
+            "langspec": "ft-las-langspec",
+        }[cfg.las_mode]
     cfg.output_dir = str(base_output_dir / f"{mode_prefix}_{langs}_{dataset_size}")
     logging.info("Loaded configuration:")
     logging.info(cfg)

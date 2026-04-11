@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-# Finetuning LLMs on FineWeb2 5M/10M/200M tokens (multilingual)
+# Finetuning LLMs on FineWeb2 / TheStack tokens (multilingual / code)
 
 import logging
 import math
@@ -62,6 +62,18 @@ def resolve_fineweb2_dataset(size: str) -> str:
         return "MultilingualUnigramLM/FineWeb2-100M-olmo3-7b-toks"
     else:
         raise ValueError(f"Invalid FineWeb2 size: {size} (use '5M', '10M' or '100M')")
+
+
+def resolve_code_dataset(lang: str, size: str) -> str:
+    """Resolve a per-language code dataset HF repo name.
+
+    Each language has its own repo:
+      MultilingualUnigramLM/LangMap-TheStack-{lang}-{size}-olmo2
+    """
+    size = size.upper()
+    if size not in {"5M", "10M", "100M"}:
+        raise ValueError(f"Invalid code dataset size: {size} (use '5M', '10M' or '100M')")
+    return f"MultilingualUnigramLM/LangMap-TheStack-{lang}-{size}-olmo2"
 
 
 # ---------------------- Dataset helper ----------------------
@@ -299,20 +311,31 @@ def run_finetune(cfg):
         if not las_dir:
             raise ValueError("las_tokenizer_path required for las_mode='langspec'")
 
-        # English is a special case: use the original model tokenizer
-        non_eng_langs = [lang for lang in langs if lang != "eng"]
+        domain = str(cfg.get("domain", "natural_language"))
 
-        lang_toks = {
-            lang: load_las_tokenizer_with_eos_pad(
-                las_dir / f"langspec_{lang}_Latn.json", model_tokenizer
-            )
-            for lang in non_eng_langs
-        }
+        if domain == "code":
+            # Code tokenizers: langspec_{lang}.json, no English special case
+            lang_toks = {
+                lang: load_las_tokenizer_with_eos_pad(
+                    las_dir / f"langspec_{lang}.json", model_tokenizer
+                )
+                for lang in langs
+            }
+            tokenizer_for_lang = {lang: t[0] for lang, t in lang_toks.items()}
+        else:
+            # Natural language: langspec_{lang}_Latn.json with eng special case
+            non_eng_langs = [lang for lang in langs if lang != "eng"]
 
-        tokenizer_for_lang = {lang: t[0] for lang, t in lang_toks.items()}
+            lang_toks = {
+                lang: load_las_tokenizer_with_eos_pad(
+                    las_dir / f"langspec_{lang}_Latn.json", model_tokenizer
+                )
+                for lang in non_eng_langs
+            }
+            tokenizer_for_lang = {lang: t[0] for lang, t in lang_toks.items()}
 
-        if "eng" in langs:
-            tokenizer_for_lang["eng"] = model_tokenizer.backend_tokenizer
+            if "eng" in langs:
+                tokenizer_for_lang["eng"] = model_tokenizer.backend_tokenizer
 
         if lang_toks:
             _, pad_token_id, eos_token_id = next(iter(lang_toks.values()))
@@ -340,19 +363,23 @@ def run_finetune(cfg):
         f"Active tokenizer ({las_mode}): pad_token_id={pad_token_id}, eos_token_id={eos_token_id}"
     )
 
-    # ---- Load FineWeb2 multilingual splits ----
-    HF_DATASET_NAME = resolve_fineweb2_dataset(dataset_size)
+    # ---- Load dataset splits ----
+    domain = str(cfg.get("domain", "natural_language"))
     lang_texts = {}
     for lang in langs:
-        logging.info(f"Loading {HF_DATASET_NAME} :: {lang}_Latn")
-        ds = load_dataset(
-            HF_DATASET_NAME, f"{lang}_Latn", split="train", streaming=False
-        )
+        if domain == "code":
+            hf_name = resolve_code_dataset(lang, dataset_size)
+            logging.info(f"Loading {hf_name} (code)")
+            ds = load_dataset(hf_name, split="train", streaming=False)
+        else:
+            hf_name = resolve_fineweb2_dataset(dataset_size)
+            logging.info(f"Loading {hf_name} :: {lang}_Latn")
+            ds = load_dataset(hf_name, f"{lang}_Latn", split="train", streaming=False)
 
         texts = [x["text"] for x in ds]
         if not texts:
             raise ValueError(
-                f"No texts found for language '{lang}' in {HF_DATASET_NAME}"
+                f"No texts found for language '{lang}' in {hf_name}"
             )
         logging.info(f"Example text [{lang}]: {texts[0][:200]}...")
         sample_text = texts[0]
@@ -448,6 +475,18 @@ def run_finetune(cfg):
         task_type=TaskType.CAUSAL_LM,
     )
     model = get_peft_model(model, lora_config)
+
+    # ---- Optionally unfreeze embedding + LM head alongside LoRA ----
+    if cfg.get("unfreeze_embeddings", False):
+        unfrozen = []
+        for name, param in model.named_parameters():
+            if "embed_tokens" in name or "lm_head" in name:
+                param.requires_grad = True
+                unfrozen.append(name)
+        logging.info(
+            f"Unfroze {len(unfrozen)} embedding/LM-head parameters alongside LoRA: "
+            f"{unfrozen}"
+        )
 
     # ---- Trainer ----
     training_args = TrainingArguments(

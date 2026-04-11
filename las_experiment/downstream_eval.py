@@ -27,11 +27,13 @@ class LasTokenizerHFLM(HFLM):
         las_tokenizer_main_path: str,
         las_lang: str,
         las_mode: str = "langspec",
+        las_domain: str = "natural_language",
         **kwargs,
     ) -> None:
         self._las_tokenizer_path = Path(las_tokenizer_main_path)
         self._las_lang = las_lang
         self._las_mode = las_mode
+        self._las_domain = las_domain
         self._las_tokenizer = None
 
         super().__init__(pretrained=pretrained, **kwargs)
@@ -54,10 +56,13 @@ class LasTokenizerHFLM(HFLM):
             self._las_tokenizer = Tokenizer.from_file(str(path))
 
         elif self._las_mode == "langspec":
-            if self._las_lang == "eng":
+            if self._las_domain != "code" and self._las_lang == "eng":
                 self._las_tokenizer = None
                 return
-            path = self._las_tokenizer_path / f"langspec_{self._las_lang}_Latn.json"
+            if self._las_domain == "code":
+                path = self._las_tokenizer_path / f"langspec_{self._las_lang}.json"
+            else:
+                path = self._las_tokenizer_path / f"langspec_{self._las_lang}_Latn.json"
             if not path.exists():
                 raise FileNotFoundError(
                     f"LAS language-specific tokenizer not found: {path}"
