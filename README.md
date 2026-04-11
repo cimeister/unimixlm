@@ -6,8 +6,9 @@ Training pipeline for Language-Adaptive Segmentation (LAS) tokenizers and finetu
 
 ```bash
 # Clone with submodules
-git clone --recurse-submodules https://gitlab.ethz.ch/meistecl/unimixlm.git
+git clone https://github.com/cimeister/unimixlm.git
 cd unimixlm
+git switch suchir-code-tok
 
 # OR if already cloned:
 git submodule update --init --recursive
