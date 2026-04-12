@@ -10,6 +10,7 @@
 # Tier 1 languages prioritised by The Stack data size.
 
 set -euo pipefail
+export PYTORCH_CUDA_ALLOC_CONF=expandable_segments:True
 
 # Tier 1 languages (>100GB in The Stack)
 code_langs=(python javascript java c cpp csharp go typescript)

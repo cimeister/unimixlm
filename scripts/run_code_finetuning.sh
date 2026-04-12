@@ -9,6 +9,7 @@
 # JavaScript for Python itself to avoid duplicate keys).
 
 set -euo pipefail
+export PYTORCH_CUDA_ALLOC_CONF=expandable_segments:True
 hostname
 date
 

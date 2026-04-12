@@ -199,17 +199,9 @@ Config: `config/finetune/default.yaml`
 
 ```bash
 # Single language with LAS code tokenizer (80% target, 20% Python rehearsal)
-python run_finetune.py \
-    --config-name=code_default \
-    '+langs={rust: 0.8, python: 0.2}' \
-    las_mode=langspec \
-    dataset.size=100M
-
-# Original tokenizer baseline
-python run_finetune.py \
-    --config-name=code_default \
-    '+langs={rust: 0.8, python: 0.2}' \
-    las_mode=original
+bash scripts/run_single_code_finetune.sh rust              # langspec (default)
+bash scripts/run_single_code_finetune.sh rust original     # BPE baseline
+CUDA_VISIBLE_DEVICES=0 bash scripts/run_single_code_finetune.sh python  # specific GPU
 
 # Multilingual code (language cluster)
 python run_finetune.py \
