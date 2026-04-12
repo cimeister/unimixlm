@@ -68,9 +68,25 @@ python3 run_finetune.py \
     "dataset.size=100M" \
     "las_mode=${MODE}"
 
+# ─── Upload to HuggingFace ────────────────────────────────────────────────────
+
+if [ "$MODE" = "langspec" ]; then
+    OUT_DIR="./finetuned_model/ft-code-las-langspec_${LANG}-${REHEARSAL}_100M"
+    HF_REPO="MultilingualUnigramLM/ft-code-las-olmo3-7b-thestack100M-${LANG}"
+else
+    OUT_DIR="./finetuned_model/ft-code_${LANG}-${REHEARSAL}_100M"
+    HF_REPO="MultilingualUnigramLM/ft-code-olmo3-7b-thestack100M-${LANG}"
+fi
+
+echo ""
+echo "Uploading to HuggingFace: ${HF_REPO}"
+hf repo create "${HF_REPO}" 2>/dev/null || true
+hf upload "${HF_REPO}" "${OUT_DIR}" --repo-type model
+
 echo ""
 echo "========================================"
 echo "Finetuning complete for ${LANG} (${MODE})"
-echo "Output: ./finetuned_model/ft-code-las-langspec_${LANG}-${REHEARSAL}_100M"
+echo "  Output: ${OUT_DIR}"
+echo "  HF repo: https://huggingface.co/${HF_REPO}"
 date
 echo "========================================"
