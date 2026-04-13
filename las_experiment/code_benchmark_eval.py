@@ -1,10 +1,14 @@
 #!/usr/bin/env python3
 """
-UniMixLM Eval System v3
+UniMixLM Eval System v4 — bigcode-evaluation-harness
 
-Per-language code benchmark evaluation.
-- Registry-safe task names (no fake multiple_* crash)
-- Dtype fallback: bf16 → fp16 → fp32 (only retries on OOM, NOT task errors)
+Per-language code benchmark evaluation using bigcode-evaluation-harness.
+Each language runs ONLY its language-specific benchmarks (no cross-language
+Python retention tests).
+
+- Python:     HumanEval, MBPP, HumanEval+
+- Go/Java/JS/TS/C++/C#/PHP: MultiPL-E + HumanEvalPack where available
+- C/HTML/CSS/Markdown:       BpB perplexity (no functional benchmark)
 - pass@k (k=1,10,100) via multiple-sample generation
 - BpB perplexity on TheStack (correct byte-based formula)
 - HF leaderboard sync (--push-to-hub)
@@ -12,16 +16,15 @@ Per-language code benchmark evaluation.
 - SLURM-safe JSONL logging
 
 Usage:
-    # lm-eval mode (go, java, typescript, etc.)
+    # bigcode-eval mode (python, go, java, typescript, etc.)
     python3 las_experiment/code_benchmark_eval.py \\
-        --lang java \\
+        --lang python \\
         --base-model allenai/OLMo-3-1025-7B \\
-        --adapter-repo MultilingualUnigramLM/ft-code-las-olmo3-7b-thestack100M-java \\
-        --output-dir ./eval_results/code_java \\
-        --batch-size auto:4 \\
+        --adapter-repo MultilingualUnigramLM/ft-code-las-olmo3-7b-thestack100M-python \\
+        --output-dir ./eval_results/code_python \\
         --n-samples 1
 
-    # Perplexity mode (html, css, markdown)
+    # Perplexity mode (c, html, css, markdown)
     python3 las_experiment/code_benchmark_eval.py \\
         --lang html \\
         --base-model allenai/OLMo-3-1025-7B \\
@@ -31,7 +34,7 @@ Usage:
 
     # With HF leaderboard sync
     python3 las_experiment/code_benchmark_eval.py \\
-        --lang java ... --push-to-hub MultilingualUnigramLM/eval-leaderboard
+        --lang python ... --push-to-hub MultilingualUnigramLM/eval-leaderboard
 """
 
 from __future__ import annotations
@@ -41,6 +44,8 @@ import json
 import logging
 import math
 import os
+import subprocess
+import sys
 from datetime import datetime
 from pathlib import Path
 from typing import Optional
@@ -56,29 +61,25 @@ logger = logging.getLogger("unieval")
 
 # ─── Config ──────────────────────────────────────────────────────────────────
 
-# Core Python benchmarks — stable across all lm-eval versions
-CODE_TASKS = ["humaneval", "mbpp"]
-
-# MultiPL-E task names in lm-eval registry.
-# These are checked against the live registry at runtime — no crashes on mismatch.
-MULTIPL_E_TASK_MAP: dict[str, str] = {
-    "go":         "multiple_go",
-    "typescript": "multiple_ts",
-    "java":       "multiple_java",
-    "javascript": "multiple_js",
-    "cpp":        "multiple_cpp",
-    "csharp":     "multiple_cs",
-    "php":        "multiple_php",
-    # "c" omitted — multiple_c is rarely registered
+# Language -> list of bigcode-eval task names
+BIGCODE_TASK_MAP: dict[str, list[str]] = {
+    "python":     ["humaneval", "mbpp", "humanevalplus"],
+    "go":         ["multiple-go", "humanevalsynthesize-go"],
+    "typescript": ["multiple-ts"],
+    "java":       ["multiple-java", "humanevalsynthesize-java"],
+    "javascript": ["multiple-js", "humanevalsynthesize-javascript"],
+    "cpp":        ["multiple-cpp", "humanevalsynthesize-cpp"],
+    "csharp":     ["multiple-cs"],
+    "php":        ["multiple-php"],
 }
 
 # Languages that have no functional benchmark → perplexity (BpB) only
-PERPLEXITY_LANGS: set[str] = {"html", "css", "markdown"}
+PERPLEXITY_LANGS: set[str] = {"c", "html", "css", "markdown"}
 
 THESTACK_REPO_TEMPLATE = "MultilingualUnigramLM/LangMap-TheStack-{lang}-100M"
 
-# dtype preference order — we only retry on OOM, never on task errors
-DTYPE_FALLBACKS = ["bfloat16", "float16", "float32"]
+# Precision fallback order — only retry on OOM, never on task errors
+PRECISION_FALLBACKS = ["bf16", "fp16", "fp32"]
 
 
 # ─── JSONL logging ───────────────────────────────────────────────────────────
@@ -89,242 +90,230 @@ def jsonl_log(log_path: Path, obj: dict) -> None:
         f.write(json.dumps({**obj, "_ts": datetime.now().isoformat()}) + "\n")
 
 
-# ─── Task registry (safe) ────────────────────────────────────────────────────
-
-def get_available_tasks(lm_eval_module) -> set[str]:
-    """Return the set of registered lm-eval task names."""
-    try:
-        from lm_eval.tasks import TaskManager
-        tm = TaskManager()
-        return set(tm.all_tasks)
-    except Exception:
-        pass
-    try:
-        # Older lm-eval API: get_task_dict with an empty list returns all tasks
-        return set(lm_eval_module.tasks.get_task_dict([]).keys())
-    except Exception:
-        pass
-    logger.warning("[registry] Could not enumerate lm-eval task registry. "
-                   "Will attempt tasks and catch failures.")
-    return set()
-
-
-def build_tasks(lang: str, available_tasks: Optional[set[str]] = None) -> list[str]:
-    """
-    Build the task list for a language, skipping any tasks not in the registry.
-    If available_tasks is None (registry lookup failed), attempts all and relies on
-    the retry logic in run_lmeval to drop bad task names.
-    """
-    tasks: list[str] = []
-
-    for t in CODE_TASKS:
-        if available_tasks is None or t in available_tasks:
-            tasks.append(t)
-        else:
-            logger.warning(f"[registry] Core task '{t}' not found — skipping.")
-
-    candidate = MULTIPL_E_TASK_MAP.get(lang)
-    if candidate:
-        if available_tasks is None or candidate in available_tasks:
-            tasks.append(candidate)
-        else:
-            logger.warning(
-                f"[registry] '{candidate}' not in lm-eval registry. "
-                "Install via: pip install lm-eval[multiple] or "
-                "git+https://github.com/nuprl/MultiPL-E.git. Skipping."
-            )
-
-    if not tasks:
-        raise RuntimeError(
-            f"No valid lm-eval tasks found for lang='{lang}'. "
-            "Check your lm-eval installation."
-        )
-
-    return tasks
-
-
 # ─── Error classification ─────────────────────────────────────────────────────
 
-def _is_oom(e: Exception) -> bool:
-    s = str(e).lower()
+def _is_oom(text: str) -> bool:
+    s = text.lower()
     return any(k in s for k in ["out of memory", "cuda oom", "oom", "memory"])
 
 
-def _is_task_error(e: Exception) -> bool:
-    """True if the error is about task names, not hardware."""
-    s = str(e)
-    return any(k in s for k in ["task", "not found", "unknown task", "KeyError"])
+# ─── bigcode-eval runner ────────────────────────────────────────────────────
 
+def _find_bigcode_main(override: Optional[str] = None) -> str:
+    """Locate bigcode-evaluation-harness main.py."""
+    if override:
+        p = Path(override)
+        if p.exists():
+            return str(p)
+        raise FileNotFoundError(f"bigcode-eval main.py not found at: {override}")
 
-# ─── lm-eval runner ──────────────────────────────────────────────────────────
+    # Try env var
+    env_path = os.environ.get("BIGCODE_EVAL_MAIN")
+    if env_path and Path(env_path).exists():
+        return env_path
 
-def _run_lmeval_once(model_args: str, tasks: list[str], batch_size: str,
-                     n_samples: int) -> dict:
-    """Single lm-eval call. Raises on failure."""
-    import lm_eval
+    # Try to find via the installed package
+    try:
+        import bigcode_eval
+        pkg_dir = Path(bigcode_eval.__file__).parent.parent
+        main_py = pkg_dir / "main.py"
+        if main_py.exists():
+            return str(main_py)
+    except ImportError:
+        pass
 
-    # Generation kwargs for pass@k sampling (k > 1 needs do_sample + temperature)
-    gen_kwargs = None
-    if n_samples > 1:
-        gen_kwargs = f"n={n_samples},do_sample=True,temperature=0.8,top_p=0.95"
+    # Try common locations
+    for candidate in [
+        Path("bigcode-evaluation-harness/main.py"),
+        Path.home() / "bigcode-evaluation-harness" / "main.py",
+    ]:
+        if candidate.exists():
+            return str(candidate)
 
-    kwargs = dict(
-        model="hf",
-        model_args=model_args,
-        tasks=tasks,
-        num_fewshot=0,
-        batch_size=batch_size,
-        log_samples=(n_samples > 1),   # need samples for pass@k computation
-        confirm_run_unsafe_code=True,   # HumanEval code execution
+    raise FileNotFoundError(
+        "Cannot find bigcode-evaluation-harness main.py. "
+        "Set BIGCODE_EVAL_MAIN env var or --bigcode-eval-path."
     )
-    if gen_kwargs:
-        kwargs["gen_kwargs"] = gen_kwargs
-
-    return lm_eval.simple_evaluate(**kwargs)
 
 
-def run_lmeval(
-    model_args: str,
+def run_bigcode_eval(
+    base_model_id: str,
+    peft_model: Optional[str],
     tasks: list[str],
-    batch_size: str,
     output_dir: Path,
     run_label: str,
-    n_samples: int,
     log_path: Path,
+    n_samples: int = 1,
+    batch_size: int = 1,
+    max_length_generation: int = 512,
+    temperature: float = 0.2,
+    precision: str = "bf16",
+    bigcode_main: str = "",
 ) -> dict:
     """
-    Run lm-eval with fallback: drops unregistered tasks and retries.
-    Saves eval_results_{run_label}_{timestamp}.json.
+    Run bigcode-evaluation-harness via subprocess.
+    Returns the parsed metric output JSON.
     """
-    active_tasks = list(tasks)
-    results = None
-
-    while active_tasks:
-        logger.info(f"[lm-eval] {run_label}: tasks={active_tasks}, n_samples={n_samples}")
-        try:
-            results = _run_lmeval_once(model_args, active_tasks, batch_size, n_samples)
-            break
-        except Exception as e:
-            if _is_task_error(e):
-                # Find and drop the offending task
-                dropped = False
-                for task in list(active_tasks):
-                    if task in str(e) or task.startswith("multiple_"):
-                        logger.warning(f"[lm-eval] Dropping unregistered task '{task}': {e}")
-                        active_tasks.remove(task)
-                        dropped = True
-                        break
-                if not dropped:
-                    raise   # can't identify which task — re-raise
-            else:
-                raise   # OOM or model error — let caller handle
-
-    if results is None or not active_tasks:
-        raise RuntimeError(f"All tasks failed for run_label={run_label}. "
-                           "Check lm-eval task installation.")
-
     ts = datetime.now().strftime("%Y%m%d_%H%M%S")
-    out_file = output_dir / f"eval_results_{run_label}_{ts}.json"
-    try:
-        from lm_eval.utils import handle_non_serializable
-        _serializer = handle_non_serializable
-    except (ImportError, AttributeError):
-        _serializer = str
-    with open(out_file, "w") as f:
-        json.dump(results, f, indent=2, default=_serializer)
+    metric_path = output_dir / f"bigcode_metrics_{run_label}_{ts}.json"
+    gen_path = output_dir / f"generations_{run_label}_{ts}.json"
 
-    jsonl_log(log_path, {"event": "lmeval_done", "run": run_label,
-                          "tasks": active_tasks, "file": str(out_file)})
-    logger.info(f"[lm-eval] Saved {run_label} → {out_file}")
-    return results
+    cmd = [
+        sys.executable, "-m", "accelerate.commands.launch",
+        "--num_processes", "1",
+        bigcode_main,
+        "--model", base_model_id,
+        "--tasks", ",".join(tasks),
+        "--max_length_generation", str(max_length_generation),
+        "--temperature", str(temperature),
+        "--n_samples", str(n_samples),
+        "--batch_size", str(batch_size),
+        "--precision", precision,
+        "--allow_code_execution",
+        "--metric_output_path", str(metric_path),
+        "--save_generations",
+        "--save_generations_path", str(gen_path),
+    ]
+
+    if peft_model:
+        cmd.extend(["--peft_model", peft_model])
+
+    if n_samples > 1:
+        cmd.extend(["--do_sample", "True"])
+
+    logger.info(
+        f"[bigcode-eval] {run_label}: tasks={tasks}, "
+        f"n_samples={n_samples}, precision={precision}"
+    )
+    logger.info(f"[bigcode-eval] cmd: {' '.join(cmd)}")
+
+    result = subprocess.run(
+        cmd,
+        capture_output=True,
+        text=True,
+        env={**os.environ, "HF_ALLOW_CODE_EVAL": "1"},
+    )
+
+    if result.returncode != 0:
+        logger.error(f"[bigcode-eval] stderr:\n{result.stderr[-2000:]}")
+        raise subprocess.CalledProcessError(
+            result.returncode, cmd, result.stdout, result.stderr
+        )
+
+    if result.stdout:
+        logger.info(f"[bigcode-eval] stdout (last 500 chars):\n{result.stdout[-500:]}")
+
+    # Read metric output
+    if not metric_path.exists():
+        raise FileNotFoundError(
+            f"bigcode-eval did not produce metric output at {metric_path}"
+        )
+
+    with open(metric_path) as f:
+        metrics = json.load(f)
+
+    # Save a copy in the standard naming convention for plot compatibility
+    compat_file = output_dir / f"eval_results_{run_label}_{ts}.json"
+    compat_data = {
+        "results": {k: v for k, v in metrics.items() if k != "config"},
+        "config": metrics.get("config", {}),
+        "eval_engine": "bigcode-eval",
+        "lang": run_label.split("_")[0] if "_" in run_label else "",
+        "run_label": run_label,
+    }
+    with open(compat_file, "w") as f:
+        json.dump(compat_data, f, indent=2)
+
+    jsonl_log(log_path, {
+        "event": "bigcode_eval_done",
+        "run": run_label,
+        "tasks": tasks,
+        "metric_file": str(metric_path),
+        "compat_file": str(compat_file),
+    })
+    logger.info(f"[bigcode-eval] Saved {run_label} → {compat_file}")
+    return compat_data
 
 
-# ─── Dtype-safe runner ───────────────────────────────────────────────────────
-
-def run_with_dtype_fallback(
+def run_with_precision_fallback(
     base_model_id: str,
-    adapter: str,
+    peft_model: Optional[str],
     tasks: list[str],
-    batch_size: str,
     output_dir: Path,
+    run_label: str,
     log_path: Path,
     n_samples: int,
-) -> tuple[dict, dict, str]:
-    """
-    Try dtypes in order, but ONLY retry on OOM errors.
-    Task registration errors are propagated immediately (not hidden by dtype loop).
-    Returns (base_results, ft_results, dtype_used).
-    """
+    batch_size: int,
+    max_length_generation: int,
+    temperature: float,
+    bigcode_main: str,
+) -> dict:
+    """Try precisions in order, but ONLY retry on OOM errors."""
     last_err: Optional[Exception] = None
 
-    for dtype in DTYPE_FALLBACKS:
-        logger.info(f"[dtype] Trying {dtype}")
-        base_args = f"pretrained={base_model_id},dtype={dtype}"
-        ft_args   = f"pretrained={base_model_id},peft={adapter},dtype={dtype}"
+    for precision in PRECISION_FALLBACKS:
+        logger.info(f"[precision] Trying {precision} for {run_label}")
         try:
-            base = run_lmeval(base_args, tasks, batch_size, output_dir, "base", n_samples, log_path)
-            ft   = run_lmeval(ft_args,   tasks, batch_size, output_dir, "ft",   n_samples, log_path)
-
-            jsonl_log(log_path, {"event": "dtype_success", "dtype": dtype})
-            return base, ft, dtype
-
-        except Exception as e:
-            if _is_oom(e):
-                logger.warning(f"[dtype] OOM with {dtype}, trying next. {e}")
+            return run_bigcode_eval(
+                base_model_id=base_model_id,
+                peft_model=peft_model,
+                tasks=tasks,
+                output_dir=output_dir,
+                run_label=run_label,
+                log_path=log_path,
+                n_samples=n_samples,
+                batch_size=batch_size,
+                max_length_generation=max_length_generation,
+                temperature=temperature,
+                precision=precision,
+                bigcode_main=bigcode_main,
+            )
+        except subprocess.CalledProcessError as e:
+            stderr = e.stderr or ""
+            if _is_oom(stderr):
+                logger.warning(f"[precision] OOM with {precision}, trying next.")
                 last_err = e
-                jsonl_log(log_path, {"event": "oom", "dtype": dtype, "error": str(e)[:200]})
+                jsonl_log(log_path, {
+                    "event": "oom", "precision": precision,
+                    "error": stderr[:200],
+                })
             else:
-                # Task error or model error — do NOT retry with different dtype
-                jsonl_log(log_path, {"event": "fatal", "dtype": dtype, "error": str(e)[:200]})
+                jsonl_log(log_path, {
+                    "event": "fatal", "precision": precision,
+                    "error": stderr[:200],
+                })
                 raise
 
-    raise RuntimeError(f"OOM across all dtypes. Last error: {last_err}")
+    raise RuntimeError(f"OOM across all precisions. Last error: {last_err}")
 
 
-# ─── pass@k extraction ───────────────────────────────────────────────────────
+# ─── Metric extraction ──────────────────────────────────────────────────────
 
-def _pass_at_k_unbiased(n: int, c: int, k: int) -> float:
-    """Unbiased pass@k estimator (Chen et al. 2021)."""
-    if n - c < k:
-        return 1.0
-    return 1.0 - math.prod((1 - k / i) for i in range(n - c + 1, n + 1))
-
-
-def extract_pass_at_k(results: dict, k_values: list[int] = (1, 10, 100)) -> dict:
+def extract_bigcode_metrics(results: dict) -> dict[str, dict[str, float]]:
     """
-    Extract pass@k metrics from lm-eval results.
-    lm-eval stores pass@1 directly; for k>1 compute via unbiased estimator
-    if per-sample correctness data is available.
-    """
-    summary: dict[str, dict] = {}
-    task_results = results.get("results", {})
+    Extract metrics from bigcode-eval output.
 
-    for task, metrics in task_results.items():
-        if not isinstance(metrics, dict):
+    Input format (compat_data):
+        {"results": {"humaneval": {"pass@1": 0.35}, ...}, "config": {...}}
+
+    Returns:
+        {"humaneval": {"pass@1": 0.35}, ...}
+    """
+    metrics: dict[str, dict[str, float]] = {}
+    results_block = results.get("results", {})
+
+    for task_name, task_data in results_block.items():
+        if task_name == "config":
             continue
-        task_summary: dict[str, float] = {}
+        if isinstance(task_data, dict):
+            task_metrics = {}
+            for k, v in task_data.items():
+                if isinstance(v, (int, float)):
+                    task_metrics[k] = float(v)
+            if task_metrics:
+                metrics[task_name] = task_metrics
 
-        # pass@1 (always available)
-        p1 = metrics.get("pass@1,none") or metrics.get("pass@1")
-        if p1 is not None:
-            task_summary["pass@1"] = float(p1)
-            task_summary["pass@1_stderr"] = float(
-                metrics.get("pass@1_stderr,none") or metrics.get("pass@1_stderr", 0.0)
-            )
-
-        # pass@k from samples (if log_samples=True was used)
-        samples = results.get("samples", {}).get(task, [])
-        if samples and len(k_values) > 1:
-            n = len(samples)
-            c = sum(1 for s in samples if s.get("exact_match") or s.get("pass@1"))
-            for k in k_values:
-                if k <= n:
-                    task_summary[f"pass@{k}"] = _pass_at_k_unbiased(n, c, k)
-
-        if task_summary:
-            summary[task] = task_summary
-
-    return summary
+    return metrics
 
 
 # ─── Perplexity (BpB) ────────────────────────────────────────────────────────
@@ -356,7 +345,7 @@ def _load_model(base_model_id: str, adapter: Optional[str], dtype_str: str):
 
 def compute_bpb(model, tokenizer, texts: list[str], device: str,
                 max_seq_len: int = 512) -> float:
-    """Compute bits-per-byte. Correct formula: BpB = total_nll / (total_bytes × ln2)."""
+    """Compute bits-per-byte. Correct formula: BpB = total_nll / (total_bytes * ln2)."""
     total_nll = 0.0
     total_bytes = 0
 
@@ -382,6 +371,9 @@ def compute_bpb(model, tokenizer, texts: list[str], device: str,
     if total_bytes == 0:
         return float("nan")
     return total_nll / (total_bytes * math.log(2))
+
+
+DTYPE_FALLBACKS = ["bfloat16", "float16", "float32"]
 
 
 def run_bpb(
@@ -434,7 +426,7 @@ def run_bpb(
                 torch.cuda.empty_cache()
             break
         except Exception as e:
-            if _is_oom(e):
+            if _is_oom(str(e)):
                 logger.warning(f"[bpb] OOM with {dtype}, trying next.")
                 continue
             raise
@@ -481,12 +473,17 @@ def push_to_hub(result_file: Path, hub_repo: str, lang: str) -> None:
 # ─── Regression tracking ─────────────────────────────────────────────────────
 
 def _extract_primary_score(results: dict) -> Optional[float]:
-    """Extract the most informative single score from a results dict."""
-    task_results = results.get("results", {})
+    """Extract the most informative single score from a results dict.
+
+    Handles both bigcode-eval and legacy lm-eval formats.
+    """
+    results_block = results.get("results", results)
     scores = []
-    for task_data in task_results.values():
+    for task_name, task_data in results_block.items():
+        if task_name in ("config", "eval_engine", "lang", "run_label"):
+            continue
         if isinstance(task_data, dict):
-            for key in ("pass@1,none", "pass@1", "acc,none", "acc"):
+            for key in ("pass@1", "pass@1,none", "acc,none", "acc"):
                 v = task_data.get(key)
                 if v is not None:
                     scores.append(float(v))
@@ -546,19 +543,20 @@ def build_leaderboard_summary(
     ft_results: dict,
     pass_at_k: dict,
     mode: str,
-    dtype: str,
+    precision: str,
     output_dir: Path,
 ) -> Path:
     """Save a compact summary JSON (leaderboard_{lang}.json)."""
     summary = {
         "lang": lang,
         "mode": mode,
-        "dtype": dtype,
+        "precision": precision,
+        "eval_engine": "bigcode-eval" if mode == "bigcode" else "perplexity",
         "timestamp": datetime.now().isoformat(),
         "pass_at_k": pass_at_k,
     }
 
-    if mode == "lmeval":
+    if mode == "bigcode":
         base_score = _extract_primary_score(base_results)
         ft_score   = _extract_primary_score(ft_results)
         summary["base_score"]  = base_score
@@ -581,16 +579,21 @@ def build_leaderboard_summary(
 # ─── Main ────────────────────────────────────────────────────────────────────
 
 def main() -> None:
-    parser = argparse.ArgumentParser(description="UniMixLM Eval System v3")
+    parser = argparse.ArgumentParser(description="UniMixLM Eval System v4 (bigcode-eval)")
     parser.add_argument("--lang", required=True)
     parser.add_argument("--base-model", default="allenai/OLMo-3-1025-7B")
     parser.add_argument("--adapter-repo", required=True)
     parser.add_argument("--output-dir", type=Path, required=True)
-    parser.add_argument("--batch-size", default="auto:4")
-    parser.add_argument("--mode", default="auto", choices=["auto", "lmeval", "perplexity"])
+    parser.add_argument("--batch-size", type=int, default=1)
+    parser.add_argument("--mode", default="auto", choices=["auto", "bigcode", "perplexity"])
     parser.add_argument("--n-samples", type=int, default=1,
                         help="Completions per problem: 1=pass@1, 10=pass@1+10, 100=pass@1+10+100")
+    parser.add_argument("--max-length-generation", type=int, default=512)
+    parser.add_argument("--temperature", type=float, default=0.2)
+    parser.add_argument("--precision", default="bf16", choices=["bf16", "fp16", "fp32"])
     parser.add_argument("--max-bpb-samples", type=int, default=200)
+    parser.add_argument("--bigcode-eval-path", default=None,
+                        help="Path to bigcode-evaluation-harness main.py")
     parser.add_argument("--push-to-hub", default=None,
                         metavar="HF_REPO",
                         help="Upload leaderboard JSON to this HF dataset repo")
@@ -601,7 +604,7 @@ def main() -> None:
     lang = args.lang.lower()
     out  = args.output_dir
     out.mkdir(parents=True, exist_ok=True)
-    log_path = out / "unieval_v3.jsonl"
+    log_path = out / "unieval_v4.jsonl"
 
     jsonl_log(log_path, {
         "event": "start",
@@ -617,45 +620,59 @@ def main() -> None:
     else:
         is_perplexity = args.mode == "perplexity"
 
-    mode_str = "perplexity" if is_perplexity else "lmeval"
-    logger.info(f"UniEval v3 | lang={lang} | mode={mode_str}")
+    mode_str = "perplexity" if is_perplexity else "bigcode"
+    logger.info(f"UniEval v4 | lang={lang} | mode={mode_str}")
 
-    # ── lm-eval path ──────────────────────────────────────────────────────────
+    # ── bigcode-eval path ─────────────────────────────────────────────────────
     if not is_perplexity:
-        import lm_eval
-        available = get_available_tasks(lm_eval)
-        if available:
-            logger.info(f"[registry] {len(available)} tasks registered in lm-eval.")
-        else:
-            logger.warning("[registry] Could not enumerate registry. Will attempt tasks directly.")
+        tasks = BIGCODE_TASK_MAP.get(lang)
+        if not tasks:
+            raise ValueError(
+                f"No bigcode-eval tasks defined for lang='{lang}'. "
+                f"Known languages: {sorted(BIGCODE_TASK_MAP.keys())}"
+            )
+        logger.info(f"[tasks] bigcode-eval tasks for {lang}: {tasks}")
 
-        tasks = build_tasks(lang, available if available else None)
-        logger.info(f"[tasks] Final task list for {lang}: {tasks}")
+        bigcode_main = _find_bigcode_main(args.bigcode_eval_path)
+        logger.info(f"[bigcode-eval] Using main.py at: {bigcode_main}")
 
-        base_res, ft_res, dtype_used = run_with_dtype_fallback(
-            args.base_model,
-            args.adapter_repo,
-            tasks,
-            args.batch_size,
-            out,
-            log_path,
-            args.n_samples,
+        # Run base model
+        base_res = run_with_precision_fallback(
+            base_model_id=args.base_model,
+            peft_model=None,
+            tasks=tasks,
+            output_dir=out,
+            run_label="base",
+            log_path=log_path,
+            n_samples=args.n_samples,
+            batch_size=args.batch_size,
+            max_length_generation=args.max_length_generation,
+            temperature=args.temperature,
+            bigcode_main=bigcode_main,
         )
 
-        k_values = [1]
-        if args.n_samples >= 10:
-            k_values.append(10)
-        if args.n_samples >= 100:
-            k_values.append(100)
+        # Run finetuned model
+        ft_res = run_with_precision_fallback(
+            base_model_id=args.base_model,
+            peft_model=args.adapter_repo,
+            tasks=tasks,
+            output_dir=out,
+            run_label="ft",
+            log_path=log_path,
+            n_samples=args.n_samples,
+            batch_size=args.batch_size,
+            max_length_generation=args.max_length_generation,
+            temperature=args.temperature,
+            bigcode_main=bigcode_main,
+        )
 
         pass_at_k = {
-            "base": extract_pass_at_k(base_res, k_values),
-            "ft":   extract_pass_at_k(ft_res,   k_values),
+            "base": extract_bigcode_metrics(base_res),
+            "ft":   extract_bigcode_metrics(ft_res),
         }
 
     # ── Perplexity path ───────────────────────────────────────────────────────
     else:
-        dtype_used = "bfloat16"
         base_res = run_bpb(
             args.base_model, None, lang, out, "base", log_path, args.max_bpb_samples
         )
@@ -665,8 +682,9 @@ def main() -> None:
         pass_at_k = {}
 
     # ── Summary / leaderboard ─────────────────────────────────────────────────
+    precision_used = args.precision if not is_perplexity else "bfloat16"
     summary_path = build_leaderboard_summary(
-        lang, base_res, ft_res, pass_at_k, mode_str, dtype_used, out
+        lang, base_res, ft_res, pass_at_k, mode_str, precision_used, out
     )
 
     # ── HF leaderboard sync ───────────────────────────────────────────────────

@@ -9,11 +9,13 @@ Reads eval_results/code_{lang}/ directories, produces:
   4. Summary improvement bar chart    (summary_delta.png)
   5. CSV summary table                (results_summary.csv)
 
+Supports both bigcode-evaluation-harness (v4) and legacy lm-eval (v3) output formats.
+
 Usage:
     python3 las_experiment/plot_code_eval_results.py \\
         --results-dir eval_results \\
         --output-dir eval_results/code_summary \\
-        --langs go typescript java javascript cpp csharp php c html css markdown
+        --langs python go typescript java javascript cpp csharp php c html css markdown
 """
 
 from __future__ import annotations
@@ -41,33 +43,41 @@ except ImportError:
 warnings.filterwarnings("ignore", category=UserWarning, module="matplotlib")
 
 # --- Constants ---
-ALL_LANGS = ["go", "typescript", "java", "javascript", "cpp", "csharp", "php", "c",
-             "html", "css", "markdown"]
+ALL_LANGS = ["python", "go", "typescript", "java", "javascript", "cpp", "csharp",
+             "php", "c", "html", "css", "markdown"]
 
-PERPLEXITY_LANGS = {"html", "css", "markdown"}
+PERPLEXITY_LANGS = {"c", "html", "css", "markdown"}
 
-MULTIPL_E_TASK_MAP = {
-    "go":         "multiple_go",
-    "typescript": "multiple_ts",
-    "java":       "multiple_java",
-    "javascript": "multiple_js",
-    "cpp":        "multiple_cpp",
-    "csharp":     "multiple_cs",
-    "php":        "multiple_php",
-}
-
-# Display-friendly task labels
+# Display-friendly task labels (bigcode-eval task names use hyphens)
 TASK_LABELS = {
-    "humaneval":      "HumanEval\n(pass@1)",
-    "mbpp":           "MBPP\n(pass@1)",
-    "multiple_go":    "MultiPL-E Go\n(pass@1)",
-    "multiple_ts":    "MultiPL-E TS\n(pass@1)",
-    "multiple_java":  "MultiPL-E Java\n(pass@1)",
-    "multiple_js":    "MultiPL-E JS\n(pass@1)",
-    "multiple_cpp":   "MultiPL-E C++\n(pass@1)",
-    "multiple_cs":    "MultiPL-E C#\n(pass@1)",
-    "multiple_php":   "MultiPL-E PHP\n(pass@1)",
-    "bpb":            "BpB\n(↓ better)",
+    # Python-native benchmarks
+    "humaneval":                       "HumanEval\n(pass@1)",
+    "mbpp":                            "MBPP\n(pass@1)",
+    "humanevalplus":                   "HumanEval+\n(pass@1)",
+    # MultiPL-E (bigcode-eval naming: hyphens)
+    "multiple-go":                     "MultiPL-E Go\n(pass@1)",
+    "multiple-ts":                     "MultiPL-E TS\n(pass@1)",
+    "multiple-java":                   "MultiPL-E Java\n(pass@1)",
+    "multiple-js":                     "MultiPL-E JS\n(pass@1)",
+    "multiple-cpp":                    "MultiPL-E C++\n(pass@1)",
+    "multiple-cs":                     "MultiPL-E C#\n(pass@1)",
+    "multiple-php":                    "MultiPL-E PHP\n(pass@1)",
+    # HumanEvalPack synthesis
+    "humanevalsynthesize-go":          "HEPack Go\n(pass@1)",
+    "humanevalsynthesize-java":        "HEPack Java\n(pass@1)",
+    "humanevalsynthesize-javascript":  "HEPack JS\n(pass@1)",
+    "humanevalsynthesize-js":          "HEPack JS\n(pass@1)",
+    "humanevalsynthesize-cpp":         "HEPack C++\n(pass@1)",
+    # Legacy lm-eval MultiPL-E (underscore naming)
+    "multiple_go":                     "MultiPL-E Go\n(pass@1)",
+    "multiple_ts":                     "MultiPL-E TS\n(pass@1)",
+    "multiple_java":                   "MultiPL-E Java\n(pass@1)",
+    "multiple_js":                     "MultiPL-E JS\n(pass@1)",
+    "multiple_cpp":                    "MultiPL-E C++\n(pass@1)",
+    "multiple_cs":                     "MultiPL-E C#\n(pass@1)",
+    "multiple_php":                    "MultiPL-E PHP\n(pass@1)",
+    # Perplexity
+    "bpb":                             "BpB\n(lower better)",
 }
 
 # Matplotlib style
@@ -98,15 +108,15 @@ def _find_latest(out_dir: Path, run_label: str) -> Optional[Path]:
 
 
 def _find_leaderboard(out_dir: Path, lang: str) -> Optional[Path]:
-    """Find leaderboard_{lang}.json in out_dir (v3 compact summary format)."""
+    """Find leaderboard_{lang}.json in out_dir (compact summary format)."""
     p = out_dir / f"leaderboard_{lang}.json"
     return p if p.exists() else None
 
 
 def _extract_from_leaderboard(lb: dict, run_label: str) -> dict[str, tuple[float, float]]:
     """
-    Extract metrics from a v3 leaderboard_{lang}.json.
-    Supports both lmeval mode (pass_at_k per run) and perplexity mode (base_bpb / ft_bpb).
+    Extract metrics from a leaderboard_{lang}.json.
+    Supports both bigcode mode and perplexity mode.
     """
     metrics: dict[str, tuple[float, float]] = {}
     mode = lb.get("mode", "")
@@ -117,7 +127,7 @@ def _extract_from_leaderboard(lb: dict, run_label: str) -> dict[str, tuple[float
         if bpb is not None:
             metrics["bpb"] = (float(bpb), 0.0)
 
-    elif mode == "lmeval":
+    elif mode in ("lmeval", "bigcode"):
         pak = lb.get("pass_at_k", {}).get(run_label, {})
         for task, task_metrics in pak.items():
             if not isinstance(task_metrics, dict):
@@ -130,24 +140,37 @@ def _extract_from_leaderboard(lb: dict, run_label: str) -> dict[str, tuple[float
     return metrics
 
 
-def _extract_lmeval_metrics(data: dict) -> dict[str, tuple[float, float]]:
-    """Extract {task: (score, stderr)} from an lm-eval results JSON.
+def _extract_code_metrics(data: dict) -> dict[str, tuple[float, float]]:
+    """Extract {task: (score, stderr)} from a bigcode-eval or lm-eval results JSON.
 
-    lm-eval-harness stores results under data["results"][task_name].
-    Primary metric keys tried: pass@1,none  →  acc,none  →  first numeric value.
+    Handles both formats:
+      - bigcode-eval: {"results": {"humaneval": {"pass@1": 0.35}}}
+      - lm-eval:      {"results": {"humaneval": {"pass@1,none": 0.35, "pass@1_stderr,none": 0.03}}}
     """
     metrics: dict[str, tuple[float, float]] = {}
     results_block = data.get("results", {})
     for task_name, task_data in results_block.items():
         if not isinstance(task_data, dict):
             continue
-        # Try pass@1 (code generation tasks)
-        score = task_data.get("pass@1,none") or task_data.get("pass@1")
-        stderr = task_data.get("pass@1_stderr,none") or task_data.get("pass@1_stderr", 0.0)
+        if task_name in ("config", "eval_engine", "lang", "run_label"):
+            continue
+
+        # Try bigcode-eval format first: {"pass@1": 0.35}
+        score = task_data.get("pass@1")
+        stderr = 0.0
+
+        # Fallback to lm-eval format: {"pass@1,none": 0.35}
+        if score is None:
+            score = task_data.get("pass@1,none") or task_data.get("pass@1,create_test")
+            stderr = float(task_data.get("pass@1_stderr,none") or
+                          task_data.get("pass@1_stderr,create_test") or
+                          task_data.get("pass@1_stderr") or 0.0)
+
         # Fallback to acc (classification tasks)
         if score is None:
             score = task_data.get("acc,none") or task_data.get("acc")
-            stderr = task_data.get("acc_stderr,none") or task_data.get("acc_stderr", 0.0)
+            stderr = float(task_data.get("acc_stderr,none") or task_data.get("acc_stderr", 0.0))
+
         # Fallback: first float value
         if score is None:
             for v in task_data.values():
@@ -155,8 +178,9 @@ def _extract_lmeval_metrics(data: dict) -> dict[str, tuple[float, float]]:
                     score = float(v)
                     stderr = 0.0
                     break
+
         if score is not None:
-            # Normalise task name: strip group prefixes (lm-eval sometimes nests)
+            # Normalise task name: strip group prefixes
             short = task_name.split(",")[0]
             metrics[short] = (float(score), float(stderr or 0.0))
     return metrics
@@ -178,9 +202,10 @@ def load_all_results(
     Returns:
         { lang: { "base": {task: (score, stderr)}, "ft": {task: (score, stderr)} } }
 
-    Supports two result formats:
+    Supports result formats:
+      - v4 bigcode-eval output (eval_results_{base|ft}_{ts}.json with "eval_engine": "bigcode-eval")
       - v3 leaderboard_{lang}.json (compact, both runs in one file)
-      - v2/original eval_results_{base|ft}_{ts}.json (separate files per run)
+      - v2/original lm-eval output (separate files per run)
     """
     out: dict[str, dict[str, dict[str, tuple[float, float]]]] = {}
 
@@ -191,7 +216,7 @@ def load_all_results(
 
         lang_data: dict[str, dict[str, tuple[float, float]]] = {}
 
-        # ── Try v3 leaderboard format first ────────────────────────────────
+        # ── Try leaderboard format first ──────────────────────────────────
         lb_path = _find_leaderboard(lang_dir, lang)
         if lb_path is not None:
             with open(lb_path) as f:
@@ -201,7 +226,7 @@ def load_all_results(
                 if extracted:
                     lang_data[run_label] = extracted
 
-        # ── Fall back to per-run eval_results_*.json ────────────────────────
+        # ── Fall back to per-run eval_results_*.json ──────────────────────
         # (also merges in any tasks present in the per-file format but not the leaderboard)
         for run_label in ("base", "ft"):
             path = _find_latest(lang_dir, run_label)
@@ -217,7 +242,7 @@ def load_all_results(
                 if isinstance(first_val, (int, float)):
                     file_metrics = _extract_perplexity_metrics(data)
                 else:
-                    file_metrics = _extract_lmeval_metrics(data)
+                    file_metrics = _extract_code_metrics(data)
             else:
                 file_metrics = {}
 
@@ -291,7 +316,7 @@ def _build_pivot(
     run_label: str,
     negate_bpb: bool = True,
 ) -> pd.DataFrame:
-    """Build a tasks × langs DataFrame of scores.
+    """Build a tasks x langs DataFrame of scores.
 
     negate_bpb: if True, store -BpB so that higher = better throughout.
     """
@@ -345,13 +370,13 @@ def plot_heatmap_scores(
             xticklabels=lang_labels,
             yticklabels=task_labels,
             linewidths=0.4,
-            cbar_kws={"label": "Score (↑ better; BpB shown as –BpB)"},
+            cbar_kws={"label": "Score (higher better; BpB shown as -BpB)"},
         )
     else:
         data = df.values.astype(float)
         masked = np.ma.masked_invalid(data)
         im = ax.imshow(masked, cmap="YlOrRd", aspect="auto")
-        fig.colorbar(im, ax=ax, label="Score (↑ better; BpB shown as –BpB)")
+        fig.colorbar(im, ax=ax, label="Score (higher better; BpB shown as -BpB)")
         ax.set_xticks(range(len(lang_labels)))
         ax.set_yticks(range(len(task_labels)))
         ax.set_xticklabels(lang_labels, fontsize=9)
@@ -406,13 +431,13 @@ def plot_heatmap_delta(
             xticklabels=lang_labels,
             yticklabels=task_labels,
             linewidths=0.4,
-            cbar_kws={"label": "Δ Score (FT − Base, ↑ better)"},
+            cbar_kws={"label": "Delta Score (FT - Base, higher better)"},
         )
     else:
         masked = np.ma.masked_invalid(data)
         norm = mcolors.TwoSlopeNorm(vmin=-vmax, vcenter=0, vmax=vmax)
         im = ax.imshow(masked, cmap="RdBu_r", norm=norm, aspect="auto")
-        fig.colorbar(im, ax=ax, label="Δ Score (FT − Base, ↑ better)")
+        fig.colorbar(im, ax=ax, label="Delta Score (FT - Base, higher better)")
         ax.set_xticks(range(len(lang_labels)))
         ax.set_yticks(range(len(task_labels)))
         ax.set_xticklabels(lang_labels, fontsize=9)
@@ -423,7 +448,7 @@ def plot_heatmap_delta(
                 if not np.isnan(v):
                     ax.text(j, i, f"{v:+.3f}", ha="center", va="center", fontsize=7)
 
-    ax.set_title("Improvement: LAS Finetuned − Base OLMo-3-7B", fontsize=12,
+    ax.set_title("Improvement: LAS Finetuned - Base OLMo-3-7B", fontsize=12,
                  fontweight="bold", pad=12)
     fig.tight_layout()
     fig.savefig(output_dir / "heatmap_delta.png", bbox_inches="tight")
@@ -475,7 +500,7 @@ def plot_summary_delta(
     ax.axhline(0, color="black", linewidth=0.8, linestyle="--")
     ax.set_xticks(x)
     ax.set_xticklabels(labels, fontsize=10)
-    ax.set_ylabel("Mean Improvement (LAS-FT − Base)")
+    ax.set_ylabel("Mean Improvement (LAS-FT - Base)")
     ax.set_title("Average Improvement per Language", fontsize=12, fontweight="bold")
     ax.grid(axis="y", linestyle="--", alpha=0.35)
     fig.tight_layout()
@@ -576,11 +601,11 @@ def main() -> None:
     export_csv(all_data, found_langs, output_dir)
 
     print(f"\nAll outputs saved to: {output_dir}")
-    print("  per_lang/bar_{{lang}}.png   — per-language grouped bar charts")
-    print("  heatmap_ft_scores.png      — cross-language score heatmap")
-    print("  heatmap_delta.png          — improvement delta heatmap")
-    print("  summary_delta.png          — mean improvement per language")
-    print("  results_summary.csv        — full numeric results table")
+    print("  per_lang/bar_{lang}.png   — per-language grouped bar charts")
+    print("  heatmap_ft_scores.png     — cross-language score heatmap")
+    print("  heatmap_delta.png         — improvement delta heatmap")
+    print("  summary_delta.png         — mean improvement per language")
+    print("  results_summary.csv       — full numeric results table")
 
 
 if __name__ == "__main__":

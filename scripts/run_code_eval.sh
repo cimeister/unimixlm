@@ -1,25 +1,38 @@
 #!/usr/bin/env bash
 # =============================================================================
-# run_code_eval.sh — UniMixLM Eval System v3
+# run_code_eval.sh — UniMixLM Eval System v4 (bigcode-evaluation-harness)
 #
-# Evaluates all 11 LAS finetuned models vs. base OLMo-3-7B.
+# Evaluates all 12 LAS finetuned models vs. base OLMo-3-7B using
+# bigcode-evaluation-harness with language-specific benchmarks:
+#
+#   Python:      HumanEval, MBPP, HumanEval+
+#   Go:          MultiPL-E Go, HumanEvalPack Go
+#   TypeScript:  MultiPL-E TS
+#   Java:        MultiPL-E Java, HumanEvalPack Java
+#   JavaScript:  MultiPL-E JS, HumanEvalPack JS
+#   C++:         MultiPL-E C++, HumanEvalPack C++
+#   C#:          MultiPL-E C#
+#   PHP:         MultiPL-E PHP
+#   C/HTML/CSS/Markdown: BpB perplexity (no functional benchmark)
+#
 # Parallelises across all available GPUs (one language per GPU).
 # Resumable: completed languages are skipped (delete sentinel to re-run).
 #
 # Usage:
 #   bash scripts/run_code_eval.sh                          # all langs, all GPUs
-#   bash scripts/run_code_eval.sh go java typescript       # specific languages
+#   bash scripts/run_code_eval.sh go java python           # specific languages
 #   GPUS="1 2 3 4 5 6 7" bash scripts/run_code_eval.sh    # skip GPU 0 (if busy)
 #   bash scripts/run_code_eval.sh --slurm                  # SLURM array jobs
 #   bash scripts/run_code_eval.sh --slurm go java          # SLURM, specific langs
 #
 # Environment overrides:
 #   GPUS="0 1 2 3 4 5 6 7"   space-separated GPU IDs to use (default: all detected)
-#   BATCH_SIZE=auto:4          lm-eval batch size
+#   BATCH_SIZE=1               bigcode-eval batch size (integer)
 #   N_SAMPLES=1                completions per problem (1=pass@1, 10=pass@1+10)
 #   SKIP_PLOTTING=1            skip final plot generation
 #   PUSH_TO_HUB=<repo>         upload leaderboard JSONs to HF dataset repo
 #   BASELINE_DIR=<path>        directory with prior results for regression check
+#   BIGCODE_EVAL_MAIN=<path>   path to bigcode-evaluation-harness main.py
 #   SLURM_GPU=1                GPU count per SLURM job
 #   SLURM_MEM=80G              memory per SLURM job
 #   SLURM_TIME=04:00:00        wall time per SLURM job
@@ -31,11 +44,12 @@ BASE_MODEL="allenai/OLMo-3-1025-7B"
 HF_ADAPTER_PREFIX="MultilingualUnigramLM/ft-code-las-olmo3-7b-thestack100M"
 RESULTS_BASE="./eval_results"
 LOGS_DIR="./logs/code_eval"
-BATCH_SIZE="${BATCH_SIZE:-auto:4}"
+BATCH_SIZE="${BATCH_SIZE:-1}"
 N_SAMPLES="${N_SAMPLES:-1}"
 SKIP_PLOTTING="${SKIP_PLOTTING:-0}"
 PUSH_TO_HUB="${PUSH_TO_HUB:-}"
 BASELINE_DIR="${BASELINE_DIR:-}"
+BIGCODE_EVAL_MAIN="${BIGCODE_EVAL_MAIN:-}"
 
 # SLURM settings
 SLURM_MODE=0
@@ -46,12 +60,13 @@ SLURM_PARTITION="${SLURM_PARTITION:-gpu}"
 
 # Required for HumanEval code execution
 export HF_ALLOW_CODE_EVAL=1
-export LM_EVAL_CONFIRM_RUN_UNSAFE_CODE=1
 export TOKENIZERS_PARALLELISM=false
 
 # Default language lists
-ALL_CODE_LANGS=(go typescript java javascript cpp csharp php c)
-ALL_PERP_LANGS=(html css markdown)
+# Code languages: evaluated with bigcode-evaluation-harness (language-specific benchmarks)
+ALL_CODE_LANGS=(python go typescript java javascript cpp csharp php)
+# Perplexity languages: evaluated with BpB (no functional benchmark available)
+ALL_PERP_LANGS=(c html css markdown)
 
 # ─── GPU detection ───────────────────────────────────────────────────────────
 # Auto-detect available GPU IDs from nvidia-smi, or fall back to GPUS env var.
@@ -82,8 +97,8 @@ done
 if [ "${#POSITIONAL[@]}" -gt 0 ]; then
     for lang in "${POSITIONAL[@]}"; do
         case "$lang" in
-            html|css|markdown) PERP_LANGS+=("$lang") ;;
-            *)                 CODE_LANGS+=("$lang") ;;
+            c|html|css|markdown) PERP_LANGS+=("$lang") ;;
+            *)                   CODE_LANGS+=("$lang") ;;
         esac
     done
 else
@@ -98,7 +113,7 @@ log() { echo "[$(date '+%Y-%m-%d %H:%M:%S')] $*"; }
 err() { log "ERROR: $*" >&2; exit 1; }
 
 # ─── Pre-flight checks ───────────────────────────────────────────────────────
-log "=== UniMixLM Eval System v3 (parallel) ==="
+log "=== UniMixLM Eval System v4 (bigcode-evaluation-harness) ==="
 log "Base model  : $BASE_MODEL"
 log "Code langs  : ${CODE_LANGS[*]:-none}"
 log "Perp langs  : ${PERP_LANGS[*]:-none}"
@@ -106,8 +121,9 @@ log "GPUs        : ${GPUS} (${N_GPUS} total)"
 log "Batch size  : $BATCH_SIZE"
 log "N samples   : $N_SAMPLES"
 log "SLURM mode  : $SLURM_MODE"
-[ -n "$PUSH_TO_HUB" ]   && log "Hub sync    : $PUSH_TO_HUB"
-[ -n "$BASELINE_DIR" ]  && log "Baseline    : $BASELINE_DIR"
+[ -n "$PUSH_TO_HUB" ]       && log "Hub sync    : $PUSH_TO_HUB"
+[ -n "$BASELINE_DIR" ]      && log "Baseline    : $BASELINE_DIR"
+[ -n "$BIGCODE_EVAL_MAIN" ] && log "Bigcode main: $BIGCODE_EVAL_MAIN"
 
 if ! huggingface-cli whoami >/dev/null 2>&1; then
     err "Not logged in to HuggingFace. Run: huggingface-cli login"
@@ -115,11 +131,14 @@ fi
 HF_USER=$(huggingface-cli whoami 2>/dev/null | head -1)
 log "HuggingFace : authenticated as $HF_USER"
 
-if ! python3 -c "import lm_eval" 2>/dev/null; then
-    err "lm_eval not found. Run: pip install -r requirements.txt"
+if ! python3 -c "import bigcode_eval" 2>/dev/null; then
+    err "bigcode_eval not found. Install: pip install -e git+https://github.com/bigcode-project/bigcode-evaluation-harness@main#egg=bigcode_eval"
 fi
 if ! python3 -c "import peft" 2>/dev/null; then
     err "peft not found. Run: pip install peft"
+fi
+if ! python3 -c "import accelerate" 2>/dev/null; then
+    err "accelerate not found. Run: pip install accelerate"
 fi
 
 mkdir -p "$RESULTS_BASE" "$LOGS_DIR"
@@ -149,8 +168,9 @@ _python_args() {
         --n-samples "$N_SAMPLES"
         --batch-size "$BATCH_SIZE"
     )
-    [ -n "$PUSH_TO_HUB" ]  && args+=(--push-to-hub "$PUSH_TO_HUB")
-    [ -n "$BASELINE_DIR" ] && args+=(--baseline-dir "$BASELINE_DIR")
+    [ -n "$PUSH_TO_HUB" ]       && args+=(--push-to-hub "$PUSH_TO_HUB")
+    [ -n "$BASELINE_DIR" ]      && args+=(--baseline-dir "$BASELINE_DIR")
+    [ -n "$BIGCODE_EVAL_MAIN" ] && args+=(--bigcode-eval-path "$BIGCODE_EVAL_MAIN")
     echo "${args[@]}"
 }
 
@@ -263,7 +283,6 @@ submit_slurm() {
 #SBATCH --error=${LOGS_DIR}/${lang}_%j.err
 
 export HF_ALLOW_CODE_EVAL=1
-export LM_EVAL_CONFIRM_RUN_UNSAFE_CODE=1
 export TOKENIZERS_PARALLELISM=false
 
 python3 las_experiment/code_benchmark_eval.py ${py_args}
@@ -276,10 +295,10 @@ SLURM_SCRIPT
 if [ "$SLURM_MODE" -eq 1 ]; then
     # SLURM: submit one job per language (cluster manages parallelism)
     if [ "${#CODE_LANGS[@]}" -gt 0 ]; then
-        log "=== Submitting functional benchmark jobs (SLURM) ==="
+        log "=== Submitting bigcode-eval benchmark jobs (SLURM) ==="
         for lang in "${CODE_LANGS[@]}"; do
             sentinel="${RESULTS_BASE}/code_${lang}/.eval_complete"
-            submit_slurm "$lang" "lmeval" "$sentinel"
+            submit_slurm "$lang" "bigcode" "$sentinel"
         done
     fi
     if [ "${#PERP_LANGS[@]}" -gt 0 ]; then
@@ -294,10 +313,10 @@ else
     log "=== Launching parallel evaluation (max ${N_GPUS} concurrent jobs) ==="
 
     if [ "${#CODE_LANGS[@]}" -gt 0 ]; then
-        log "--- Functional benchmarks (HumanEval + MBPP + MultiPL-E) ---"
+        log "--- Functional benchmarks (bigcode-eval: HumanEval/MBPP/MultiPL-E/HumanEvalPack) ---"
         for lang in "${CODE_LANGS[@]}"; do
             sentinel="${RESULTS_BASE}/code_${lang}/.eval_complete"
-            run_parallel "$lang" "lmeval" "$sentinel"
+            run_parallel "$lang" "bigcode" "$sentinel"
         done
     fi
 

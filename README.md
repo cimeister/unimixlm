@@ -35,7 +35,7 @@ The pipeline has four stages:
 1. **Dataset Creation** - Stream and curate training data from HuggingFace
 2. **Tokenizer Training** - Train LAS tokenizers (shared base + language-specific)
 3. **Finetuning** - LoRA fine-tune LLMs with original or LAS tokenizers
-4. **Evaluation** - Benchmark with lm-eval-harness (BpB + downstream tasks)
+4. **Evaluation** - Benchmark with [bigcode-evaluation-harness](https://github.com/bigcode-project/bigcode-evaluation-harness) (code) and lm-eval-harness (NL)
 
 Each stage supports both **natural language** and **code** domains.
 
@@ -318,18 +318,24 @@ Tasks:
 - **Belebele** - reading comprehension (random guess: 25%)
 - **PIQA** - question answering (random guess: 50%)
 
-### Code
+### Code (bigcode-evaluation-harness)
+
+All code evaluations use the [bigcode-evaluation-harness](https://github.com/bigcode-project/bigcode-evaluation-harness) with **language-specific benchmarks** — each model is evaluated only on benchmarks native to its language.
 
 ```bash
-python run_eval.py --config-name=code_default model_lang=python
+# Install bigcode-evaluation-harness (one-time setup)
+pip install -e git+https://github.com/bigcode-project/bigcode-evaluation-harness@main#egg=bigcode_eval
+pip install evalplus  # for HumanEval+
+
+# Run single language
+python3 las_experiment/code_benchmark_eval.py \
+    --lang python \
+    --base-model allenai/OLMo-3-1025-7B \
+    --adapter-repo MultilingualUnigramLM/ft-code-las-olmo3-7b-thestack100M-python \
+    --output-dir ./eval_results/code_python
 ```
 
-Tasks:
-- **HumanEval** - code generation benchmark
-- **MBPP** - Mostly Basic Python Problems
-- **MultiPL-E** - multilingual code generation across programming languages
-
-### Code Benchmark Suite (all 11 languages)
+### Code Benchmark Suite (all 12 languages)
 
 Run the full evaluation pipeline comparing all LAS finetuned models against base OLMo-3-7B:
 
@@ -337,7 +343,7 @@ Run the full evaluation pipeline comparing all LAS finetuned models against base
 bash scripts/run_code_eval.sh
 ```
 
-The script **parallelises across all available GPUs** — each language is pinned to a dedicated GPU via `CUDA_VISIBLE_DEVICES`, with a FIFO-based pool ensuring at most one language per GPU at a time. On a node with 8× A100-80GB this runs all 8 code languages simultaneously, then the 3 perplexity languages.
+The script **parallelises across all available GPUs** — each language is pinned to a dedicated GPU via `CUDA_VISIBLE_DEVICES`, with a FIFO-based pool ensuring at most one language per GPU at a time. On a node with 8x A100-80GB this runs all 8 code languages simultaneously, then the 4 perplexity languages.
 
 The script is **resumable** — already-completed languages are skipped automatically (delete the sentinel file to re-run a language).
 
@@ -349,58 +355,54 @@ bash scripts/run_code_eval.sh
 GPUS="1 2 3 4 5 6 7" bash scripts/run_code_eval.sh
 
 # Selected languages only (assigned to free GPUs)
-bash scripts/run_code_eval.sh go java typescript
+bash scripts/run_code_eval.sh python go java typescript
 
 # Skip plotting step
 SKIP_PLOTTING=1 bash scripts/run_code_eval.sh
+
+# Override bigcode-eval-harness location
+BIGCODE_EVAL_MAIN=/path/to/bigcode-evaluation-harness/main.py bash scripts/run_code_eval.sh
 ```
 
-#### GPU-hour estimates (8× A100-80GB, bfloat16, n_samples=1)
+#### GPU-hour estimates (8x A100-80GB, bfloat16, n_samples=1)
 
-Observed throughput on OLMo-3-7B + PEFT:
-
-| Run | Samples | Rate | Time per language |
-|-----|---------|------|------------------|
-| Base model (lm-eval) | 664 | ~6.8 s/sample | ~75 min |
-| FT model (lm-eval, PEFT) | 664 | ~15 s/sample | ~170 min |
-| **Total per code language** | | | **~4 h 5 min** |
-| Perplexity language (BpB, base + FT) | 200 | forward-pass only | ~30 min |
-
-| Mode | Wall-clock (8× A100) | GPU-hours |
+| Mode | Wall-clock (8x A100) | GPU-hours |
 |------|---------------------|-----------|
-| 8 code languages in parallel | ~4 h 5 min | ~33 GPU-h |
-| 3 perplexity languages in parallel | ~30 min | ~1.5 GPU-h |
-| **Full suite (11 languages)** | **~4.5–5 h** | **~35 GPU-h** |
-
-*FT eval is ~2.2× slower than base due to PEFT adapter overhead. Rates measured on A100-SXM4-80GB with batch_size=1 (auto-detected).*
+| 8 code languages in parallel (bigcode-eval) | ~4-5 h | ~33 GPU-h |
+| 4 perplexity languages in parallel (BpB) | ~30 min | ~2 GPU-h |
+| **Full suite (12 languages)** | **~5-6 h** | **~35 GPU-h** |
 
 #### Sentinel files
 
 | Language type | Sentinel path | Delete to re-run |
 |--------------|--------------|-----------------|
-| Code (lm-eval) | `eval_results/code_{lang}/.eval_complete` | `rm eval_results/code_go/.eval_complete` |
-| Perplexity | `eval_results/code_{lang}/.perplexity_complete` | `rm eval_results/code_html/.perplexity_complete` |
+| Code (bigcode-eval) | `eval_results/code_{lang}/.eval_complete` | `rm eval_results/code_python/.eval_complete` |
+| Perplexity (BpB) | `eval_results/code_{lang}/.perplexity_complete` | `rm eval_results/code_html/.perplexity_complete` |
 
-#### Benchmarks
+#### Language-Specific Benchmarks
 
-| Language | HumanEval | MBPP | MultiPL-E Task | Metric |
-|----------|:---------:|:----:|:--------------|:------:|
-| Go | Python retention | Python retention | `multiple_go` | pass@1 |
-| TypeScript | Python retention | Python retention | `multiple_ts` | pass@1 |
-| Java | Python retention | Python retention | `multiple_java` | pass@1 |
-| JavaScript | Python retention | Python retention | `multiple_js` | pass@1 |
-| C++ | Python retention | Python retention | `multiple_cpp` | pass@1 |
-| C# | Python retention | Python retention | `multiple_cs` | pass@1 |
-| PHP | Python retention | Python retention | `multiple_php` | pass@1 |
-| C | Python retention | Python retention | — | pass@1 |
-| HTML | — | — | — | BpB (perplexity) |
-| CSS | — | — | — | BpB (perplexity) |
-| Markdown | — | — | — | BpB (perplexity) |
+Each language is evaluated with benchmarks appropriate for that language using bigcode-evaluation-harness:
+
+| Language | Benchmarks | bigcode-eval Tasks | Metric |
+|----------|-----------|-------------------|:------:|
+| Python | HumanEval, MBPP, HumanEval+ | `humaneval`, `mbpp`, `humanevalplus` | pass@1 |
+| Go | MultiPL-E Go, HumanEvalPack Go | `multiple-go`, `humanevalsynthesize-go` | pass@1 |
+| TypeScript | MultiPL-E TS | `multiple-ts` | pass@1 |
+| Java | MultiPL-E Java, HumanEvalPack Java | `multiple-java`, `humanevalsynthesize-java` | pass@1 |
+| JavaScript | MultiPL-E JS, HumanEvalPack JS | `multiple-js`, `humanevalsynthesize-javascript` | pass@1 |
+| C++ | MultiPL-E C++, HumanEvalPack C++ | `multiple-cpp`, `humanevalsynthesize-cpp` | pass@1 |
+| C# | MultiPL-E C# | `multiple-cs` | pass@1 |
+| PHP | MultiPL-E PHP | `multiple-php` | pass@1 |
+| C | BpB perplexity | — | BpB |
+| HTML | BpB perplexity | — | BpB |
+| CSS | BpB perplexity | — | BpB |
+| Markdown | BpB perplexity | — | BpB |
 
 **Notes**:
-- HumanEval and MBPP are Python-only; they are run for all languages to measure catastrophic forgetting of Python ability.
-- MultiPL-E (`multiple_{lang}`) provides per-language functional correctness via code execution.
-- HTML, CSS, and Markdown have no standard functional benchmark; bits-per-byte (BpB) on TheStack test splits is used. Lower BpB = better.
+- **Python** is evaluated with native Python benchmarks: HumanEval (164 problems), MBPP (974 problems), and HumanEval+ (164 problems with ~764 tests/problem for rigorous assessment).
+- **MultiPL-E** provides per-language functional correctness via HumanEval translations with code execution in native language runtimes.
+- **HumanEvalPack** (synthesis mode) extends HumanEval to additional languages via human translations (available for Go, Java, JavaScript, C++).
+- **C, HTML, CSS, Markdown** have no standard functional code generation benchmark; bits-per-byte (BpB) on TheStack test splits is used. Lower BpB = better.
 - All comparisons are base `allenai/OLMo-3-1025-7B` vs. `MultilingualUnigramLM/ft-code-las-olmo3-7b-thestack100M-{lang}`.
 
 #### Output Structure
@@ -408,24 +410,27 @@ Observed throughput on OLMo-3-7B + PEFT:
 ```
 eval_results/
 ├── code_{lang}/
-│   ├── eval_results_base_{timestamp}.json   # base model scores
-│   ├── eval_results_ft_{timestamp}.json     # LAS finetuned scores
-│   └── .eval_complete                       # sentinel (skip-if-done)
+│   ├── eval_results_base_{timestamp}.json      # base model scores
+│   ├── eval_results_ft_{timestamp}.json        # LAS finetuned scores
+│   ├── bigcode_metrics_{base|ft}_{ts}.json     # raw bigcode-eval output
+│   ├── generations_{base|ft}_{ts}.json         # generated code samples
+│   ├── leaderboard_{lang}.json                 # compact summary
+│   └── .eval_complete                          # sentinel (skip-if-done)
 └── code_summary/
     ├── per_lang/
-    │   └── bar_{lang}.png                   # grouped bar charts (base vs. LAS-FT)
-    ├── heatmap_ft_scores.png                # tasks × languages score heatmap
-    ├── heatmap_delta.png                    # improvement delta heatmap (RdBu)
-    ├── summary_delta.png                    # mean improvement per language
-    └── results_summary.csv                  # full numeric results table
+    │   └── bar_{lang}.png                      # grouped bar charts (base vs. LAS-FT)
+    ├── heatmap_ft_scores.png                   # tasks x languages score heatmap
+    ├── heatmap_delta.png                       # improvement delta heatmap (RdBu)
+    ├── summary_delta.png                       # mean improvement per language
+    └── results_summary.csv                     # full numeric results table
 ```
 
 #### Results
 
 <!-- Run `bash scripts/run_code_eval.sh` to populate this table -->
 
-| Language | Task | Base Score | LAS-FT Score | Δ |
-|----------|------|:----------:|:------------:|:-:|
+| Language | Task | Base Score | LAS-FT Score | Delta |
+|----------|------|:----------:|:------------:|:-----:|
 | *Run evaluation to populate* | | | | |
 
 ### BpB Metric
@@ -467,7 +472,9 @@ unimixlm/
 │
 ├── las_experiment/
 │   ├── finetune.py                  # Core finetuning logic
-│   ├── downstream_eval.py           # Evaluation with LAS tokenizers
+│   ├── code_benchmark_eval.py       # Code eval engine (bigcode-evaluation-harness)
+│   ├── plot_code_eval_results.py    # Evaluation plotting and CSV export
+│   ├── downstream_eval.py           # NL evaluation with LAS tokenizers (lm-eval)
 │   └── tokenizer_training/
 │       ├── training.py              # NL tokenizer training
 │       └── code_tokenizer_training.py  # Code tokenizer training
@@ -479,6 +486,7 @@ unimixlm/
 │   └── ...
 │
 ├── scripts/
+│   ├── run_code_eval.sh             # Code evaluation (parallel, 8x A100)
 │   ├── run_code_finetuning.sh       # Code finetuning (multi-GPU)
 │   ├── run_code_finetuning-slurm.sh # Code finetuning (SLURM)
 │   ├── download_code_tokenizers.sh  # Download tokenizers from HF
