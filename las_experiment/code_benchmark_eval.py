@@ -76,11 +76,14 @@ BIGCODE_TASK_MAP: dict[str, list[str]] = {
     "cpp":        ["multiple-cpp", "humanevalsynthesize-cpp"],
     "csharp":     ["multiple-cs"],
     "php":        ["multiple-php"],
-    "c":          ["multiple-c"],
 }
 
+# HumanEvalPack tasks require --prompt; run separately from standard tasks
+PROMPT_REQUIRED_PREFIXES = ("humanevalsynthesize-", "humanevalfix-", "humanevalexplain-")
+
 # Languages that have no functional benchmark → perplexity (BpB) only
-PERPLEXITY_LANGS: set[str] = {"html", "css", "markdown"}
+# NOTE: "c" has no MultiPL-E support (only C++ via multiple-cpp)
+PERPLEXITY_LANGS: set[str] = {"html", "css", "markdown", "c"}
 
 # Exact HF model names for each language adapter
 ADAPTER_MAP: dict[str, str] = {
@@ -117,10 +120,26 @@ def jsonl_log(log_path: Path, obj: dict) -> None:
 
 def _is_oom(text: str) -> bool:
     s = text.lower()
-    return any(k in s for k in ["out of memory", "cuda oom", "oom", "memory"])
+    return any(k in s for k in [
+        "out of memory", "cuda out of memory", "cuda oom",
+        "torch.cuda.outofmemoryerror", "runtime error: cuda",
+        "allocator", "oom killed",
+    ])
 
 
 # ─── Robust dataset loading (fixes HF cache + config mismatch) ──────────────
+
+def _parse_cached_configs(error_msg: str) -> list[str]:
+    """Extract cached config names from HF datasets error messages.
+
+    Errors look like: "Available configs in the cache: ['css-540ede6bde1cefae']"
+    """
+    import re
+    m = re.search(r"Available configs in the cache:\s*\[([^\]]+)\]", str(error_msg))
+    if not m:
+        return []
+    return [c.strip().strip("'\"") for c in m.group(1).split(",")]
+
 
 def safe_load_dataset(repo: str, split: str = "test", max_retries: int = 3):
     """
@@ -132,12 +151,26 @@ def safe_load_dataset(repo: str, split: str = "test", max_retries: int = 3):
     from datasets import load_dataset, get_dataset_config_names
 
     # Attempt 1: direct load
+    first_err = None
     try:
         return load_dataset(repo, split=split, streaming=True)
     except Exception as e:
+        first_err = e
         logger.warning(f"[dataset] primary load failed for {repo}: {e}")
 
-    # Attempt 2: enumerate configs, pick first valid one
+    # Attempt 2: try cached config names parsed from the error message
+    cached_configs = _parse_cached_configs(str(first_err))
+    if cached_configs:
+        logger.info(f"[dataset] trying cached configs: {cached_configs}")
+        for cfg in cached_configs:
+            for sp in (split, "train"):
+                try:
+                    return load_dataset(repo, name=cfg, split=sp, streaming=True)
+                except Exception:
+                    pass
+        logger.warning(f"[dataset] cached config fallback failed for {repo}")
+
+    # Attempt 3: enumerate configs from HF, pick first valid one
     try:
         configs = get_dataset_config_names(repo)
         logger.warning(f"[dataset] available configs for {repo}: {configs}")
@@ -157,7 +190,7 @@ def safe_load_dataset(repo: str, split: str = "test", max_retries: int = 3):
     except Exception as e2:
         logger.warning(f"[dataset] config-based load failed: {e2}")
 
-    # Attempt 3: fallback to train split
+    # Attempt 4: fallback to train split
     try:
         return load_dataset(repo, split="train", streaming=True)
     except Exception as e3:
@@ -259,6 +292,7 @@ def run_bigcode_eval(
     precision: str = "bf16",
     bigcode_main: str = "",
     las_tokenizer_path: Optional[str] = None,
+    prompt_type: Optional[str] = None,
 ) -> dict:
     """
     Run bigcode-evaluation-harness via subprocess.
@@ -287,6 +321,10 @@ def run_bigcode_eval(
 
     if peft_model:
         cmd.extend(["--peft_model", peft_model])
+
+    # HumanEvalPack tasks require --prompt
+    if prompt_type:
+        cmd.extend(["--prompt", prompt_type])
 
     # Use LAS tokenizer if available
     if las_tokenizer_path:
@@ -367,6 +405,7 @@ def run_with_precision_fallback(
     temperature: float,
     bigcode_main: str,
     las_tokenizer_path: Optional[str] = None,
+    prompt_type: Optional[str] = None,
 ) -> dict:
     """Try precisions in order, but ONLY retry on OOM errors."""
     last_err: Optional[Exception] = None
@@ -387,6 +426,7 @@ def run_with_precision_fallback(
                 temperature=temperature,
                 precision=precision,
                 bigcode_main=bigcode_main,
+                prompt_type=prompt_type,
                 las_tokenizer_path=las_tokenizer_path,
             )
         except subprocess.CalledProcessError as e:
@@ -791,48 +831,83 @@ def main() -> None:
 
     # ── bigcode-eval path ─────────────────────────────────────────────────────
     if not is_perplexity:
-        tasks = BIGCODE_TASK_MAP.get(lang)
-        if not tasks:
+        all_tasks = BIGCODE_TASK_MAP.get(lang)
+        if not all_tasks:
             raise ValueError(
                 f"No bigcode-eval tasks defined for lang='{lang}'. "
                 f"Known languages: {sorted(BIGCODE_TASK_MAP.keys())}"
             )
-        logger.info(f"[tasks] bigcode-eval tasks for {lang}: {tasks}")
+        logger.info(f"[tasks] bigcode-eval tasks for {lang}: {all_tasks}")
+
+        # Split into standard tasks and tasks requiring --prompt
+        std_tasks = [t for t in all_tasks
+                     if not t.startswith(PROMPT_REQUIRED_PREFIXES)]
+        prompt_tasks = [t for t in all_tasks
+                        if t.startswith(PROMPT_REQUIRED_PREFIXES)]
 
         bigcode_main = _find_bigcode_main(args.bigcode_eval_path)
         logger.info(f"[bigcode-eval] Using main.py at: {bigcode_main}")
 
-        # Run base model (no PEFT, no LAS tokenizer — base model in native config)
-        base_res = run_with_precision_fallback(
-            base_model_id=args.base_model,
-            peft_model=None,
-            tasks=tasks,
-            output_dir=out,
-            run_label="base",
-            log_path=log_path,
-            n_samples=args.n_samples,
-            batch_size=args.batch_size,
-            max_length_generation=args.max_length_generation,
-            temperature=args.temperature,
-            bigcode_main=bigcode_main,
-            las_tokenizer_path=None,  # base model uses its own tokenizer
-        )
+        def _run_task_group(tasks, run_label, peft_model, las_tokenizer_path,
+                           prompt_type=None):
+            return run_with_precision_fallback(
+                base_model_id=args.base_model,
+                peft_model=peft_model,
+                tasks=tasks,
+                output_dir=out,
+                run_label=run_label,
+                log_path=log_path,
+                n_samples=args.n_samples,
+                batch_size=args.batch_size,
+                max_length_generation=args.max_length_generation,
+                temperature=args.temperature,
+                bigcode_main=bigcode_main,
+                las_tokenizer_path=las_tokenizer_path,
+                prompt_type=prompt_type,
+            )
 
-        # Run finetuned model (with PEFT + LAS tokenizer)
-        ft_res = run_with_precision_fallback(
-            base_model_id=args.base_model,
-            peft_model=args.adapter_repo,
-            tasks=tasks,
-            output_dir=out,
-            run_label="ft",
-            log_path=log_path,
-            n_samples=args.n_samples,
-            batch_size=args.batch_size,
-            max_length_generation=args.max_length_generation,
-            temperature=args.temperature,
-            bigcode_main=bigcode_main,
+        def _merge_results(a: dict, b: dict) -> dict:
+            """Merge two bigcode-eval compat_data dicts."""
+            merged = dict(a)
+            merged["results"] = {**a.get("results", {}), **b.get("results", {})}
+            return merged
+
+        # ── Run standard tasks ───────────────────────────────────────────
+        base_res = _run_task_group(
+            std_tasks, "base", peft_model=None, las_tokenizer_path=None,
+        )
+        ft_res = _run_task_group(
+            std_tasks, "ft", peft_model=args.adapter_repo,
             las_tokenizer_path=las_tok_dir,
         )
+
+        # ── Run prompt-required tasks (non-fatal if they fail) ───────────
+        if prompt_tasks:
+            logger.info(
+                f"[tasks] Running HumanEvalPack tasks with --prompt continue: "
+                f"{prompt_tasks}"
+            )
+            try:
+                prompt_base = _run_task_group(
+                    prompt_tasks, "base_synth", peft_model=None,
+                    las_tokenizer_path=None, prompt_type="continue",
+                )
+                base_res = _merge_results(base_res, prompt_base)
+            except Exception as e:
+                logger.warning(
+                    f"[tasks] HumanEvalPack base run failed (non-fatal): {e}"
+                )
+            try:
+                prompt_ft = _run_task_group(
+                    prompt_tasks, "ft_synth",
+                    peft_model=args.adapter_repo,
+                    las_tokenizer_path=las_tok_dir, prompt_type="continue",
+                )
+                ft_res = _merge_results(ft_res, prompt_ft)
+            except Exception as e:
+                logger.warning(
+                    f"[tasks] HumanEvalPack ft run failed (non-fatal): {e}"
+                )
 
         pass_at_k = {
             "base": extract_bigcode_metrics(base_res),
