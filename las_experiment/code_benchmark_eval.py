@@ -83,6 +83,19 @@ BIGCODE_TASK_MAP: dict[str, list[str]] = {
 # HumanEvalPack tasks require --prompt; run separately from standard tasks
 PROMPT_REQUIRED_PREFIXES = ("humanevalsynthesize-", "humanevalfix-", "humanevalexplain-")
 
+# Language -> external binaries required by bigcode-eval --allow_code_execution
+# These runtimes are needed to compile/run generated code for metric computation.
+RUNTIME_DEPS: dict[str, list[str]] = {
+    "python":     ["python3"],
+    "go":         ["go"],
+    "typescript":  ["node", "tsc"],
+    "java":       ["javac", "java"],
+    "javascript": ["node"],
+    "cpp":        ["g++"],
+    "csharp":     ["dotnet"],
+    "php":        ["php"],
+}
+
 # Languages that have no functional benchmark → perplexity (BpB) only
 PERPLEXITY_LANGS: set[str] = {"html", "css", "markdown", "c"}
 
@@ -228,6 +241,38 @@ def _is_oom(text: str) -> bool:
         "torch.cuda.outofmemoryerror", "runtime error: cuda",
         "allocator", "oom killed",
     ])
+
+
+# ─── Runtime dependency pre-flight check ─────────────────────────────────────
+
+def check_runtime_deps(lang: str) -> None:
+    """Verify that the language runtime required by bigcode-eval is installed.
+
+    Raises RuntimeError immediately if a required binary is missing, avoiding
+    a wasted 70-minute generation phase that would fail at metric computation.
+    """
+    deps = RUNTIME_DEPS.get(lang)
+    if not deps:
+        return  # perplexity-only languages have no runtime deps
+
+    missing = [cmd for cmd in deps if shutil.which(cmd) is None]
+    if missing:
+        raise RuntimeError(
+            f"[preflight] Language '{lang}' requires the following runtime(s) "
+            f"to execute generated code, but they are not installed: "
+            f"{', '.join(missing)}.\n"
+            f"Install them before running evaluation. Without these, bigcode-eval "
+            f"will fail after the generation phase (~70 min wasted).\n"
+            f"  go        -> wget https://go.dev/dl/go1.22.2.linux-amd64.tar.gz && sudo tar -C /usr/local -xzf go*.tar.gz\n"
+            f"  javac/java-> sudo apt-get install -y default-jdk\n"
+            f"  node      -> curl -fsSL https://deb.nodesource.com/setup_20.x | sudo -E bash - && sudo apt-get install -y nodejs\n"
+            f"  tsc       -> sudo npm install -g typescript\n"
+            f"  g++       -> sudo apt-get install -y g++\n"
+            f"  dotnet    -> sudo apt-get install -y dotnet-sdk-8.0\n"
+            f"  php       -> sudo apt-get install -y php-cli"
+        )
+
+    logger.info(f"[preflight] [{lang}] All runtime deps OK: {', '.join(deps)}")
 
 
 # ─── Robust dataset loading (fixes HF cache + config mismatch) ──────────────
@@ -1047,6 +1092,10 @@ def main() -> None:
         # [std base, std ft], [prompt base, prompt ft], BpB base, BpB ft
         n_phases = 2 + (2 if has_std else 0) + (2 if has_prompt else 0)
     timer = EvalTimer(lang, total_phases=n_phases)
+
+    # ── Pre-flight: verify language runtime is available ────────────────────
+    if not is_perplexity:
+        check_runtime_deps(lang)
 
     # ── bigcode-eval path ─────────────────────────────────────────────────────
     if not is_perplexity:

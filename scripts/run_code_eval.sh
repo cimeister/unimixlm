@@ -98,6 +98,87 @@ format_duration() {
 
 EVAL_START_EPOCH=$(date +%s)
 
+# ─── Install language runtimes needed by bigcode-eval (--allow_code_execution) ─
+install_runtime_deps() {
+    local missing=()
+
+    command -v go       &>/dev/null || missing+=(go)
+    command -v javac    &>/dev/null || missing+=(java)
+    command -v node     &>/dev/null || missing+=(node)
+    command -v tsc      &>/dev/null || missing+=(typescript)
+    command -v g++      &>/dev/null || missing+=(cpp)
+    command -v dotnet   &>/dev/null || missing+=(csharp)
+    command -v php      &>/dev/null || missing+=(php)
+
+    [ ${#missing[@]} -eq 0 ] && return 0
+
+    log "Installing missing language runtimes: ${missing[*]}"
+
+    for dep in "${missing[@]}"; do
+        case "$dep" in
+            go)
+                log "  -> Installing Go..."
+                wget -q https://go.dev/dl/go1.22.2.linux-amd64.tar.gz -O /tmp/go.tar.gz
+                sudo tar -C /usr/local -xzf /tmp/go.tar.gz
+                rm /tmp/go.tar.gz
+                export PATH=$PATH:/usr/local/go/bin
+                ;;
+            java)
+                log "  -> Installing Java (default-jdk)..."
+                sudo apt-get update -qq && sudo apt-get install -y -qq default-jdk
+                ;;
+            node)
+                log "  -> Installing Node.js..."
+                curl -fsSL https://deb.nodesource.com/setup_20.x | sudo -E bash -
+                sudo apt-get install -y -qq nodejs
+                ;;
+            typescript)
+                log "  -> Installing TypeScript..."
+                command -v node &>/dev/null || {
+                    curl -fsSL https://deb.nodesource.com/setup_20.x | sudo -E bash -
+                    sudo apt-get install -y -qq nodejs
+                }
+                sudo npm install -g typescript
+                ;;
+            cpp)
+                log "  -> Installing g++..."
+                sudo apt-get update -qq && sudo apt-get install -y -qq g++
+                ;;
+            csharp)
+                log "  -> Installing .NET SDK..."
+                sudo apt-get update -qq && sudo apt-get install -y -qq dotnet-sdk-8.0
+                ;;
+            php)
+                log "  -> Installing PHP..."
+                sudo apt-get update -qq && sudo apt-get install -y -qq php-cli
+                ;;
+        esac
+    done
+
+    log "Runtime dependency installation complete."
+
+    # Verify all critical runtimes are now available
+    local failed=()
+    command -v go       &>/dev/null || failed+=(go)
+    command -v javac    &>/dev/null || failed+=(javac)
+    command -v node     &>/dev/null || failed+=(node)
+    command -v tsc      &>/dev/null || failed+=(tsc)
+    command -v g++      &>/dev/null || failed+=(g++)
+    command -v dotnet   &>/dev/null || failed+=(dotnet)
+    command -v php      &>/dev/null || failed+=(php)
+
+    if [ ${#failed[@]} -gt 0 ]; then
+        log "ERROR: The following runtimes are still missing after install: ${failed[*]}"
+        log "       bigcode-eval --allow_code_execution will fail without these."
+        log "       Please install them manually before running evaluation."
+        exit 1
+    fi
+
+    log "All language runtimes verified: go javac node tsc g++ dotnet php"
+}
+
+install_runtime_deps
+
 # ─── Pre-flight checks ───────────────────────────────────────────────────────
 log "=== UniMixLM Eval System v4 (bigcode-evaluation-harness) ==="
 log "Base model   : $BASE_MODEL"
