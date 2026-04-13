@@ -46,6 +46,7 @@ import shutil
 import subprocess
 import sys
 import tempfile
+import time
 from datetime import datetime
 from pathlib import Path
 from typing import Optional
@@ -76,14 +77,14 @@ BIGCODE_TASK_MAP: dict[str, list[str]] = {
     "cpp":        ["multiple-cpp", "humanevalsynthesize-cpp"],
     "csharp":     ["multiple-cs"],
     "php":        ["multiple-php"],
+    "c":          ["multiple-c"],
 }
 
 # HumanEvalPack tasks require --prompt; run separately from standard tasks
 PROMPT_REQUIRED_PREFIXES = ("humanevalsynthesize-", "humanevalfix-", "humanevalexplain-")
 
 # Languages that have no functional benchmark → perplexity (BpB) only
-# NOTE: "c" has no MultiPL-E support (only C++ via multiple-cpp)
-PERPLEXITY_LANGS: set[str] = {"html", "css", "markdown", "c"}
+PERPLEXITY_LANGS: set[str] = {"html", "css", "markdown"}
 
 # Exact HF model names for each language adapter
 ADAPTER_MAP: dict[str, str] = {
@@ -114,6 +115,91 @@ def jsonl_log(log_path: Path, obj: dict) -> None:
     log_path.parent.mkdir(parents=True, exist_ok=True)
     with open(log_path, "a") as f:
         f.write(json.dumps({**obj, "_ts": datetime.now().isoformat()}) + "\n")
+
+
+# ─── Evaluation timer ──────────────────────────────────────────────────────────
+
+class EvalTimer:
+    """Track and log evaluation phase timings with ETA estimates."""
+
+    def __init__(self, lang: str, total_phases: int = 0):
+        self.lang = lang
+        self.start_time = time.monotonic()
+        self.phases: list[tuple[str, float]] = []
+        self.total_phases = total_phases
+        self._phase_start: float | None = None
+        self._phase_name: str = ""
+
+    def start_phase(self, name: str) -> None:
+        if self._phase_start is not None:
+            self._end_current_phase()
+        self._phase_name = name
+        self._phase_start = time.monotonic()
+        elapsed_total = self._format_duration(time.monotonic() - self.start_time)
+        completed = len(self.phases)
+        remaining = self.total_phases - completed if self.total_phases else "?"
+        logger.info(
+            f"[timer] [{self.lang}] Phase {completed + 1}"
+            f"{'/' + str(self.total_phases) if self.total_phases else ''}"
+            f": Starting '{name}' | Total elapsed: {elapsed_total}"
+            f" | Phases remaining after this: {remaining}"
+        )
+        if completed > 0 and self.total_phases > 0:
+            avg_phase = (time.monotonic() - self.start_time) / completed
+            est_remaining = avg_phase * (self.total_phases - completed)
+            logger.info(
+                f"[timer] [{self.lang}] Estimated time remaining: "
+                f"~{self._format_duration(est_remaining)} "
+                f"(based on avg {self._format_duration(avg_phase)}/phase)"
+            )
+
+    def _end_current_phase(self) -> None:
+        if self._phase_start is not None:
+            elapsed = time.monotonic() - self._phase_start
+            self.phases.append((self._phase_name, elapsed))
+            logger.info(
+                f"[timer] [{self.lang}] Completed '{self._phase_name}' "
+                f"in {self._format_duration(elapsed)}"
+            )
+            self._phase_start = None
+
+    def end_phase(self) -> None:
+        self._end_current_phase()
+
+    def total_elapsed(self) -> float:
+        return time.monotonic() - self.start_time
+
+    def summary(self) -> str:
+        self._end_current_phase()
+        total = self.total_elapsed()
+        lines = [
+            "",
+            "=" * 70,
+            f"  TIMING SUMMARY — {self.lang}",
+            "=" * 70,
+        ]
+        for i, (name, dur) in enumerate(self.phases, 1):
+            pct = (dur / total * 100) if total > 0 else 0
+            lines.append(
+                f"  {i:2d}. {name:42s} "
+                f"{self._format_duration(dur):>12s}  ({pct:5.1f}%)"
+            )
+        lines.append("-" * 70)
+        lines.append(f"      {'TOTAL':42s} {self._format_duration(total):>12s}")
+        lines.append("=" * 70)
+        return "\n".join(lines)
+
+    @staticmethod
+    def _format_duration(seconds: float) -> str:
+        if seconds < 60:
+            return f"{seconds:.1f}s"
+        elif seconds < 3600:
+            m, s = divmod(seconds, 60)
+            return f"{int(m)}m {int(s)}s"
+        else:
+            h, rem = divmod(seconds, 3600)
+            m, s = divmod(rem, 60)
+            return f"{int(h)}h {int(m)}m {int(s)}s"
 
 
 # ─── Error classification ─────────────────────────────────────────────────────
@@ -729,8 +815,14 @@ def build_leaderboard_summary(
     mode: str,
     precision: str,
     output_dir: Path,
+    base_bpb_override: float | None = None,
+    ft_bpb_override: float | None = None,
 ) -> Path:
-    """Save a compact summary JSON (leaderboard_{lang}.json)."""
+    """Save a compact summary JSON (leaderboard_{lang}.json).
+
+    For bigcode-mode languages, pass base_bpb_override / ft_bpb_override
+    to include BpB alongside pass@k metrics.
+    """
     summary = {
         "lang": lang,
         "mode": mode,
@@ -746,6 +838,13 @@ def build_leaderboard_summary(
         summary["base_score"]  = base_score
         summary["ft_score"]    = ft_score
         summary["delta"]       = (ft_score - base_score) if (base_score is not None and ft_score is not None) else None
+        # Include BpB if computed for this language
+        if base_bpb_override is not None:
+            summary["base_bpb"] = base_bpb_override
+        if ft_bpb_override is not None:
+            summary["ft_bpb"] = ft_bpb_override
+        if base_bpb_override is not None and ft_bpb_override is not None:
+            summary["delta_bpb"] = base_bpb_override - ft_bpb_override
     else:  # perplexity
         base_bpb = base_results.get("results", {}).get("bpb")
         ft_bpb   = ft_results.get("results", {}).get("bpb")
@@ -829,6 +928,16 @@ def main() -> None:
     mode_str = "perplexity" if is_perplexity else "bigcode"
     logger.info(f"UniEval v4 | lang={lang} | mode={mode_str} | adapter={args.adapter_repo}")
 
+    # ── Initialise evaluation timer ──────────────────────────────────────────
+    if is_perplexity:
+        n_phases = 2  # BpB base + BpB ft
+    else:
+        all_tasks_preview = BIGCODE_TASK_MAP.get(lang, [])
+        has_prompt = any(t.startswith(PROMPT_REQUIRED_PREFIXES) for t in all_tasks_preview)
+        # std base, std ft, [prompt base, prompt ft], BpB base, BpB ft
+        n_phases = 4 + (2 if has_prompt else 0)
+    timer = EvalTimer(lang, total_phases=n_phases)
+
     # ── bigcode-eval path ─────────────────────────────────────────────────────
     if not is_perplexity:
         all_tasks = BIGCODE_TASK_MAP.get(lang)
@@ -873,13 +982,18 @@ def main() -> None:
             return merged
 
         # ── Run standard tasks ───────────────────────────────────────────
+        timer.start_phase(f"bigcode-eval base model ({', '.join(std_tasks)})")
         base_res = _run_task_group(
             std_tasks, "base", peft_model=None, las_tokenizer_path=None,
         )
+        timer.end_phase()
+
+        timer.start_phase(f"bigcode-eval finetuned model ({', '.join(std_tasks)})")
         ft_res = _run_task_group(
             std_tasks, "ft", peft_model=args.adapter_repo,
             las_tokenizer_path=las_tok_dir,
         )
+        timer.end_phase()
 
         # ── Run prompt-required tasks (non-fatal if they fail) ───────────
         if prompt_tasks:
@@ -887,6 +1001,7 @@ def main() -> None:
                 f"[tasks] Running HumanEvalPack tasks with --prompt continue: "
                 f"{prompt_tasks}"
             )
+            timer.start_phase(f"HumanEvalPack base ({', '.join(prompt_tasks)})")
             try:
                 prompt_base = _run_task_group(
                     prompt_tasks, "base_synth", peft_model=None,
@@ -897,6 +1012,9 @@ def main() -> None:
                 logger.warning(
                     f"[tasks] HumanEvalPack base run failed (non-fatal): {e}"
                 )
+            timer.end_phase()
+
+            timer.start_phase(f"HumanEvalPack finetuned ({', '.join(prompt_tasks)})")
             try:
                 prompt_ft = _run_task_group(
                     prompt_tasks, "ft_synth",
@@ -908,30 +1026,76 @@ def main() -> None:
                 logger.warning(
                     f"[tasks] HumanEvalPack ft run failed (non-fatal): {e}"
                 )
+            timer.end_phase()
 
         pass_at_k = {
             "base": extract_bigcode_metrics(base_res),
             "ft":   extract_bigcode_metrics(ft_res),
         }
 
+        # ── BpB for this language (computed for ALL languages) ───────────
+        logger.info(f"[bpb] Computing BpB for {lang} (all languages get BpB)")
+        base_bpb = None
+        ft_bpb = None
+
+        timer.start_phase(f"BpB computation — base model ({lang})")
+        try:
+            bpb_base_res = run_bpb(
+                args.base_model, None, lang, out, "base_bpb", log_path,
+                args.max_bpb_samples, tokenizer_path=None,
+            )
+            base_bpb = bpb_base_res.get("results", {}).get("bpb")
+            logger.info(f"[bpb] Base BpB for {lang}: {base_bpb:.4f}")
+        except Exception as e:
+            logger.warning(f"[bpb] Base BpB computation failed (non-fatal): {e}")
+        timer.end_phase()
+
+        timer.start_phase(f"BpB computation — finetuned model ({lang})")
+        try:
+            bpb_ft_res = run_bpb(
+                args.base_model, args.adapter_repo, lang, out, "ft_bpb", log_path,
+                args.max_bpb_samples, tokenizer_path=las_tok_dir,
+            )
+            ft_bpb = bpb_ft_res.get("results", {}).get("bpb")
+            logger.info(f"[bpb] FT BpB for {lang}: {ft_bpb:.4f}")
+        except Exception as e:
+            logger.warning(f"[bpb] FT BpB computation failed (non-fatal): {e}")
+        timer.end_phase()
+
+        if base_bpb is not None and ft_bpb is not None:
+            delta = base_bpb - ft_bpb
+            logger.info(
+                f"[bpb] {lang} BpB delta: {delta:+.4f} "
+                f"({'improved' if delta > 0 else 'regressed'})"
+            )
+
     # ── Perplexity path ───────────────────────────────────────────────────────
     else:
-        # Base model uses its own tokenizer
+        base_bpb = None
+        ft_bpb = None
+
+        timer.start_phase(f"BpB computation — base model ({lang})")
         base_res = run_bpb(
             args.base_model, None, lang, out, "base", log_path,
             args.max_bpb_samples, tokenizer_path=None,
         )
-        # FT model uses LAS tokenizer
+        timer.end_phase()
+
+        timer.start_phase(f"BpB computation — finetuned model ({lang})")
         ft_res = run_bpb(
             args.base_model, args.adapter_repo, lang, out, "ft", log_path,
             args.max_bpb_samples, tokenizer_path=las_tok_dir,
         )
+        timer.end_phase()
+
         pass_at_k = {}
 
     # ── Summary / leaderboard ─────────────────────────────────────────────────
     precision_used = args.precision if not is_perplexity else "bfloat16"
     summary_path = build_leaderboard_summary(
-        lang, base_res, ft_res, pass_at_k, mode_str, precision_used, out
+        lang, base_res, ft_res, pass_at_k, mode_str, precision_used, out,
+        base_bpb_override=base_bpb if not is_perplexity else None,
+        ft_bpb_override=ft_bpb if not is_perplexity else None,
     )
 
     # ── HF leaderboard sync ───────────────────────────────────────────────────
@@ -947,7 +1111,15 @@ def main() -> None:
         shutil.rmtree(las_tok_dir, ignore_errors=True)
         logger.info(f"[las-tok] Cleaned up temp dir: {las_tok_dir}")
 
-    jsonl_log(log_path, {"event": "done", "lang": lang})
+    # ── Timing summary ───────────────────────────────────────────────────────
+    timing_summary = timer.summary()
+    logger.info(timing_summary)
+    jsonl_log(log_path, {
+        "event": "done",
+        "lang": lang,
+        "total_elapsed_seconds": round(timer.total_elapsed(), 1),
+        "phase_timings": {name: round(dur, 1) for name, dur in timer.phases},
+    })
     logger.info(f"Done. Results in: {out}")
 
 

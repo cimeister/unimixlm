@@ -137,6 +137,11 @@ def _extract_from_leaderboard(lb: dict, run_label: str) -> dict[str, tuple[float
             if score is not None:
                 metrics[task] = (float(score),
                                  float(task_metrics.get("pass@1_stderr", 0.0)))
+        # Also extract BpB if present (computed for all languages)
+        bpb_key = "base_bpb" if run_label == "base" else "ft_bpb"
+        bpb = lb.get(bpb_key)
+        if bpb is not None:
+            metrics["bpb"] = (float(bpb), 0.0)
 
     return metrics
 
@@ -251,6 +256,20 @@ def load_all_results(
                 # Merge: leaderboard takes priority if key already present
                 merged = {**file_metrics, **lang_data.get(run_label, {})}
                 lang_data[run_label] = merged
+
+        # ── Also load BpB results for code languages (base_bpb / ft_bpb) ─
+        for bpb_label, target_label in [("base_bpb", "base"), ("ft_bpb", "ft")]:
+            bpb_path = _find_latest(lang_dir, bpb_label)
+            if bpb_path is None:
+                continue
+            with open(bpb_path) as f:
+                bpb_data = json.load(f)
+            bpb_metrics = _extract_perplexity_metrics(bpb_data)
+            if bpb_metrics:
+                existing = lang_data.get(target_label, {})
+                # Only add BpB if not already present
+                if "bpb" not in existing:
+                    lang_data[target_label] = {**existing, **bpb_metrics}
 
         if lang_data:
             out[lang] = lang_data

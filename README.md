@@ -79,18 +79,39 @@ python thestack_finetune_dataset.py \
     --languages rust
 ```
 
-**Existing datasets on HuggingFace** (100M tokens each):
-`python`, `javascript`, `java`, `c`, `go`, `typescript`
+**Existing LangMap datasets on HuggingFace** (100M tokens each, 18 languages):
 
-**Missing datasets** — `cpp` and `csharp` had empty uploads and need to be re-created on HPC:
+| # | Language | HF Repo |
+|---|----------|---------|
+| 1 | python | `MultilingualUnigramLM/LangMap-TheStack-python-100M` |
+| 2 | javascript | `MultilingualUnigramLM/LangMap-TheStack-javascript-100M` |
+| 3 | java | `MultilingualUnigramLM/LangMap-TheStack-java-100M` |
+| 4 | c | `MultilingualUnigramLM/LangMap-TheStack-c-100M` |
+| 5 | cpp | `MultilingualUnigramLM/LangMap-TheStack-cpp-100M` |
+| 6 | csharp | `MultilingualUnigramLM/LangMap-TheStack-csharp-100M` |
+| 7 | html | `MultilingualUnigramLM/LangMap-TheStack-html-100M` |
+| 8 | php | `MultilingualUnigramLM/LangMap-TheStack-php-100M` |
+| 9 | css | `MultilingualUnigramLM/LangMap-TheStack-css-100M` |
+| 10 | markdown | `MultilingualUnigramLM/LangMap-TheStack-markdown-100M` |
+| 11 | typescript | `MultilingualUnigramLM/LangMap-TheStack-typescript-100M` |
+| 12 | go | `MultilingualUnigramLM/LangMap-TheStack-go-100M` |
+| 13 | rust | `MultilingualUnigramLM/LangMap-TheStack-rust-100M` |
+| 14 | ruby | `MultilingualUnigramLM/LangMap-TheStack-ruby-100M` |
+| 15 | sql | `MultilingualUnigramLM/LangMap-TheStack-sql-100M` |
+| 16 | scala | `MultilingualUnigramLM/LangMap-TheStack-scala-100M` |
+| 17 | shell | `MultilingualUnigramLM/LangMap-TheStack-shell-100M` |
+| 18 | haskell | `MultilingualUnigramLM/LangMap-TheStack-haskell-100M` |
 
-```bash
-# Re-create cpp and csharp datasets (run on HPC cluster)
-# Both safe names (cpp, csharp) and original names (c++, c-sharp) are accepted.
-python thestack_finetune_dataset.py \
-    --hf-user MultilingualUnigramLM \
-    --target-tokens 100000000 \
-    --languages cpp csharp
+Each dataset repo uses the following YAML dataset card config:
+
+```yaml
+---
+configs:
+- config_name: default
+  data_files:
+  - split: train
+    path: data/train-*.parquet
+---
 ```
 
 **Language data availability** (The Stack sizes, for 100M token feasibility):
@@ -399,10 +420,10 @@ Each language is evaluated with benchmarks appropriate for that language using b
 | Markdown | BpB perplexity | — | BpB |
 
 **Notes**:
+- **BpB is computed for all languages** (not just perplexity-only ones). Code languages get both pass@k and BpB for comprehensive evaluation.
 - **Python** is evaluated with native Python benchmarks: HumanEval (164 problems), MBPP (974 problems), and HumanEval+ (164 problems with ~764 tests/problem for rigorous assessment).
-- **MultiPL-E** provides per-language functional correctness via HumanEval translations with code execution in native language runtimes.
+- **MultiPL-E** provides per-language functional correctness via HumanEval translations with code execution in native language runtimes (Go, TypeScript, Java, JavaScript, C++, C#, PHP, C).
 - **HumanEvalPack** (synthesis mode) extends HumanEval to additional languages via human translations (available for Go, Java, JavaScript, C++).
-- **C** is evaluated with MultiPL-E C translations via code execution.
 - **HTML, CSS, Markdown** have no standard functional code generation benchmark; bits-per-byte (BpB) on TheStack test splits is used. Lower BpB = better.
 - All comparisons are base `allenai/OLMo-3-1025-7B` vs. `MultilingualUnigramLM/ft-code-las-olmo3-7b-thestack100M-{lang}`.
 
@@ -436,11 +457,13 @@ eval_results/
 
 ### BpB Metric
 
-All finetuning runs report bits-per-byte (BpB) during training and evaluation. BpB is tokenizer-agnostic, enabling fair comparison between original and LAS tokenizers:
+All finetuning runs and evaluations report bits-per-byte (BpB). BpB is tokenizer-agnostic, enabling fair comparison between original and LAS tokenizers:
 
 ```
 BpB = total_NLL / (total_bytes * ln(2))
 ```
+
+BpB is computed for **all 12 languages** during evaluation — both code languages (alongside pass@k) and perplexity-only languages (HTML, CSS, Markdown). This gives a unified compression metric across the entire language suite.
 
 ---
 

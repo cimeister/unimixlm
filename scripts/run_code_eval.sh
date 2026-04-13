@@ -85,6 +85,19 @@ fi
 # ─── Utilities ───────────────────────────────────────────────────────────────
 log() { echo "[$(date '+%Y-%m-%d %H:%M:%S')] $*"; }
 
+format_duration() {
+    local secs=$1
+    if [ "$secs" -ge 3600 ]; then
+        printf "%dh %dm %ds" $((secs/3600)) $((secs%3600/60)) $((secs%60))
+    elif [ "$secs" -ge 60 ]; then
+        printf "%dm %ds" $((secs/60)) $((secs%60))
+    else
+        printf "%ds" "$secs"
+    fi
+}
+
+EVAL_START_EPOCH=$(date +%s)
+
 # ─── Pre-flight checks ───────────────────────────────────────────────────────
 log "=== UniMixLM Eval System v4 (bigcode-evaluation-harness) ==="
 log "Base model   : $BASE_MODEL"
@@ -168,16 +181,21 @@ for i in "${!LANGS[@]}"; do
     # Launch in background — GPU pinned via CUDA_VISIBLE_DEVICES
     (
         set +e
+        JOB_START=$(date +%s)
         CUDA_VISIBLE_DEVICES="$GPU" \
             python3 las_experiment/code_benchmark_eval.py ${PY_ARGS} \
             > "$LOG_FILE" 2>&1
         EXIT_CODE=$?
+        JOB_END=$(date +%s)
+        JOB_ELAPSED=$((JOB_END - JOB_START))
+        # Write timing for parent to read
+        echo "$JOB_ELAPSED" > "${LANG_OUT}/.eval_timing"
 
         if [ "$EXIT_CODE" -eq 0 ]; then
             touch "$SENTINEL"
-            echo "[$(date '+%Y-%m-%d %H:%M:%S')] OK   [$LANG] GPU $GPU — done"
+            echo "[$(date '+%Y-%m-%d %H:%M:%S')] OK   [$LANG] GPU $GPU — done in $(format_duration $JOB_ELAPSED)"
         else
-            echo "[$(date '+%Y-%m-%d %H:%M:%S')] FAIL [$LANG] GPU $GPU — exit $EXIT_CODE (see $LOG_FILE)"
+            echo "[$(date '+%Y-%m-%d %H:%M:%S')] FAIL [$LANG] GPU $GPU — exit $EXIT_CODE after $(format_duration $JOB_ELAPSED) (see $LOG_FILE)"
         fi
         exit "$EXIT_CODE"
     ) &
@@ -186,10 +204,52 @@ for i in "${!LANGS[@]}"; do
     PID_LANGS+=("$LANG")
 done
 
+# ─── Background progress monitor (reports every 2 minutes) ─────────────────
+TOTAL_JOBS=${#PIDS[@]}
+
+if [ "$TOTAL_JOBS" -gt 0 ]; then
+(
+    while true; do
+        sleep 120
+        NOW=$(date +%s)
+        ELAPSED=$((NOW - EVAL_START_EPOCH))
+        DONE=0
+        STILL_RUNNING=()
+        for idx in "${!PID_LANGS[@]}"; do
+            plang="${PID_LANGS[$idx]}"
+            if [ -f "${OUT_DIR}/code_${plang}/.eval_complete" ]; then
+                DONE=$((DONE + 1))
+            else
+                STILL_RUNNING+=("$plang")
+            fi
+        done
+        PCT=$((DONE * 100 / TOTAL_JOBS))
+        log "[MONITOR] Progress: ${DONE}/${TOTAL_JOBS} (${PCT}%) | Elapsed: $(format_duration $ELAPSED)"
+        if [ "${#STILL_RUNNING[@]}" -gt 0 ]; then
+            log "[MONITOR] Still running: ${STILL_RUNNING[*]}"
+        fi
+        if [ "$DONE" -gt 0 ] && [ "$DONE" -lt "$TOTAL_JOBS" ]; then
+            REMAINING=$((TOTAL_JOBS - DONE))
+            # Estimate based on parallel execution: assume max concurrency = NUM_GPUS
+            WAVES_DONE=$(( (DONE + NUM_GPUS - 1) / NUM_GPUS ))
+            if [ "$WAVES_DONE" -gt 0 ]; then
+                AVG_WAVE=$((ELAPSED / WAVES_DONE))
+                WAVES_LEFT=$(( (REMAINING + NUM_GPUS - 1) / NUM_GPUS ))
+                ETA=$((AVG_WAVE * WAVES_LEFT))
+                log "[MONITOR] Estimated time remaining: ~$(format_duration $ETA)"
+            fi
+        fi
+        [ "$DONE" -ge "$TOTAL_JOBS" ] && break
+    done
+) &
+MONITOR_PID=$!
+fi
+
 # ─── Wait for all jobs ───────────────────────────────────────────────────────
-log "=== Waiting for ${#PIDS[@]} jobs to complete ==="
+log "=== Waiting for ${TOTAL_JOBS} jobs to complete ==="
 
 FAILED_LANGS=()
+COMPLETED=0
 for i in "${!PIDS[@]}"; do
     pid="${PIDS[$i]}"
     lang="${PID_LANGS[$i]}"
@@ -197,13 +257,43 @@ for i in "${!PIDS[@]}"; do
     wait "$pid"
     status=$?
     set -e
+    COMPLETED=$((COMPLETED + 1))
+    NOW=$(date +%s)
+    ELAPSED=$((NOW - EVAL_START_EPOCH))
+    REMAINING_JOBS=$((TOTAL_JOBS - COMPLETED))
+
+    # Read per-job timing if available
+    TIMING_FILE="${OUT_DIR}/code_${lang}/.eval_timing"
+    JOB_TIME_STR=""
+    if [ -f "$TIMING_FILE" ]; then
+        JOB_TIME=$(cat "$TIMING_FILE")
+        JOB_TIME_STR=" (job time: $(format_duration $JOB_TIME))"
+    fi
+
     if [ "$status" -ne 0 ]; then
         FAILED_LANGS+=("$lang")
-        log "FAIL [$lang] exited with status $status — see ${LOG_DIR}/${lang}.log"
+        log "FAIL [$lang] exit $status${JOB_TIME_STR} | ${COMPLETED}/${TOTAL_JOBS} done | Elapsed: $(format_duration $ELAPSED) | See ${LOG_DIR}/${lang}.log"
     else
-        log "OK   [$lang] finished successfully"
+        log "OK   [$lang]${JOB_TIME_STR} | ${COMPLETED}/${TOTAL_JOBS} done | Elapsed: $(format_duration $ELAPSED)"
+    fi
+
+    # ETA for remaining jobs
+    if [ "$REMAINING_JOBS" -gt 0 ] && [ "$COMPLETED" -gt 0 ]; then
+        WAVES_DONE=$(( (COMPLETED + NUM_GPUS - 1) / NUM_GPUS ))
+        if [ "$WAVES_DONE" -gt 0 ]; then
+            AVG_WAVE=$((ELAPSED / WAVES_DONE))
+            WAVES_LEFT=$(( (REMAINING_JOBS + NUM_GPUS - 1) / NUM_GPUS ))
+            ETA=$((AVG_WAVE * WAVES_LEFT))
+            log "     ${REMAINING_JOBS} jobs remaining | Est. time left: ~$(format_duration $ETA)"
+        fi
     fi
 done
+
+# Kill the background monitor
+if [ -n "${MONITOR_PID:-}" ]; then
+    kill "$MONITOR_PID" 2>/dev/null || true
+    wait "$MONITOR_PID" 2>/dev/null || true
+fi
 
 if [ "${#FAILED_LANGS[@]}" -gt 0 ]; then
     log "=== WARNING: ${#FAILED_LANGS[@]} language(s) failed: ${FAILED_LANGS[*]} ==="
@@ -226,11 +316,38 @@ if [ "$SKIP_PLOTTING" -eq 0 ]; then
     log "Plots saved to: $SUMMARY_DIR"
 fi
 
-# ─── Summary ─────────────────────────────────────────────────────────────────
-log "=== Evaluation complete ==="
+# ─── Detailed timing summary ─────────────────────────────────────────────────
+TOTAL_ELAPSED=$(( $(date +%s) - EVAL_START_EPOCH ))
+log ""
+log "======================================================================"
+log "  EVALUATION SUMMARY"
+log "======================================================================"
 log "Results : $OUT_DIR"
 log "Logs    : $LOG_DIR"
 log "Passed  : $((${#PIDS[@]} - ${#FAILED_LANGS[@]}))/${#PIDS[@]}"
+log "Total wall-clock time: $(format_duration $TOTAL_ELAPSED)"
+log ""
+log "  Per-Language Timing:"
+log "  --------------------"
+for lang_name in "${LANGS[@]}"; do
+    TIMING_FILE="${OUT_DIR}/code_${lang_name}/.eval_timing"
+    SENTINEL="${OUT_DIR}/code_${lang_name}/.eval_complete"
+    if [ -f "$TIMING_FILE" ]; then
+        JOB_TIME=$(cat "$TIMING_FILE")
+        STATUS="OK"
+        [ ! -f "$SENTINEL" ] && STATUS="FAIL"
+        printf "  [%s] %-12s %s\n" "$STATUS" "$lang_name" "$(format_duration $JOB_TIME)"
+    else
+        printf "  [SKIP] %-12s (no timing data)\n" "$lang_name"
+    fi
+done
+log ""
+log "  GPU utilisation: ${NUM_GPUS} GPUs, ${#PIDS[@]} jobs"
+if [ "${#PIDS[@]}" -gt 0 ]; then
+    GPU_HOURS=$(( TOTAL_ELAPSED * NUM_GPUS / 3600 ))
+    log "  Approx GPU-hours: ~${GPU_HOURS}"
+fi
+log "======================================================================"
 
 if [ "${#FAILED_LANGS[@]}" -gt 0 ]; then
     exit 1
