@@ -1,0 +1,11 @@
+{
+  "lang": "css",
+  "mode": "perplexity",
+  "precision": "bfloat16",
+  "eval_engine": "perplexity",
+  "timestamp": "2026-04-13T19:38:23.562109",
+  "pass_at_k": {},
+  "base_bpb": 0.0365287312500809,
+  "ft_bpb": 0.03574027193111675,
+  "delta_bpb": 0.000788459318964152
+}

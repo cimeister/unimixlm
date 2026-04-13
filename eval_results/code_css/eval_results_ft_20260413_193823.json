@@ -1,0 +1,10 @@
+{
+  "lang": "css",
+  "eval_mode": "perplexity",
+  "run_label": "ft",
+  "model_args": "pretrained=allenai/OLMo-3-1025-7B,peft=MultilingualUnigramLM/ft-code-las-olmo3-7b-thestack100M-css",
+  "n_samples": 200,
+  "results": {
+    "bpb": 0.03574027193111675
+  }
+}

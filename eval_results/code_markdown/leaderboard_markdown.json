@@ -1,0 +1,11 @@
+{
+  "lang": "markdown",
+  "mode": "perplexity",
+  "precision": "bfloat16",
+  "eval_engine": "perplexity",
+  "timestamp": "2026-04-13T19:38:26.302888",
+  "pass_at_k": {},
+  "base_bpb": 0.2263638104025951,
+  "ft_bpb": 0.22948970709513256,
+  "delta_bpb": -0.003125896692537461
+}

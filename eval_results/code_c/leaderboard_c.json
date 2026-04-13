@@ -1,13 +1,11 @@
 {
   "lang": "c",
-  "mode": "lmeval",
-  "dtype": "bfloat16",
-  "timestamp": "2026-04-13T14:38:38.381991",
-  "pass_at_k": {
-    "base": {},
-    "ft": {}
-  },
-  "base_score": null,
-  "ft_score": null,
-  "delta": null
+  "mode": "perplexity",
+  "precision": "bfloat16",
+  "eval_engine": "perplexity",
+  "timestamp": "2026-04-13T19:38:45.877148",
+  "pass_at_k": {},
+  "base_bpb": 0.043248814557865604,
+  "ft_bpb": 0.043382528225228256,
+  "delta_bpb": -0.00013371366736265183
 }

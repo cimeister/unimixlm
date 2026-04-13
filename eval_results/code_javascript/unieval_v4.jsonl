@@ -1,0 +1,2 @@
+{"event": "start", "lang": "javascript", "base_model": "allenai/OLMo-3-1025-7B", "adapter": "MultilingualUnigramLM/ft-code-las-olmo3-7b-thestack100M-javascript", "n_samples": 10, "_ts": "2026-04-13T19:37:10.677007"}
+{"event": "fatal", "precision": "bf16", "error": "The following values were not passed to `accelerate launch` and had defaults used instead:\n\t`--num_machines` was set to a value of `1`\n\t`--mixed_precision` was set to a value of `'no'`\n\t`--dynamo_back", "_ts": "2026-04-13T20:50:58.881079"}

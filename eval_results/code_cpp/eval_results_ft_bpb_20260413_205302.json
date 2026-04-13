@@ -1,0 +1,10 @@
+{
+  "lang": "cpp",
+  "eval_mode": "perplexity",
+  "run_label": "ft_bpb",
+  "model_args": "pretrained=allenai/OLMo-3-1025-7B,peft=MultilingualUnigramLM/ft-code-las-olmo3-7b-thestack100M-cpp",
+  "n_samples": 200,
+  "results": {
+    "bpb": 0.0727542861729451
+  }
+}

@@ -1,13 +1,22 @@
 {
   "lang": "cpp",
-  "mode": "lmeval",
-  "dtype": "bfloat16",
-  "timestamp": "2026-04-13T14:48:45.495222",
+  "mode": "bigcode",
+  "precision": "bf16",
+  "eval_engine": "bigcode-eval",
+  "timestamp": "2026-04-13T20:53:02.795412",
   "pass_at_k": {
-    "base": {},
+    "base": {
+      "humanevalsynthesize-cpp": {
+        "pass@1": 0.0,
+        "pass@10": 0.0
+      }
+    },
     "ft": {}
   },
-  "base_score": null,
+  "base_score": 0.0,
   "ft_score": null,
-  "delta": null
+  "delta": null,
+  "base_bpb": 0.07122226766213487,
+  "ft_bpb": 0.0727542861729451,
+  "delta_bpb": -0.0015320185108102374
 }
