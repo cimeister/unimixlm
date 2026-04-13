@@ -52,6 +52,7 @@ from pathlib import Path
 from typing import Optional
 
 import torch
+from tqdm import tqdm
 
 # ─── Environment (must be set before any HF imports) ─────────────────────────
 os.environ["HF_DATASETS_TRUST_REMOTE_CODE"] = "1"
@@ -59,7 +60,7 @@ os.environ["TOKENIZERS_PARALLELISM"] = "false"
 
 logging.basicConfig(
     level=logging.INFO,
-    format="%(asctime)s | %(levelname)s | %(message)s",
+    format="%(asctime)s | %(levelname)s | %(name)s | %(message)s",
     datefmt="%Y-%m-%d %H:%M:%S",
 )
 logger = logging.getLogger("unieval")
@@ -74,17 +75,16 @@ BIGCODE_TASK_MAP: dict[str, list[str]] = {
     "typescript": ["multiple-ts"],
     "java":       ["multiple-java", "humanevalsynthesize-java"],
     "javascript": ["multiple-js", "humanevalsynthesize-javascript"],
-    "cpp":        ["multiple-cpp", "humanevalsynthesize-cpp"],
+    "cpp":        ["humanevalsynthesize-cpp"],
     "csharp":     ["multiple-cs"],
     "php":        ["multiple-php"],
-    "c":          ["multiple-c"],
 }
 
 # HumanEvalPack tasks require --prompt; run separately from standard tasks
 PROMPT_REQUIRED_PREFIXES = ("humanevalsynthesize-", "humanevalfix-", "humanevalexplain-")
 
 # Languages that have no functional benchmark → perplexity (BpB) only
-PERPLEXITY_LANGS: set[str] = {"html", "css", "markdown"}
+PERPLEXITY_LANGS: set[str] = {"html", "css", "markdown", "c"}
 
 # Exact HF model names for each language adapter
 ADAPTER_MAP: dict[str, str] = {
@@ -120,7 +120,7 @@ def jsonl_log(log_path: Path, obj: dict) -> None:
 # ─── Evaluation timer ──────────────────────────────────────────────────────────
 
 class EvalTimer:
-    """Track and log evaluation phase timings with ETA estimates."""
+    """Track and log evaluation phase timings with ETA estimates and tqdm bar."""
 
     def __init__(self, lang: str, total_phases: int = 0):
         self.lang = lang
@@ -129,6 +129,16 @@ class EvalTimer:
         self.total_phases = total_phases
         self._phase_start: float | None = None
         self._phase_name: str = ""
+        # Top-level tqdm bar tracking phases
+        self._pbar: tqdm | None = None
+        if total_phases > 0:
+            self._pbar = tqdm(
+                total=total_phases,
+                desc=f"[{lang}] Evaluation phases",
+                unit="phase",
+                bar_format="{l_bar}{bar}| {n_fmt}/{total_fmt} [{elapsed}<{remaining}, {rate_fmt}]",
+                leave=True,
+            )
 
     def start_phase(self, name: str) -> None:
         if self._phase_start is not None:
@@ -144,6 +154,8 @@ class EvalTimer:
             f": Starting '{name}' | Total elapsed: {elapsed_total}"
             f" | Phases remaining after this: {remaining}"
         )
+        if self._pbar is not None:
+            self._pbar.set_postfix_str(name[:60], refresh=True)
         if completed > 0 and self.total_phases > 0:
             avg_phase = (time.monotonic() - self.start_time) / completed
             est_remaining = avg_phase * (self.total_phases - completed)
@@ -161,6 +173,8 @@ class EvalTimer:
                 f"[timer] [{self.lang}] Completed '{self._phase_name}' "
                 f"in {self._format_duration(elapsed)}"
             )
+            if self._pbar is not None:
+                self._pbar.update(1)
             self._phase_start = None
 
     def end_phase(self) -> None:
@@ -171,6 +185,9 @@ class EvalTimer:
 
     def summary(self) -> str:
         self._end_current_phase()
+        if self._pbar is not None:
+            self._pbar.close()
+            self._pbar = None
         total = self.total_elapsed()
         lines = [
             "",
@@ -421,9 +438,20 @@ def run_bigcode_eval(
 
     logger.info(
         f"[bigcode-eval] {run_label}: tasks={tasks}, "
-        f"n_samples={n_samples}, precision={precision}"
+        f"n_samples={n_samples}, precision={precision}, "
+        f"batch_size={batch_size}, max_len={max_length_generation}, "
+        f"temperature={temperature}"
     )
-    logger.info(f"[bigcode-eval] cmd: {' '.join(cmd)}")
+    if peft_model:
+        logger.info(f"[bigcode-eval] {run_label}: PEFT adapter = {peft_model}")
+    if las_tokenizer_path:
+        logger.info(f"[bigcode-eval] {run_label}: LAS tokenizer = {las_tokenizer_path}")
+    if prompt_type:
+        logger.info(f"[bigcode-eval] {run_label}: prompt_type = {prompt_type}")
+    logger.info(f"[bigcode-eval] {run_label}: cmd: {' '.join(cmd)}")
+
+    logger.info(f"[bigcode-eval] {run_label}: running subprocess (this may take a while)...")
+    eval_start = time.monotonic()
 
     result = subprocess.run(
         cmd,
@@ -437,14 +465,20 @@ def run_bigcode_eval(
         },
     )
 
+    eval_elapsed = time.monotonic() - eval_start
+    logger.info(
+        f"[bigcode-eval] {run_label}: subprocess finished in "
+        f"{EvalTimer._format_duration(eval_elapsed)} (returncode={result.returncode})"
+    )
+
     if result.returncode != 0:
-        logger.error(f"[bigcode-eval] stderr:\n{result.stderr[-2000:]}")
+        logger.error(f"[bigcode-eval] {run_label}: FAILED — stderr:\n{result.stderr[-2000:]}")
         raise subprocess.CalledProcessError(
             result.returncode, cmd, result.stdout, result.stderr
         )
 
     if result.stdout:
-        logger.info(f"[bigcode-eval] stdout (last 500 chars):\n{result.stdout[-500:]}")
+        logger.info(f"[bigcode-eval] {run_label}: stdout (last 500 chars):\n{result.stdout[-500:]}")
 
     # Read metric output
     if not metric_path.exists():
@@ -454,6 +488,18 @@ def run_bigcode_eval(
 
     with open(metric_path) as f:
         metrics = json.load(f)
+
+    # Log per-task metric breakdown
+    for task_name, task_data in metrics.items():
+        if task_name == "config":
+            continue
+        if isinstance(task_data, dict):
+            metric_strs = [f"{k}={v:.4f}" if isinstance(v, float) else f"{k}={v}"
+                           for k, v in task_data.items()]
+            logger.info(
+                f"[bigcode-eval] {run_label} | task={task_name} | "
+                + ", ".join(metric_strs)
+            )
 
     # Save a copy in the standard naming convention for plot compatibility
     compat_file = output_dir / f"eval_results_{run_label}_{ts}.json"
@@ -616,29 +662,49 @@ def _load_model(
 
 
 def compute_bpb(model, tokenizer, texts: list[str], device: str,
-                max_seq_len: int = 512) -> float:
+                max_seq_len: int = 512, lang: str = "") -> float:
     """Compute bits-per-byte. Correct formula: BpB = total_nll / (total_bytes * ln2)."""
     total_nll = 0.0
     total_bytes = 0
+    skipped = 0
 
     with torch.no_grad():
-        for text in texts:
+        pbar = tqdm(
+            texts,
+            desc=f"[{lang}] Computing BpB" if lang else "Computing BpB",
+            unit="sample",
+            leave=False,
+        )
+        for text in pbar:
             if not text or not text.strip():
+                skipped += 1
                 continue
             n_bytes = len(text.encode("utf-8"))
             if n_bytes == 0:
+                skipped += 1
                 continue
 
             enc = tokenizer(text, return_tensors="pt", truncation=True,
                             max_length=max_seq_len, padding=False)
             ids = enc["input_ids"].to(device)
             if ids.shape[1] < 2:
+                skipped += 1
                 continue
 
             loss = model(input_ids=ids, labels=ids).loss.item()
             n_tokens = ids.shape[1]
             total_nll   += loss * n_tokens
             total_bytes += n_bytes
+
+            # Live BpB estimate in progress bar
+            running_bpb = total_nll / (total_bytes * math.log(2))
+            pbar.set_postfix(bpb=f"{running_bpb:.4f}", skipped=skipped)
+        pbar.close()
+
+    logger.info(
+        f"[bpb] [{lang}] Processed {len(texts) - skipped}/{len(texts)} samples "
+        f"({skipped} skipped), total_bytes={total_bytes:,}"
+    )
 
     if total_bytes == 0:
         return float("nan")
@@ -658,50 +724,69 @@ def run_bpb(
 ) -> dict:
     """Compute BpB on TheStack test split. Saves eval_results_{run_label}_{ts}.json."""
     repo = THESTACK_REPO_TEMPLATE.format(lang=lang)
-    logger.info(f"[bpb] {run_label}: loading {repo}")
+    logger.info(f"[bpb] [{lang}] {run_label}: loading dataset {repo}")
 
     # Use robust dataset loading (fixes config mismatch / cache issues)
     ds = safe_load_dataset(repo)
+    logger.info(f"[bpb] [{lang}] {run_label}: dataset loaded, collecting up to {max_samples} samples")
 
     texts: list[str] = []
     col = None
+    pbar = tqdm(
+        total=max_samples,
+        desc=f"[{lang}] Loading samples ({run_label})",
+        unit="sample",
+        leave=False,
+    )
     for i, sample in enumerate(ds):
         if col is None:
             col = next(
                 (c for c in ("content", "text", "code") if c in sample),
                 list(sample.keys())[0],
             )
+            logger.info(f"[bpb] [{lang}] Using column '{col}' from dataset")
         texts.append(sample[col])
+        pbar.update(1)
         if len(texts) >= max_samples:
             break
+    pbar.close()
 
     if not texts:
         raise ValueError(f"No samples found in {repo}")
 
-    logger.info(f"[bpb] {run_label}: {len(texts)} samples, computing BpB...")
+    avg_len = sum(len(t) for t in texts) / len(texts)
+    logger.info(
+        f"[bpb] [{lang}] {run_label}: collected {len(texts)} samples "
+        f"(avg {avg_len:.0f} chars), computing BpB..."
+    )
 
     # Try dtype fallback for BpB too
     bpb = float("nan")
     for dtype in DTYPE_FALLBACKS:
         try:
+            logger.info(f"[bpb] [{lang}] {run_label}: loading model (dtype={dtype})")
             model, tok, device = _load_model(
                 base_model_id, adapter, dtype,
                 tokenizer_path=tokenizer_path,
             )
-            bpb = compute_bpb(model, tok, texts, device, max_seq_len)
+            logger.info(
+                f"[bpb] [{lang}] {run_label}: model loaded on {device}, "
+                f"vocab_size={len(tok)}, dtype={dtype}"
+            )
+            bpb = compute_bpb(model, tok, texts, device, max_seq_len, lang=lang)
             del model
             if torch.cuda.is_available():
                 torch.cuda.empty_cache()
             break
         except Exception as e:
             if _is_oom(str(e)):
-                logger.warning(f"[bpb] OOM with {dtype}, trying next.")
+                logger.warning(f"[bpb] [{lang}] OOM with {dtype}, trying next.")
                 if torch.cuda.is_available():
                     torch.cuda.empty_cache()
                 continue
             raise
 
-    logger.info(f"[bpb] {run_label}: BpB = {bpb:.4f}")
+    logger.info(f"[bpb] [{lang}] {run_label}: BpB = {bpb:.4f}")
 
     result = {
         "lang": lang,
@@ -926,7 +1011,31 @@ def main() -> None:
         is_perplexity = args.mode == "perplexity"
 
     mode_str = "perplexity" if is_perplexity else "bigcode"
-    logger.info(f"UniEval v4 | lang={lang} | mode={mode_str} | adapter={args.adapter_repo}")
+
+    # ── Startup banner ───────────────────────────────────────────────────────
+    banner = "\n".join([
+        "",
+        "=" * 70,
+        f"  UniMixLM Eval System v4 — {lang.upper()}",
+        "=" * 70,
+        f"  Language       : {lang}",
+        f"  Mode           : {mode_str}",
+        f"  Base model     : {args.base_model}",
+        f"  Adapter        : {args.adapter_repo}",
+        f"  LAS tokenizer  : {las_tok_dir or 'None (using base)'}",
+        f"  n_samples      : {args.n_samples}",
+        f"  batch_size     : {args.batch_size}",
+        f"  temperature    : {args.temperature}",
+        f"  precision      : {args.precision}",
+        f"  output_dir     : {out}",
+        f"  GPU available  : {torch.cuda.is_available()}",
+    ])
+    if torch.cuda.is_available():
+        banner += f"\n  GPU device     : {torch.cuda.get_device_name(0)}"
+        gpu_mem = torch.cuda.get_device_properties(0).total_mem / (1024**3)
+        banner += f"\n  GPU memory     : {gpu_mem:.1f} GB"
+    banner += "\n" + "=" * 70
+    logger.info(banner)
 
     # ── Initialise evaluation timer ──────────────────────────────────────────
     if is_perplexity:
@@ -946,13 +1055,19 @@ def main() -> None:
                 f"No bigcode-eval tasks defined for lang='{lang}'. "
                 f"Known languages: {sorted(BIGCODE_TASK_MAP.keys())}"
             )
-        logger.info(f"[tasks] bigcode-eval tasks for {lang}: {all_tasks}")
+        logger.info(f"[tasks] [{lang}] bigcode-eval tasks: {all_tasks}")
 
         # Split into standard tasks and tasks requiring --prompt
         std_tasks = [t for t in all_tasks
                      if not t.startswith(PROMPT_REQUIRED_PREFIXES)]
         prompt_tasks = [t for t in all_tasks
                         if t.startswith(PROMPT_REQUIRED_PREFIXES)]
+
+        logger.info(f"[tasks] [{lang}] Standard tasks ({len(std_tasks)}): {std_tasks}")
+        if prompt_tasks:
+            logger.info(f"[tasks] [{lang}] HumanEvalPack tasks ({len(prompt_tasks)}): {prompt_tasks}")
+        else:
+            logger.info(f"[tasks] [{lang}] No HumanEvalPack tasks for this language")
 
         bigcode_main = _find_bigcode_main(args.bigcode_eval_path)
         logger.info(f"[bigcode-eval] Using main.py at: {bigcode_main}")
@@ -1071,6 +1186,7 @@ def main() -> None:
 
     # ── Perplexity path ───────────────────────────────────────────────────────
     else:
+        logger.info(f"[{lang}] Perplexity-only mode (no functional benchmarks)")
         base_bpb = None
         ft_bpb = None
 
@@ -1079,6 +1195,8 @@ def main() -> None:
             args.base_model, None, lang, out, "base", log_path,
             args.max_bpb_samples, tokenizer_path=None,
         )
+        base_bpb = base_res.get("results", {}).get("bpb")
+        logger.info(f"[{lang}] Base model BpB = {base_bpb:.4f}" if base_bpb else f"[{lang}] Base BpB unavailable")
         timer.end_phase()
 
         timer.start_phase(f"BpB computation — finetuned model ({lang})")
@@ -1086,6 +1204,8 @@ def main() -> None:
             args.base_model, args.adapter_repo, lang, out, "ft", log_path,
             args.max_bpb_samples, tokenizer_path=las_tok_dir,
         )
+        ft_bpb = ft_res.get("results", {}).get("bpb")
+        logger.info(f"[{lang}] Finetuned model BpB = {ft_bpb:.4f}" if ft_bpb else f"[{lang}] FT BpB unavailable")
         timer.end_phase()
 
         pass_at_k = {}
@@ -1111,6 +1231,33 @@ def main() -> None:
         shutil.rmtree(las_tok_dir, ignore_errors=True)
         logger.info(f"[las-tok] Cleaned up temp dir: {las_tok_dir}")
 
+    # ── Results summary ────────────────────────────────────────────────────────
+    results_banner = [
+        "",
+        "=" * 70,
+        f"  RESULTS SUMMARY — {lang.upper()}",
+        "=" * 70,
+    ]
+    if pass_at_k:
+        for model_type, task_metrics in pass_at_k.items():
+            for task_name, metrics in task_metrics.items():
+                metric_strs = [f"{k}={v:.4f}" for k, v in metrics.items()]
+                results_banner.append(
+                    f"  [{model_type:>4s}] {task_name:30s}  {', '.join(metric_strs)}"
+                )
+    if base_bpb is not None:
+        results_banner.append(f"  [base] BpB: {base_bpb:.4f}")
+    if ft_bpb is not None:
+        results_banner.append(f"  [  ft] BpB: {ft_bpb:.4f}")
+    if base_bpb is not None and ft_bpb is not None:
+        delta = base_bpb - ft_bpb
+        results_banner.append(
+            f"  [diff] BpB delta: {delta:+.4f} "
+            f"({'improved' if delta > 0 else 'regressed'})"
+        )
+    results_banner.append("=" * 70)
+    logger.info("\n".join(results_banner))
+
     # ── Timing summary ───────────────────────────────────────────────────────
     timing_summary = timer.summary()
     logger.info(timing_summary)
@@ -1120,7 +1267,7 @@ def main() -> None:
         "total_elapsed_seconds": round(timer.total_elapsed(), 1),
         "phase_timings": {name: round(dur, 1) for name, dur in timer.phases},
     })
-    logger.info(f"Done. Results in: {out}")
+    logger.info(f"[{lang}] Done. Results in: {out}")
 
 
 if __name__ == "__main__":
