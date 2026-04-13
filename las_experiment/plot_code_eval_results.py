@@ -97,6 +97,39 @@ def _find_latest(out_dir: Path, run_label: str) -> Optional[Path]:
     return sorted(candidates, key=lambda x: x[0])[-1][1]
 
 
+def _find_leaderboard(out_dir: Path, lang: str) -> Optional[Path]:
+    """Find leaderboard_{lang}.json in out_dir (v3 compact summary format)."""
+    p = out_dir / f"leaderboard_{lang}.json"
+    return p if p.exists() else None
+
+
+def _extract_from_leaderboard(lb: dict, run_label: str) -> dict[str, tuple[float, float]]:
+    """
+    Extract metrics from a v3 leaderboard_{lang}.json.
+    Supports both lmeval mode (pass_at_k per run) and perplexity mode (base_bpb / ft_bpb).
+    """
+    metrics: dict[str, tuple[float, float]] = {}
+    mode = lb.get("mode", "")
+
+    if mode == "perplexity":
+        bpb_key = "base_bpb" if run_label == "base" else "ft_bpb"
+        bpb = lb.get(bpb_key)
+        if bpb is not None:
+            metrics["bpb"] = (float(bpb), 0.0)
+
+    elif mode == "lmeval":
+        pak = lb.get("pass_at_k", {}).get(run_label, {})
+        for task, task_metrics in pak.items():
+            if not isinstance(task_metrics, dict):
+                continue
+            score = task_metrics.get("pass@1")
+            if score is not None:
+                metrics[task] = (float(score),
+                                 float(task_metrics.get("pass@1_stderr", 0.0)))
+
+    return metrics
+
+
 def _extract_lmeval_metrics(data: dict) -> dict[str, tuple[float, float]]:
     """Extract {task: (score, stderr)} from an lm-eval results JSON.
 
@@ -144,6 +177,10 @@ def load_all_results(
     """
     Returns:
         { lang: { "base": {task: (score, stderr)}, "ft": {task: (score, stderr)} } }
+
+    Supports two result formats:
+      - v3 leaderboard_{lang}.json (compact, both runs in one file)
+      - v2/original eval_results_{base|ft}_{ts}.json (separate files per run)
     """
     out: dict[str, dict[str, dict[str, tuple[float, float]]]] = {}
 
@@ -154,6 +191,18 @@ def load_all_results(
 
         lang_data: dict[str, dict[str, tuple[float, float]]] = {}
 
+        # ── Try v3 leaderboard format first ────────────────────────────────
+        lb_path = _find_leaderboard(lang_dir, lang)
+        if lb_path is not None:
+            with open(lb_path) as f:
+                lb = json.load(f)
+            for run_label in ("base", "ft"):
+                extracted = _extract_from_leaderboard(lb, run_label)
+                if extracted:
+                    lang_data[run_label] = extracted
+
+        # ── Fall back to per-run eval_results_*.json ────────────────────────
+        # (also merges in any tasks present in the per-file format but not the leaderboard)
         for run_label in ("base", "ft"):
             path = _find_latest(lang_dir, run_label)
             if path is None:
@@ -161,19 +210,21 @@ def load_all_results(
             with open(path) as f:
                 data = json.load(f)
 
-            # Detect format
             if "eval_mode" in data and data.get("eval_mode") == "perplexity":
-                lang_data[run_label] = _extract_perplexity_metrics(data)
+                file_metrics = _extract_perplexity_metrics(data)
             elif "results" in data and isinstance(data["results"], dict):
-                # Could be lm-eval format OR our custom perplexity format
                 first_val = next(iter(data["results"].values()), None)
                 if isinstance(first_val, (int, float)):
-                    # Our perplexity format: {"results": {"bpb": 2.3}}
-                    lang_data[run_label] = _extract_perplexity_metrics(data)
+                    file_metrics = _extract_perplexity_metrics(data)
                 else:
-                    lang_data[run_label] = _extract_lmeval_metrics(data)
+                    file_metrics = _extract_lmeval_metrics(data)
             else:
-                lang_data[run_label] = {}
+                file_metrics = {}
+
+            if file_metrics:
+                # Merge: leaderboard takes priority if key already present
+                merged = {**file_metrics, **lang_data.get(run_label, {})}
+                lang_data[run_label] = merged
 
         if lang_data:
             out[lang] = lang_data
