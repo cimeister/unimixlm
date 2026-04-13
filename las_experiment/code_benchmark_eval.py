@@ -133,7 +133,7 @@ def safe_load_dataset(repo: str, split: str = "test", max_retries: int = 3):
 
     # Attempt 1: direct load
     try:
-        return load_dataset(repo, split=split, streaming=True, trust_remote_code=True)
+        return load_dataset(repo, split=split, streaming=True)
     except Exception as e:
         logger.warning(f"[dataset] primary load failed for {repo}: {e}")
 
@@ -146,20 +146,20 @@ def safe_load_dataset(repo: str, split: str = "test", max_retries: int = 3):
             try:
                 return load_dataset(
                     repo, name=config, split=split,
-                    streaming=True, trust_remote_code=True,
+                    streaming=True,
                 )
             except Exception:
                 # Try train split if test doesn't exist
                 return load_dataset(
                     repo, name=config, split="train",
-                    streaming=True, trust_remote_code=True,
+                    streaming=True,
                 )
     except Exception as e2:
         logger.warning(f"[dataset] config-based load failed: {e2}")
 
     # Attempt 3: fallback to train split
     try:
-        return load_dataset(repo, split="train", streaming=True, trust_remote_code=True)
+        return load_dataset(repo, split="train", streaming=True)
     except Exception as e3:
         logger.warning(f"[dataset] train split fallback failed: {e3}")
 
