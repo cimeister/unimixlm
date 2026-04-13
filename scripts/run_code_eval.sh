@@ -114,43 +114,55 @@ install_runtime_deps() {
 
     log "Installing missing language runtimes: ${missing[*]}"
 
+    # Use sudo only if not already root
+    local SUDO=""
+    [ "$(id -u)" -ne 0 ] && SUDO="sudo"
+    local APT_UPDATED=0
+
+    _apt_update() {
+        if [ "$APT_UPDATED" -eq 0 ]; then
+            $SUDO apt-get update -qq
+            APT_UPDATED=1
+        fi
+    }
+
     for dep in "${missing[@]}"; do
         case "$dep" in
             go)
                 log "  -> Installing Go..."
                 wget -q https://go.dev/dl/go1.22.2.linux-amd64.tar.gz -O /tmp/go.tar.gz
-                sudo tar -C /usr/local -xzf /tmp/go.tar.gz
+                tar -C /usr/local -xzf /tmp/go.tar.gz
                 rm /tmp/go.tar.gz
                 export PATH=$PATH:/usr/local/go/bin
                 ;;
             java)
                 log "  -> Installing Java (default-jdk)..."
-                sudo apt-get update -qq && sudo apt-get install -y -qq default-jdk
+                _apt_update && $SUDO apt-get install -y -qq default-jdk
                 ;;
             node)
                 log "  -> Installing Node.js..."
-                curl -fsSL https://deb.nodesource.com/setup_20.x | sudo -E bash -
-                sudo apt-get install -y -qq nodejs
+                curl -fsSL https://deb.nodesource.com/setup_20.x | bash -
+                $SUDO apt-get install -y -qq nodejs
                 ;;
             typescript)
                 log "  -> Installing TypeScript..."
                 command -v node &>/dev/null || {
-                    curl -fsSL https://deb.nodesource.com/setup_20.x | sudo -E bash -
-                    sudo apt-get install -y -qq nodejs
+                    curl -fsSL https://deb.nodesource.com/setup_20.x | bash -
+                    $SUDO apt-get install -y -qq nodejs
                 }
-                sudo npm install -g typescript
+                npm install -g typescript
                 ;;
             cpp)
                 log "  -> Installing g++..."
-                sudo apt-get update -qq && sudo apt-get install -y -qq g++
+                _apt_update && $SUDO apt-get install -y -qq g++
                 ;;
             csharp)
                 log "  -> Installing .NET SDK..."
-                sudo apt-get update -qq && sudo apt-get install -y -qq dotnet-sdk-8.0
+                _apt_update && $SUDO apt-get install -y -qq dotnet-sdk-8.0
                 ;;
             php)
                 log "  -> Installing PHP..."
-                sudo apt-get update -qq && sudo apt-get install -y -qq php-cli
+                _apt_update && $SUDO apt-get install -y -qq php-cli
                 ;;
         esac
     done
