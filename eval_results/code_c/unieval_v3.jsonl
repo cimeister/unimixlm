@@ -1,0 +1,5 @@
+{"event": "start", "lang": "c", "base_model": "allenai/OLMo-3-1025-7B", "adapter": "MultilingualUnigramLM/ft-code-las-olmo3-7b-thestack100M-c", "n_samples": 1, "_ts": "2026-04-13T11:08:51.058122"}
+{"event": "lmeval_done", "run": "base", "tasks": ["humaneval", "mbpp"], "file": "eval_results/code_c/eval_results_base_20260413_123459.json", "_ts": "2026-04-13T12:34:59.580382"}
+{"event": "lmeval_done", "run": "ft", "tasks": ["humaneval", "mbpp"], "file": "eval_results/code_c/eval_results_ft_20260413_143838.json", "_ts": "2026-04-13T14:38:38.381443"}
+{"event": "dtype_success", "dtype": "bfloat16", "_ts": "2026-04-13T14:38:38.381893"}
+{"event": "done", "lang": "c", "_ts": "2026-04-13T14:38:38.382298"}

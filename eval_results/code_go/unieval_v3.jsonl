@@ -1,0 +1,7 @@
+{"event": "start", "lang": "go", "base_model": "allenai/OLMo-3-1025-7B", "adapter": "MultilingualUnigramLM/ft-code-las-olmo3-7b-thestack100M-go", "n_samples": 1, "_ts": "2026-04-13T08:29:16.518158"}
+{"event": "lmeval_done", "run": "base", "tasks": ["humaneval", "mbpp"], "file": "eval_results/code_go/eval_results_base_20260413_094733.json", "_ts": "2026-04-13T09:47:33.426763"}
+{"event": "start", "lang": "go", "base_model": "allenai/OLMo-3-1025-7B", "adapter": "MultilingualUnigramLM/ft-code-las-olmo3-7b-thestack100M-go", "n_samples": 1, "_ts": "2026-04-13T11:08:51.054358"}
+{"event": "lmeval_done", "run": "base", "tasks": ["humaneval", "mbpp"], "file": "eval_results/code_go/eval_results_base_20260413_123341.json", "_ts": "2026-04-13T12:33:41.953833"}
+{"event": "lmeval_done", "run": "ft", "tasks": ["humaneval", "mbpp"], "file": "eval_results/code_go/eval_results_ft_20260413_145841.json", "_ts": "2026-04-13T14:58:41.399555"}
+{"event": "dtype_success", "dtype": "bfloat16", "_ts": "2026-04-13T14:58:41.399966"}
+{"event": "done", "lang": "go", "_ts": "2026-04-13T14:58:41.400481"}

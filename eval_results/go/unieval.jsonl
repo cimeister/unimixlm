@@ -1,0 +1,3 @@
+{"event": "dtype_fail", "dtype": "bfloat16", "error": "'multiple_go'"}
+{"event": "dtype_fail", "dtype": "float16", "error": "'multiple_go'"}
+{"event": "dtype_fail", "dtype": "float32", "error": "'multiple_go'"}

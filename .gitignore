@@ -1,39 +1,94 @@
-# Byte-compiled / optimized / DLL files
+# =========================
+# Python
+# =========================
 __pycache__/
 *.py[cod]
 *$py.class
 
-# Virtual environments
+# =========================
+# Virtual Environments
+# =========================
 venvs/
 venv/
 .env/
 .env.*
+.conda/
+*.env
 
-# Outputs and results
-output/
+# =========================
+# Training Outputs & Checkpoints
+# =========================
 outputs/
 results/
-*.log
+trainer_output/
+logs/
+wandb/
 
-# Jupyter Notebooks checkpoints
-.ipynb_checkpoints/
+# HuggingFace / model artifacts
+finetuned_model/
+*.bin
+*.pt
+*.ckpt
+*.safetensors
 
-# System files
-.DS_Store
-Thumbs.db
-
-# Hugging Face cache
-.cache/
+# =========================
+# Large Datasets / Generated Data
+# =========================
 hf_data/
+.cache/
+datasets/
+data/
+*.arrow
 
-# Tokenizer / temp files
+# Custom datasets in repo
+fineweb2_finetune_dataset.py
+thestack_finetune_dataset.py
+
+# =========================
+# Tokenizers & Intermediate Artifacts
+# =========================
+olmo3_las_tokenizers/
+tokenizers/
+sentencepiece/*.model
+sentencepiece/*.vocab
+
+# =========================
+# Temporary / Debug Files
+# =========================
 *.tmp
 *.bak
 *.swp
 *.swo
+*.log
 
-# Python packaging
+# =========================
+# Jupyter
+# =========================
+.ipynb_checkpoints/
+
+# =========================
+# System Files
+# =========================
+.DS_Store
+Thumbs.db
+
+# =========================
+# Build / Packaging
+# =========================
 *.egg-info/
 dist/
 build/
 
+# =========================
+# Shell / Execution Noise
+# =========================
+*.out
+*.err
+slurm-*.out
+slurm-*.err
+
+# =========================
+# Misc
+# =========================
+*.sqlite
+*.db
