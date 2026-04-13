@@ -343,7 +343,7 @@ Run the full evaluation pipeline comparing all LAS finetuned models against base
 bash scripts/run_code_eval.sh
 ```
 
-The script **parallelises across all available GPUs** — each language is pinned to a dedicated GPU via `CUDA_VISIBLE_DEVICES`, with a FIFO-based pool ensuring at most one language per GPU at a time. On a node with 8x A100-80GB this runs all 8 code languages simultaneously, then the 4 perplexity languages.
+The script **parallelises across all available GPUs** — each language is pinned to a GPU via round-robin `CUDA_VISIBLE_DEVICES` assignment. On a node with 8x A100-80GB all 12 languages are launched in parallel (jobs queue on GPUs as they free up).
 
 The script is **resumable** — already-completed languages are skipped automatically (delete the sentinel file to re-run a language).
 
@@ -368,9 +368,9 @@ BIGCODE_EVAL_MAIN=/path/to/bigcode-evaluation-harness/main.py bash scripts/run_c
 
 | Mode | Wall-clock (8x A100) | GPU-hours |
 |------|---------------------|-----------|
-| 8 code languages in parallel (bigcode-eval) | ~4-5 h | ~33 GPU-h |
-| 4 perplexity languages in parallel (BpB) | ~30 min | ~2 GPU-h |
-| **Full suite (12 languages)** | **~5-6 h** | **~35 GPU-h** |
+| 9 code languages in parallel (bigcode-eval) | ~4-5 h | ~36 GPU-h |
+| 3 perplexity languages in parallel (BpB) | ~30 min | ~1.5 GPU-h |
+| **Full suite (12 languages)** | **~5-6 h** | **~38 GPU-h** |
 
 #### Sentinel files
 
@@ -393,7 +393,7 @@ Each language is evaluated with benchmarks appropriate for that language using b
 | C++ | MultiPL-E C++, HumanEvalPack C++ | `multiple-cpp`, `humanevalsynthesize-cpp` | pass@1 |
 | C# | MultiPL-E C# | `multiple-cs` | pass@1 |
 | PHP | MultiPL-E PHP | `multiple-php` | pass@1 |
-| C | BpB perplexity | — | BpB |
+| C | MultiPL-E C | `multiple-c` | pass@1 |
 | HTML | BpB perplexity | — | BpB |
 | CSS | BpB perplexity | — | BpB |
 | Markdown | BpB perplexity | — | BpB |
@@ -402,7 +402,8 @@ Each language is evaluated with benchmarks appropriate for that language using b
 - **Python** is evaluated with native Python benchmarks: HumanEval (164 problems), MBPP (974 problems), and HumanEval+ (164 problems with ~764 tests/problem for rigorous assessment).
 - **MultiPL-E** provides per-language functional correctness via HumanEval translations with code execution in native language runtimes.
 - **HumanEvalPack** (synthesis mode) extends HumanEval to additional languages via human translations (available for Go, Java, JavaScript, C++).
-- **C, HTML, CSS, Markdown** have no standard functional code generation benchmark; bits-per-byte (BpB) on TheStack test splits is used. Lower BpB = better.
+- **C** is evaluated with MultiPL-E C translations via code execution.
+- **HTML, CSS, Markdown** have no standard functional code generation benchmark; bits-per-byte (BpB) on TheStack test splits is used. Lower BpB = better.
 - All comparisons are base `allenai/OLMo-3-1025-7B` vs. `MultilingualUnigramLM/ft-code-las-olmo3-7b-thestack100M-{lang}`.
 
 #### Output Structure

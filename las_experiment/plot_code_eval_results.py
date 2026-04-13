@@ -46,7 +46,7 @@ warnings.filterwarnings("ignore", category=UserWarning, module="matplotlib")
 ALL_LANGS = ["python", "go", "typescript", "java", "javascript", "cpp", "csharp",
              "php", "c", "html", "css", "markdown"]
 
-PERPLEXITY_LANGS = {"c", "html", "css", "markdown"}
+PERPLEXITY_LANGS = {"html", "css", "markdown"}
 
 # Display-friendly task labels (bigcode-eval task names use hyphens)
 TASK_LABELS = {
@@ -61,6 +61,7 @@ TASK_LABELS = {
     "multiple-js":                     "MultiPL-E JS\n(pass@1)",
     "multiple-cpp":                    "MultiPL-E C++\n(pass@1)",
     "multiple-cs":                     "MultiPL-E C#\n(pass@1)",
+    "multiple-c":                      "MultiPL-E C\n(pass@1)",
     "multiple-php":                    "MultiPL-E PHP\n(pass@1)",
     # HumanEvalPack synthesis
     "humanevalsynthesize-go":          "HEPack Go\n(pass@1)",

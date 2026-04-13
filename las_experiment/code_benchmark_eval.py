@@ -3,14 +3,14 @@
 UniMixLM Eval System v4 — bigcode-evaluation-harness
 
 Per-language code benchmark evaluation using bigcode-evaluation-harness.
-Each language runs ONLY its language-specific benchmarks (no cross-language
-Python retention tests).
+Each language runs ONLY its language-specific benchmarks.
 
 - Python:     HumanEval, MBPP, HumanEval+
-- Go/Java/JS/TS/C++/C#/PHP: MultiPL-E + HumanEvalPack where available
-- C/HTML/CSS/Markdown:       BpB perplexity (no functional benchmark)
+- Go/Java/JS/TS/C++/C#/PHP/C: MultiPL-E + HumanEvalPack where available
+- HTML/CSS/Markdown:           BpB perplexity (no functional benchmark)
 - pass@k (k=1,10,100) via multiple-sample generation
 - BpB perplexity on TheStack (correct byte-based formula)
+- LAS tokenizer support (critical for correct evaluation)
 - HF leaderboard sync (--push-to-hub)
 - Regression tracking vs. prior runs (--baseline-dir)
 - SLURM-safe JSONL logging
@@ -22,19 +22,17 @@ Usage:
         --base-model allenai/OLMo-3-1025-7B \\
         --adapter-repo MultilingualUnigramLM/ft-code-las-olmo3-7b-thestack100M-python \\
         --output-dir ./eval_results/code_python \\
-        --n-samples 1
+        --las-tokenizer-dir ./olmo3_las_tokenizers/las-code-tokenizers-OLMo-3-1025-7B \\
+        --n-samples 10
 
-    # Perplexity mode (c, html, css, markdown)
+    # Perplexity mode (html, css, markdown)
     python3 las_experiment/code_benchmark_eval.py \\
         --lang html \\
         --base-model allenai/OLMo-3-1025-7B \\
         --adapter-repo MultilingualUnigramLM/ft-code-las-olmo3-7b-thestack100M-html \\
         --output-dir ./eval_results/code_html \\
+        --las-tokenizer-dir ./olmo3_las_tokenizers/las-code-tokenizers-OLMo-3-1025-7B \\
         --mode perplexity
-
-    # With HF leaderboard sync
-    python3 las_experiment/code_benchmark_eval.py \\
-        --lang python ... --push-to-hub MultilingualUnigramLM/eval-leaderboard
 """
 
 from __future__ import annotations
@@ -44,13 +42,19 @@ import json
 import logging
 import math
 import os
+import shutil
 import subprocess
 import sys
+import tempfile
 from datetime import datetime
 from pathlib import Path
 from typing import Optional
 
 import torch
+
+# ─── Environment (must be set before any HF imports) ─────────────────────────
+os.environ["HF_DATASETS_TRUST_REMOTE_CODE"] = "1"
+os.environ["TOKENIZERS_PARALLELISM"] = "false"
 
 logging.basicConfig(
     level=logging.INFO,
@@ -62,6 +66,7 @@ logger = logging.getLogger("unieval")
 # ─── Config ──────────────────────────────────────────────────────────────────
 
 # Language -> list of bigcode-eval task names
+# Each language evaluated ONLY with its own benchmarks
 BIGCODE_TASK_MAP: dict[str, list[str]] = {
     "python":     ["humaneval", "mbpp", "humanevalplus"],
     "go":         ["multiple-go", "humanevalsynthesize-go"],
@@ -71,15 +76,33 @@ BIGCODE_TASK_MAP: dict[str, list[str]] = {
     "cpp":        ["multiple-cpp", "humanevalsynthesize-cpp"],
     "csharp":     ["multiple-cs"],
     "php":        ["multiple-php"],
+    "c":          ["multiple-c"],
 }
 
 # Languages that have no functional benchmark → perplexity (BpB) only
-PERPLEXITY_LANGS: set[str] = {"c", "html", "css", "markdown"}
+PERPLEXITY_LANGS: set[str] = {"html", "css", "markdown"}
+
+# Exact HF model names for each language adapter
+ADAPTER_MAP: dict[str, str] = {
+    "python":     "MultilingualUnigramLM/ft-code-las-olmo3-7b-thestack100M-python",
+    "go":         "MultilingualUnigramLM/ft-code-las-olmo3-7b-thestack100M-go",
+    "typescript": "MultilingualUnigramLM/ft-code-las-olmo3-7b-thestack100M-typescript",
+    "java":       "MultilingualUnigramLM/ft-code-las-olmo3-7b-thestack100M-java",
+    "javascript": "MultilingualUnigramLM/ft-code-las-olmo3-7b-thestack100M-javascript",
+    "cpp":        "MultilingualUnigramLM/ft-code-las-olmo3-7b-thestack100M-cpp",
+    "csharp":     "MultilingualUnigramLM/ft-code-las-olmo3-7b-thestack100M-csharp",
+    "php":        "MultilingualUnigramLM/ft-code-las-olmo3-7b-thestack100M-php",
+    "c":          "MultilingualUnigramLM/ft-code-las-olmo3-7b-thestack100M-c",
+    "html":       "MultilingualUnigramLM/ft-code-las-olmo3-7b-thestack100M-html",
+    "css":        "MultilingualUnigramLM/ft-code-las-olmo3-7b-thestack100M-css",
+    "markdown":   "MultilingualUnigramLM/ft-code-las-olmo3-7b-thestack100M-markdown",
+}
 
 THESTACK_REPO_TEMPLATE = "MultilingualUnigramLM/LangMap-TheStack-{lang}-100M"
 
 # Precision fallback order — only retry on OOM, never on task errors
 PRECISION_FALLBACKS = ["bf16", "fp16", "fp32"]
+DTYPE_FALLBACKS = ["bfloat16", "float16", "float32"]
 
 
 # ─── JSONL logging ───────────────────────────────────────────────────────────
@@ -95,6 +118,92 @@ def jsonl_log(log_path: Path, obj: dict) -> None:
 def _is_oom(text: str) -> bool:
     s = text.lower()
     return any(k in s for k in ["out of memory", "cuda oom", "oom", "memory"])
+
+
+# ─── Robust dataset loading (fixes HF cache + config mismatch) ──────────────
+
+def safe_load_dataset(repo: str, split: str = "test", max_retries: int = 3):
+    """
+    Robust dataset loading with fallbacks for:
+    - Missing repo on HF
+    - Broken cache / config name mismatch
+    - Missing test split
+    """
+    from datasets import load_dataset, get_dataset_config_names
+
+    # Attempt 1: direct load
+    try:
+        return load_dataset(repo, split=split, streaming=True, trust_remote_code=True)
+    except Exception as e:
+        logger.warning(f"[dataset] primary load failed for {repo}: {e}")
+
+    # Attempt 2: enumerate configs, pick first valid one
+    try:
+        configs = get_dataset_config_names(repo)
+        logger.warning(f"[dataset] available configs for {repo}: {configs}")
+        if configs:
+            config = configs[0]
+            try:
+                return load_dataset(
+                    repo, name=config, split=split,
+                    streaming=True, trust_remote_code=True,
+                )
+            except Exception:
+                # Try train split if test doesn't exist
+                return load_dataset(
+                    repo, name=config, split="train",
+                    streaming=True, trust_remote_code=True,
+                )
+    except Exception as e2:
+        logger.warning(f"[dataset] config-based load failed: {e2}")
+
+    # Attempt 3: fallback to train split
+    try:
+        return load_dataset(repo, split="train", streaming=True, trust_remote_code=True)
+    except Exception as e3:
+        logger.warning(f"[dataset] train split fallback failed: {e3}")
+
+    raise RuntimeError(f"Could not load dataset {repo} after all fallback attempts")
+
+
+# ─── LAS tokenizer preparation ──────────────────────────────────────────────
+
+def prepare_las_tokenizer_dir(
+    base_model_id: str,
+    lang: str,
+    las_tokenizer_dir: str,
+) -> Optional[str]:
+    """
+    Create an HF-compatible tokenizer directory with the LAS tokenizer.
+
+    Steps:
+      1. Load base model tokenizer → save to temp dir (gets all config files)
+      2. Overwrite tokenizer.json with the LAS langspec tokenizer
+      3. Return temp dir path
+
+    Returns None if LAS tokenizer file not found.
+    """
+    las_tok_file = Path(las_tokenizer_dir) / f"langspec_{lang}.json"
+    if not las_tok_file.exists():
+        logger.warning(
+            f"[las-tok] LAS tokenizer not found: {las_tok_file}. "
+            f"Falling back to base model tokenizer."
+        )
+        return None
+
+    from transformers import AutoTokenizer
+
+    tmp_dir = tempfile.mkdtemp(prefix=f"las_tok_{lang}_")
+
+    # Save base tokenizer to get all config files
+    base_tok = AutoTokenizer.from_pretrained(base_model_id, trust_remote_code=True)
+    base_tok.save_pretrained(tmp_dir)
+
+    # Overwrite tokenizer.json with LAS tokenizer
+    shutil.copy2(str(las_tok_file), os.path.join(tmp_dir, "tokenizer.json"))
+
+    logger.info(f"[las-tok] Prepared LAS tokenizer dir: {tmp_dir} (from {las_tok_file})")
+    return tmp_dir
 
 
 # ─── bigcode-eval runner ────────────────────────────────────────────────────
@@ -149,6 +258,7 @@ def run_bigcode_eval(
     temperature: float = 0.2,
     precision: str = "bf16",
     bigcode_main: str = "",
+    las_tokenizer_path: Optional[str] = None,
 ) -> dict:
     """
     Run bigcode-evaluation-harness via subprocess.
@@ -178,6 +288,10 @@ def run_bigcode_eval(
     if peft_model:
         cmd.extend(["--peft_model", peft_model])
 
+    # Use LAS tokenizer if available
+    if las_tokenizer_path:
+        cmd.extend(["--tokenizer", las_tokenizer_path])
+
     if n_samples > 1:
         cmd.extend(["--do_sample", "True"])
 
@@ -191,7 +305,12 @@ def run_bigcode_eval(
         cmd,
         capture_output=True,
         text=True,
-        env={**os.environ, "HF_ALLOW_CODE_EVAL": "1"},
+        env={
+            **os.environ,
+            "HF_ALLOW_CODE_EVAL": "1",
+            "HF_DATASETS_TRUST_REMOTE_CODE": "1",
+            "TOKENIZERS_PARALLELISM": "false",
+        },
     )
 
     if result.returncode != 0:
@@ -218,7 +337,7 @@ def run_bigcode_eval(
         "results": {k: v for k, v in metrics.items() if k != "config"},
         "config": metrics.get("config", {}),
         "eval_engine": "bigcode-eval",
-        "lang": run_label.split("_")[0] if "_" in run_label else "",
+        "lang": "",
         "run_label": run_label,
     }
     with open(compat_file, "w") as f:
@@ -231,7 +350,7 @@ def run_bigcode_eval(
         "metric_file": str(metric_path),
         "compat_file": str(compat_file),
     })
-    logger.info(f"[bigcode-eval] Saved {run_label} → {compat_file}")
+    logger.info(f"[bigcode-eval] Saved {run_label} -> {compat_file}")
     return compat_data
 
 
@@ -247,6 +366,7 @@ def run_with_precision_fallback(
     max_length_generation: int,
     temperature: float,
     bigcode_main: str,
+    las_tokenizer_path: Optional[str] = None,
 ) -> dict:
     """Try precisions in order, but ONLY retry on OOM errors."""
     last_err: Optional[Exception] = None
@@ -267,6 +387,7 @@ def run_with_precision_fallback(
                 temperature=temperature,
                 precision=precision,
                 bigcode_main=bigcode_main,
+                las_tokenizer_path=las_tokenizer_path,
             )
         except subprocess.CalledProcessError as e:
             stderr = e.stderr or ""
@@ -318,8 +439,17 @@ def extract_bigcode_metrics(results: dict) -> dict[str, dict[str, float]]:
 
 # ─── Perplexity (BpB) ────────────────────────────────────────────────────────
 
-def _load_model(base_model_id: str, adapter: Optional[str], dtype_str: str):
-    from transformers import AutoModelForCausalLM, AutoTokenizer
+def _load_model(
+    base_model_id: str,
+    adapter: Optional[str],
+    dtype_str: str,
+    tokenizer_path: Optional[str] = None,
+):
+    """
+    Load model + optional PEFT adapter + optional LAS tokenizer.
+    Includes OLMo rope_scaling fix.
+    """
+    from transformers import AutoModelForCausalLM, AutoTokenizer, AutoConfig
 
     torch_dtype = {
         "bfloat16": torch.bfloat16,
@@ -328,8 +458,20 @@ def _load_model(base_model_id: str, adapter: Optional[str], dtype_str: str):
     }.get(dtype_str, torch.float32)
 
     device = "cuda" if torch.cuda.is_available() else "cpu"
+
+    # Fix OLMo rope_scaling config (beta_fast/beta_slow must be float)
+    config = AutoConfig.from_pretrained(base_model_id, trust_remote_code=True)
+    if hasattr(config, "rope_scaling") and config.rope_scaling is not None:
+        if isinstance(config.rope_scaling, dict):
+            for key in ("beta_fast", "beta_slow"):
+                if key in config.rope_scaling:
+                    config.rope_scaling[key] = float(config.rope_scaling[key])
+
     model = AutoModelForCausalLM.from_pretrained(
-        base_model_id, trust_remote_code=True, torch_dtype=torch_dtype
+        base_model_id,
+        config=config,
+        trust_remote_code=True,
+        torch_dtype=torch_dtype,
     ).to(device)
 
     if adapter:
@@ -337,9 +479,13 @@ def _load_model(base_model_id: str, adapter: Optional[str], dtype_str: str):
         model = PeftModel.from_pretrained(model, adapter)
 
     model.eval()
-    tok = AutoTokenizer.from_pretrained(base_model_id, trust_remote_code=True)
+
+    # Use LAS tokenizer if provided, otherwise base model tokenizer
+    tok_source = tokenizer_path if tokenizer_path else base_model_id
+    tok = AutoTokenizer.from_pretrained(tok_source, trust_remote_code=True)
     if tok.pad_token_id is None:
         tok.pad_token_id = tok.eos_token_id
+
     return model, tok, device
 
 
@@ -373,9 +519,6 @@ def compute_bpb(model, tokenizer, texts: list[str], device: str,
     return total_nll / (total_bytes * math.log(2))
 
 
-DTYPE_FALLBACKS = ["bfloat16", "float16", "float32"]
-
-
 def run_bpb(
     base_model_id: str,
     adapter: Optional[str],
@@ -385,18 +528,14 @@ def run_bpb(
     log_path: Path,
     max_samples: int = 200,
     max_seq_len: int = 512,
+    tokenizer_path: Optional[str] = None,
 ) -> dict:
     """Compute BpB on TheStack test split. Saves eval_results_{run_label}_{ts}.json."""
-    from datasets import load_dataset
-
     repo = THESTACK_REPO_TEMPLATE.format(lang=lang)
     logger.info(f"[bpb] {run_label}: loading {repo}")
 
-    try:
-        ds = load_dataset(repo, split="test", streaming=True, trust_remote_code=True)
-    except Exception:
-        logger.warning(f"[bpb] No 'test' split in {repo}, using tail of 'train'.")
-        ds = load_dataset(repo, split="train", streaming=True, trust_remote_code=True)
+    # Use robust dataset loading (fixes config mismatch / cache issues)
+    ds = safe_load_dataset(repo)
 
     texts: list[str] = []
     col = None
@@ -419,7 +558,10 @@ def run_bpb(
     bpb = float("nan")
     for dtype in DTYPE_FALLBACKS:
         try:
-            model, tok, device = _load_model(base_model_id, adapter, dtype)
+            model, tok, device = _load_model(
+                base_model_id, adapter, dtype,
+                tokenizer_path=tokenizer_path,
+            )
             bpb = compute_bpb(model, tok, texts, device, max_seq_len)
             del model
             if torch.cuda.is_available():
@@ -428,6 +570,8 @@ def run_bpb(
         except Exception as e:
             if _is_oom(str(e)):
                 logger.warning(f"[bpb] OOM with {dtype}, trying next.")
+                if torch.cuda.is_available():
+                    torch.cuda.empty_cache()
                 continue
             raise
 
@@ -448,7 +592,7 @@ def run_bpb(
         json.dump(result, f, indent=2)
 
     jsonl_log(log_path, {"event": "bpb_done", "run": run_label, "bpb": bpb, "file": str(out_file)})
-    logger.info(f"[bpb] Saved {run_label} → {out_file}")
+    logger.info(f"[bpb] Saved {run_label} -> {out_file}")
     return result
 
 
@@ -465,7 +609,7 @@ def push_to_hub(result_file: Path, hub_repo: str, lang: str) -> None:
             repo_id=hub_repo,
             repo_type="dataset",
         )
-        logger.info(f"[hub] Uploaded {result_file.name} → {hub_repo}")
+        logger.info(f"[hub] Uploaded {result_file.name} -> {hub_repo}")
     except Exception as e:
         logger.warning(f"[hub] Upload failed (non-fatal): {e}")
 
@@ -572,7 +716,7 @@ def build_leaderboard_summary(
     path = output_dir / f"leaderboard_{lang}.json"
     with open(path, "w") as f:
         json.dump(summary, f, indent=2)
-    logger.info(f"[leaderboard] Saved → {path}")
+    logger.info(f"[leaderboard] Saved -> {path}")
     return path
 
 
@@ -582,16 +726,19 @@ def main() -> None:
     parser = argparse.ArgumentParser(description="UniMixLM Eval System v4 (bigcode-eval)")
     parser.add_argument("--lang", required=True)
     parser.add_argument("--base-model", default="allenai/OLMo-3-1025-7B")
-    parser.add_argument("--adapter-repo", required=True)
+    parser.add_argument("--adapter-repo", required=True,
+                        help="Exact HF repo name for the PEFT adapter")
     parser.add_argument("--output-dir", type=Path, required=True)
     parser.add_argument("--batch-size", type=int, default=1)
     parser.add_argument("--mode", default="auto", choices=["auto", "bigcode", "perplexity"])
-    parser.add_argument("--n-samples", type=int, default=1,
+    parser.add_argument("--n-samples", type=int, default=10,
                         help="Completions per problem: 1=pass@1, 10=pass@1+10, 100=pass@1+10+100")
     parser.add_argument("--max-length-generation", type=int, default=512)
     parser.add_argument("--temperature", type=float, default=0.2)
     parser.add_argument("--precision", default="bf16", choices=["bf16", "fp16", "fp32"])
     parser.add_argument("--max-bpb-samples", type=int, default=200)
+    parser.add_argument("--las-tokenizer-dir", default=None,
+                        help="Path to LAS tokenizer dir containing langspec_{lang}.json files")
     parser.add_argument("--bigcode-eval-path", default=None,
                         help="Path to bigcode-evaluation-harness main.py")
     parser.add_argument("--push-to-hub", default=None,
@@ -606,6 +753,14 @@ def main() -> None:
     out.mkdir(parents=True, exist_ok=True)
     log_path = out / "unieval_v4.jsonl"
 
+    # Validate adapter repo matches expected pattern
+    expected_adapter = ADAPTER_MAP.get(lang)
+    if expected_adapter and args.adapter_repo != expected_adapter:
+        logger.warning(
+            f"[adapter] Provided adapter '{args.adapter_repo}' differs from "
+            f"expected '{expected_adapter}'. Using provided value."
+        )
+
     jsonl_log(log_path, {
         "event": "start",
         "lang": lang,
@@ -614,6 +769,17 @@ def main() -> None:
         "n_samples": args.n_samples,
     })
 
+    # Prepare LAS tokenizer if available
+    las_tok_dir = None
+    if args.las_tokenizer_dir:
+        las_tok_dir = prepare_las_tokenizer_dir(
+            args.base_model, lang, args.las_tokenizer_dir,
+        )
+        if las_tok_dir:
+            logger.info(f"[las-tok] Using LAS tokenizer: {las_tok_dir}")
+        else:
+            logger.warning("[las-tok] LAS tokenizer not available, using base model tokenizer")
+
     # Determine mode
     if args.mode == "auto":
         is_perplexity = lang in PERPLEXITY_LANGS
@@ -621,7 +787,7 @@ def main() -> None:
         is_perplexity = args.mode == "perplexity"
 
     mode_str = "perplexity" if is_perplexity else "bigcode"
-    logger.info(f"UniEval v4 | lang={lang} | mode={mode_str}")
+    logger.info(f"UniEval v4 | lang={lang} | mode={mode_str} | adapter={args.adapter_repo}")
 
     # ── bigcode-eval path ─────────────────────────────────────────────────────
     if not is_perplexity:
@@ -636,7 +802,7 @@ def main() -> None:
         bigcode_main = _find_bigcode_main(args.bigcode_eval_path)
         logger.info(f"[bigcode-eval] Using main.py at: {bigcode_main}")
 
-        # Run base model
+        # Run base model (no PEFT, no LAS tokenizer — base model in native config)
         base_res = run_with_precision_fallback(
             base_model_id=args.base_model,
             peft_model=None,
@@ -649,9 +815,10 @@ def main() -> None:
             max_length_generation=args.max_length_generation,
             temperature=args.temperature,
             bigcode_main=bigcode_main,
+            las_tokenizer_path=None,  # base model uses its own tokenizer
         )
 
-        # Run finetuned model
+        # Run finetuned model (with PEFT + LAS tokenizer)
         ft_res = run_with_precision_fallback(
             base_model_id=args.base_model,
             peft_model=args.adapter_repo,
@@ -664,6 +831,7 @@ def main() -> None:
             max_length_generation=args.max_length_generation,
             temperature=args.temperature,
             bigcode_main=bigcode_main,
+            las_tokenizer_path=las_tok_dir,
         )
 
         pass_at_k = {
@@ -673,11 +841,15 @@ def main() -> None:
 
     # ── Perplexity path ───────────────────────────────────────────────────────
     else:
+        # Base model uses its own tokenizer
         base_res = run_bpb(
-            args.base_model, None, lang, out, "base", log_path, args.max_bpb_samples
+            args.base_model, None, lang, out, "base", log_path,
+            args.max_bpb_samples, tokenizer_path=None,
         )
+        # FT model uses LAS tokenizer
         ft_res = run_bpb(
-            args.base_model, args.adapter_repo, lang, out, "ft", log_path, args.max_bpb_samples
+            args.base_model, args.adapter_repo, lang, out, "ft", log_path,
+            args.max_bpb_samples, tokenizer_path=las_tok_dir,
         )
         pass_at_k = {}
 
@@ -694,6 +866,11 @@ def main() -> None:
     # ── Regression check ──────────────────────────────────────────────────────
     if args.baseline_dir:
         run_regression_check(lang, ft_res, args.baseline_dir, out, log_path)
+
+    # ── Cleanup temp LAS tokenizer dir ────────────────────────────────────────
+    if las_tok_dir and os.path.exists(las_tok_dir):
+        shutil.rmtree(las_tok_dir, ignore_errors=True)
+        logger.info(f"[las-tok] Cleaned up temp dir: {las_tok_dir}")
 
     jsonl_log(log_path, {"event": "done", "lang": lang})
     logger.info(f"Done. Results in: {out}")
