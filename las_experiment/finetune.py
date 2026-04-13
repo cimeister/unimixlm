@@ -370,7 +370,7 @@ def run_finetune(cfg):
         if domain == "code":
             hf_name = resolve_code_dataset(lang, dataset_size)
             logging.info(f"Loading {hf_name} (code)")
-            ds = load_dataset(hf_name, split="train", streaming=False)
+            ds = load_dataset(hf_name, split="train", streaming=False, data_dir="data")
         else:
             hf_name = resolve_fineweb2_dataset(dataset_size)
             logging.info(f"Loading {hf_name} :: {lang}_Latn")

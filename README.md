@@ -329,6 +329,68 @@ Tasks:
 - **MBPP** - Mostly Basic Python Problems
 - **MultiPL-E** - multilingual code generation across programming languages
 
+### Code Benchmark Suite (all 11 languages)
+
+Run the full evaluation pipeline comparing all LAS finetuned models against base OLMo-3-7B:
+
+```bash
+bash scripts/run_code_eval.sh
+```
+
+The script is **resumable** — already-completed languages are skipped automatically (delete `eval_results/code_{lang}/.eval_complete` to re-run a language). Evaluate specific languages by passing them as arguments:
+
+```bash
+bash scripts/run_code_eval.sh go java typescript   # selected languages only
+SKIP_PLOTTING=1 bash scripts/run_code_eval.sh      # skip plotting step
+```
+
+#### Benchmarks
+
+| Language | HumanEval | MBPP | MultiPL-E Task | Metric |
+|----------|:---------:|:----:|:--------------|:------:|
+| Go | Python retention | Python retention | `multiple_go` | pass@1 |
+| TypeScript | Python retention | Python retention | `multiple_ts` | pass@1 |
+| Java | Python retention | Python retention | `multiple_java` | pass@1 |
+| JavaScript | Python retention | Python retention | `multiple_js` | pass@1 |
+| C++ | Python retention | Python retention | `multiple_cpp` | pass@1 |
+| C# | Python retention | Python retention | `multiple_cs` | pass@1 |
+| PHP | Python retention | Python retention | `multiple_php` | pass@1 |
+| C | Python retention | Python retention | — | pass@1 |
+| HTML | — | — | — | BpB (perplexity) |
+| CSS | — | — | — | BpB (perplexity) |
+| Markdown | — | — | — | BpB (perplexity) |
+
+**Notes**:
+- HumanEval and MBPP are Python-only; they are run for all languages to measure catastrophic forgetting of Python ability.
+- MultiPL-E (`multiple_{lang}`) provides per-language functional correctness via code execution.
+- HTML, CSS, and Markdown have no standard functional benchmark; bits-per-byte (BpB) on TheStack test splits is used. Lower BpB = better.
+- All comparisons are base `allenai/OLMo-3-1025-7B` vs. `MultilingualUnigramLM/ft-code-las-olmo3-7b-thestack100M-{lang}`.
+
+#### Output Structure
+
+```
+eval_results/
+├── code_{lang}/
+│   ├── eval_results_base_{timestamp}.json   # base model scores
+│   ├── eval_results_ft_{timestamp}.json     # LAS finetuned scores
+│   └── .eval_complete                       # sentinel (skip-if-done)
+└── code_summary/
+    ├── per_lang/
+    │   └── bar_{lang}.png                   # grouped bar charts (base vs. LAS-FT)
+    ├── heatmap_ft_scores.png                # tasks × languages score heatmap
+    ├── heatmap_delta.png                    # improvement delta heatmap (RdBu)
+    ├── summary_delta.png                    # mean improvement per language
+    └── results_summary.csv                  # full numeric results table
+```
+
+#### Results
+
+<!-- Run `bash scripts/run_code_eval.sh` to populate this table -->
+
+| Language | Task | Base Score | LAS-FT Score | Δ |
+|----------|------|:----------:|:------------:|:-:|
+| *Run evaluation to populate* | | | | |
+
 ### BpB Metric
 
 All finetuning runs report bits-per-byte (BpB) during training and evaluation. BpB is tokenizer-agnostic, enabling fair comparison between original and LAS tokenizers:
