@@ -1042,9 +1042,10 @@ def main() -> None:
         n_phases = 2  # BpB base + BpB ft
     else:
         all_tasks_preview = BIGCODE_TASK_MAP.get(lang, [])
+        has_std = any(not t.startswith(PROMPT_REQUIRED_PREFIXES) for t in all_tasks_preview)
         has_prompt = any(t.startswith(PROMPT_REQUIRED_PREFIXES) for t in all_tasks_preview)
-        # std base, std ft, [prompt base, prompt ft], BpB base, BpB ft
-        n_phases = 4 + (2 if has_prompt else 0)
+        # [std base, std ft], [prompt base, prompt ft], BpB base, BpB ft
+        n_phases = 2 + (2 if has_std else 0) + (2 if has_prompt else 0)
     timer = EvalTimer(lang, total_phases=n_phases)
 
     # ── bigcode-eval path ─────────────────────────────────────────────────────
@@ -1097,18 +1098,24 @@ def main() -> None:
             return merged
 
         # ── Run standard tasks ───────────────────────────────────────────
-        timer.start_phase(f"bigcode-eval base model ({', '.join(std_tasks)})")
-        base_res = _run_task_group(
-            std_tasks, "base", peft_model=None, las_tokenizer_path=None,
-        )
-        timer.end_phase()
+        base_res = {"results": {}}
+        ft_res = {"results": {}}
 
-        timer.start_phase(f"bigcode-eval finetuned model ({', '.join(std_tasks)})")
-        ft_res = _run_task_group(
-            std_tasks, "ft", peft_model=args.adapter_repo,
-            las_tokenizer_path=las_tok_dir,
-        )
-        timer.end_phase()
+        if std_tasks:
+            timer.start_phase(f"bigcode-eval base model ({', '.join(std_tasks)})")
+            base_res = _run_task_group(
+                std_tasks, "base", peft_model=None, las_tokenizer_path=None,
+            )
+            timer.end_phase()
+
+            timer.start_phase(f"bigcode-eval finetuned model ({', '.join(std_tasks)})")
+            ft_res = _run_task_group(
+                std_tasks, "ft", peft_model=args.adapter_repo,
+                las_tokenizer_path=las_tok_dir,
+            )
+            timer.end_phase()
+        else:
+            logger.info(f"[tasks] [{lang}] No standard tasks — skipping to HumanEvalPack")
 
         # ── Run prompt-required tasks (non-fatal if they fail) ───────────
         if prompt_tasks:
