@@ -337,12 +337,49 @@ Run the full evaluation pipeline comparing all LAS finetuned models against base
 bash scripts/run_code_eval.sh
 ```
 
-The script is **resumable** — already-completed languages are skipped automatically (delete `eval_results/code_{lang}/.eval_complete` to re-run a language). Evaluate specific languages by passing them as arguments:
+The script **parallelises across all available GPUs** — each language is pinned to a dedicated GPU via `CUDA_VISIBLE_DEVICES`, with a FIFO-based pool ensuring at most one language per GPU at a time. On a node with 8× A100-80GB this runs all 8 code languages simultaneously, then the 3 perplexity languages.
+
+The script is **resumable** — already-completed languages are skipped automatically (delete the sentinel file to re-run a language).
 
 ```bash
-bash scripts/run_code_eval.sh go java typescript   # selected languages only
-SKIP_PLOTTING=1 bash scripts/run_code_eval.sh      # skip plotting step
+# Run all languages in parallel across all GPUs
+bash scripts/run_code_eval.sh
+
+# Skip GPU 0 if it is already running a job
+GPUS="1 2 3 4 5 6 7" bash scripts/run_code_eval.sh
+
+# Selected languages only (assigned to free GPUs)
+bash scripts/run_code_eval.sh go java typescript
+
+# Skip plotting step
+SKIP_PLOTTING=1 bash scripts/run_code_eval.sh
 ```
+
+#### GPU-hour estimates (8× A100-80GB, bfloat16, n_samples=1)
+
+Observed throughput on OLMo-3-7B + PEFT:
+
+| Run | Samples | Rate | Time per language |
+|-----|---------|------|------------------|
+| Base model (lm-eval) | 664 | ~6.8 s/sample | ~75 min |
+| FT model (lm-eval, PEFT) | 664 | ~15 s/sample | ~170 min |
+| **Total per code language** | | | **~4 h 5 min** |
+| Perplexity language (BpB, base + FT) | 200 | forward-pass only | ~30 min |
+
+| Mode | Wall-clock (8× A100) | GPU-hours |
+|------|---------------------|-----------|
+| 8 code languages in parallel | ~4 h 5 min | ~33 GPU-h |
+| 3 perplexity languages in parallel | ~30 min | ~1.5 GPU-h |
+| **Full suite (11 languages)** | **~4.5–5 h** | **~35 GPU-h** |
+
+*FT eval is ~2.2× slower than base due to PEFT adapter overhead. Rates measured on A100-SXM4-80GB with batch_size=1 (auto-detected).*
+
+#### Sentinel files
+
+| Language type | Sentinel path | Delete to re-run |
+|--------------|--------------|-----------------|
+| Code (lm-eval) | `eval_results/code_{lang}/.eval_complete` | `rm eval_results/code_go/.eval_complete` |
+| Perplexity | `eval_results/code_{lang}/.perplexity_complete` | `rm eval_results/code_html/.perplexity_complete` |
 
 #### Benchmarks
 

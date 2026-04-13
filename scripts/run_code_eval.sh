@@ -3,23 +3,26 @@
 # run_code_eval.sh — UniMixLM Eval System v3
 #
 # Evaluates all 11 LAS finetuned models vs. base OLMo-3-7B.
+# Parallelises across all available GPUs (one language per GPU).
 # Resumable: completed languages are skipped (delete sentinel to re-run).
 #
 # Usage:
-#   bash scripts/run_code_eval.sh                        # all languages
-#   bash scripts/run_code_eval.sh go java typescript     # specific languages
-#   bash scripts/run_code_eval.sh --slurm                # submit SLURM array jobs
-#   bash scripts/run_code_eval.sh --slurm go java        # SLURM, specific langs
+#   bash scripts/run_code_eval.sh                          # all langs, all GPUs
+#   bash scripts/run_code_eval.sh go java typescript       # specific languages
+#   GPUS="1 2 3 4 5 6 7" bash scripts/run_code_eval.sh    # skip GPU 0 (if busy)
+#   bash scripts/run_code_eval.sh --slurm                  # SLURM array jobs
+#   bash scripts/run_code_eval.sh --slurm go java          # SLURM, specific langs
 #
 # Environment overrides:
-#   BATCH_SIZE=auto:4         lm-eval batch size
-#   N_SAMPLES=1               completions per problem (1=pass@1, 10=pass@1+10)
-#   SKIP_PLOTTING=1           skip final plot generation
-#   PUSH_TO_HUB=<repo>        upload leaderboard JSONs to HF dataset repo
-#   BASELINE_DIR=<path>       directory with prior results for regression check
-#   SLURM_GPU=1               GPU count per SLURM job
-#   SLURM_MEM=80G             memory per SLURM job
-#   SLURM_TIME=04:00:00       wall time per SLURM job
+#   GPUS="0 1 2 3 4 5 6 7"   space-separated GPU IDs to use (default: all detected)
+#   BATCH_SIZE=auto:4          lm-eval batch size
+#   N_SAMPLES=1                completions per problem (1=pass@1, 10=pass@1+10)
+#   SKIP_PLOTTING=1            skip final plot generation
+#   PUSH_TO_HUB=<repo>         upload leaderboard JSONs to HF dataset repo
+#   BASELINE_DIR=<path>        directory with prior results for regression check
+#   SLURM_GPU=1                GPU count per SLURM job
+#   SLURM_MEM=80G              memory per SLURM job
+#   SLURM_TIME=04:00:00        wall time per SLURM job
 # =============================================================================
 set -euo pipefail
 
@@ -50,6 +53,19 @@ export TOKENIZERS_PARALLELISM=false
 ALL_CODE_LANGS=(go typescript java javascript cpp csharp php c)
 ALL_PERP_LANGS=(html css markdown)
 
+# ─── GPU detection ───────────────────────────────────────────────────────────
+# Auto-detect available GPU IDs from nvidia-smi, or fall back to GPUS env var.
+# Override: GPUS="1 2 3 4 5 6 7" to skip specific GPUs (e.g., one already in use).
+if [ -z "${GPUS:-}" ]; then
+    if command -v nvidia-smi &>/dev/null; then
+        GPUS=$(nvidia-smi --list-gpus | awk '{print NR-1}' | tr '\n' ' ' | xargs)
+    else
+        GPUS="0"
+    fi
+fi
+read -ra GPU_IDS <<< "$GPUS"
+N_GPUS="${#GPU_IDS[@]}"
+
 # ─── Argument parsing ────────────────────────────────────────────────────────
 CODE_LANGS=()
 PERP_LANGS=()
@@ -75,17 +91,18 @@ else
     PERP_LANGS=("${ALL_PERP_LANGS[@]}")
 fi
 
-ALL_LANGS=("${CODE_LANGS[@]}" "${PERP_LANGS[@]}")
+ALL_LANGS=("${CODE_LANGS[@]:-}" "${PERP_LANGS[@]:-}")
 
 # ─── Utilities ───────────────────────────────────────────────────────────────
 log() { echo "[$(date '+%Y-%m-%d %H:%M:%S')] $*"; }
 err() { log "ERROR: $*" >&2; exit 1; }
 
 # ─── Pre-flight checks ───────────────────────────────────────────────────────
-log "=== UniMixLM Eval System v3 ==="
+log "=== UniMixLM Eval System v3 (parallel) ==="
 log "Base model  : $BASE_MODEL"
 log "Code langs  : ${CODE_LANGS[*]:-none}"
 log "Perp langs  : ${PERP_LANGS[*]:-none}"
+log "GPUs        : ${GPUS} (${N_GPUS} total)"
 log "Batch size  : $BATCH_SIZE"
 log "N samples   : $N_SAMPLES"
 log "SLURM mode  : $SLURM_MODE"
@@ -120,7 +137,7 @@ fi
 # ─── Build common Python args ─────────────────────────────────────────────────
 _python_args() {
     local lang="$1"
-    local mode="$2"   # lmeval | perplexity
+    local mode="$2"
     local out_dir="${RESULTS_BASE}/code_${lang}"
 
     local args=(
@@ -135,6 +152,86 @@ _python_args() {
     [ -n "$PUSH_TO_HUB" ]  && args+=(--push-to-hub "$PUSH_TO_HUB")
     [ -n "$BASELINE_DIR" ] && args+=(--baseline-dir "$BASELINE_DIR")
     echo "${args[@]}"
+}
+
+# ─── GPU pool semaphore (FIFO-based) ─────────────────────────────────────────
+# A named pipe acts as a blocking queue of GPU IDs.
+# acquire_gpu: blocks until a GPU slot is free, prints the GPU ID.
+# release_gpu: returns a GPU ID to the pool.
+
+GPU_FIFO="/tmp/unimixlm_gpu_pool_$$"
+mkfifo "$GPU_FIFO"
+exec 9<>"$GPU_FIFO"   # open fd 9 for read+write so the pipe stays alive
+rm -f "$GPU_FIFO"     # unlink name; fd 9 keeps the pipe open until script exits
+
+# Populate the pool
+for _gpu in "${GPU_IDS[@]}"; do
+    printf '%s\n' "$_gpu" >&9
+done
+
+acquire_gpu() {
+    local gpu_id
+    read -r gpu_id <&9
+    echo "$gpu_id"
+}
+
+release_gpu() {
+    printf '%s\n' "$1" >&9
+}
+
+# ─── Parallel local execution ─────────────────────────────────────────────────
+# PIDs and metadata for final wait/status reporting
+PIDS=()
+PID_LANGS=()
+PID_GPUS=()
+
+run_parallel() {
+    local lang="$1"
+    local mode="$2"
+    local sentinel="$3"
+
+    if [ -f "$sentinel" ]; then
+        log "[$lang] Already complete — skipping (delete ${sentinel} to re-run)."
+        return
+    fi
+
+    # Block here until a GPU slot is free
+    local gpu_id
+    gpu_id=$(acquire_gpu)
+    log "[$lang] Acquired GPU $gpu_id — starting (mode=$mode)."
+
+    local out_dir="${RESULTS_BASE}/code_${lang}"
+    mkdir -p "$out_dir"
+    local log_file="${LOGS_DIR}/${lang}.log"
+
+    local py_args
+    py_args=$(_python_args "$lang" "$mode")
+
+    # Run in a background subshell pinned to the assigned GPU.
+    # GPU is released back to the pool when the subshell exits (success or failure).
+    (
+        # Don't let set -e kill the subshell before we can release the GPU
+        set +e
+        CUDA_VISIBLE_DEVICES="$gpu_id" \
+            python3 las_experiment/code_benchmark_eval.py ${py_args} \
+            2>&1 | tee "$log_file"
+        local exit_code="${PIPESTATUS[0]}"
+
+        # Always release the GPU
+        release_gpu "$gpu_id"
+
+        if [ "$exit_code" -ne 0 ]; then
+            log "[$lang] FAILED on GPU $gpu_id (exit $exit_code). See $log_file"
+            exit "$exit_code"
+        fi
+
+        touch "$sentinel"
+        log "[$lang] DONE on GPU $gpu_id."
+    ) &
+
+    PIDS+=($!)
+    PID_LANGS+=("$lang")
+    PID_GPUS+=("$gpu_id")
 }
 
 # ─── SLURM submission ─────────────────────────────────────────────────────────
@@ -175,64 +272,65 @@ SLURM_SCRIPT
     log "[$lang] SLURM job submitted."
 }
 
-# ─── Local execution ──────────────────────────────────────────────────────────
-run_local() {
-    local lang="$1"
-    local mode="$2"
-    local sentinel="$3"
-
-    if [ -f "$sentinel" ]; then
-        log "[$lang] Already complete — skipping (delete ${sentinel} to re-run)."
-        return
-    fi
-
-    local out_dir="${RESULTS_BASE}/code_${lang}"
-    mkdir -p "$out_dir"
-    local log_file="${LOGS_DIR}/${lang}.log"
-
-    local py_args
-    py_args=$(_python_args "$lang" "$mode")
-
-    log "[$lang] Starting (mode=$mode)..."
-    # shellcheck disable=SC2086
-    python3 las_experiment/code_benchmark_eval.py ${py_args} \
-        2>&1 | tee "$log_file"
-
-    # Check exit status from the pipeline (not tee)
-    local exit_code="${PIPESTATUS[0]}"
-    if [ "$exit_code" -ne 0 ]; then
-        log "[$lang] FAILED (exit $exit_code). See $log_file"
-        return "$exit_code"
-    fi
-
-    touch "$sentinel"
-    log "[$lang] DONE."
-}
-
-# ─── Run code langs (lm-eval) ─────────────────────────────────────────────────
-if [ "${#CODE_LANGS[@]}" -gt 0 ]; then
-    log "=== Functional benchmarks (HumanEval + MBPP + MultiPL-E) ==="
-    for lang in "${CODE_LANGS[@]}"; do
-        sentinel="${RESULTS_BASE}/code_${lang}/.eval_complete"
-        if [ "$SLURM_MODE" -eq 1 ]; then
+# ─── Dispatch all languages ───────────────────────────────────────────────────
+if [ "$SLURM_MODE" -eq 1 ]; then
+    # SLURM: submit one job per language (cluster manages parallelism)
+    if [ "${#CODE_LANGS[@]}" -gt 0 ]; then
+        log "=== Submitting functional benchmark jobs (SLURM) ==="
+        for lang in "${CODE_LANGS[@]}"; do
+            sentinel="${RESULTS_BASE}/code_${lang}/.eval_complete"
             submit_slurm "$lang" "lmeval" "$sentinel"
-        else
-            run_local "$lang" "lmeval" "$sentinel"
-        fi
-    done
-fi
-
-# ─── Run perplexity langs (BpB) ───────────────────────────────────────────────
-if [ "${#PERP_LANGS[@]}" -gt 0 ]; then
-    log "=== Perplexity benchmarks (BpB on TheStack) ==="
-    for lang in "${PERP_LANGS[@]}"; do
-        sentinel="${RESULTS_BASE}/code_${lang}/.perplexity_complete"
-        if [ "$SLURM_MODE" -eq 1 ]; then
+        done
+    fi
+    if [ "${#PERP_LANGS[@]}" -gt 0 ]; then
+        log "=== Submitting perplexity benchmark jobs (SLURM) ==="
+        for lang in "${PERP_LANGS[@]}"; do
+            sentinel="${RESULTS_BASE}/code_${lang}/.perplexity_complete"
             submit_slurm "$lang" "perplexity" "$sentinel"
+        done
+    fi
+else
+    # Local: run up to N_GPUS languages in parallel
+    log "=== Launching parallel evaluation (max ${N_GPUS} concurrent jobs) ==="
+
+    if [ "${#CODE_LANGS[@]}" -gt 0 ]; then
+        log "--- Functional benchmarks (HumanEval + MBPP + MultiPL-E) ---"
+        for lang in "${CODE_LANGS[@]}"; do
+            sentinel="${RESULTS_BASE}/code_${lang}/.eval_complete"
+            run_parallel "$lang" "lmeval" "$sentinel"
+        done
+    fi
+
+    if [ "${#PERP_LANGS[@]}" -gt 0 ]; then
+        log "--- Perplexity benchmarks (BpB on TheStack) ---"
+        for lang in "${PERP_LANGS[@]}"; do
+            sentinel="${RESULTS_BASE}/code_${lang}/.perplexity_complete"
+            run_parallel "$lang" "perplexity" "$sentinel"
+        done
+    fi
+
+    # ── Wait for all background jobs and collect exit codes ──────────────────
+    log "=== Waiting for all jobs to complete ==="
+    FAILED_LANGS=()
+    for i in "${!PIDS[@]}"; do
+        pid="${PIDS[$i]}"
+        lang="${PID_LANGS[$i]}"
+        set +e
+        wait "$pid"
+        status=$?
+        set -e
+        if [ "$status" -ne 0 ]; then
+            FAILED_LANGS+=("$lang")
+            log "FAIL [$lang] exited with status $status"
         else
-            run_local "$lang" "perplexity" "$sentinel"
+            log "OK   [$lang] finished successfully"
         fi
     done
+
+    if [ "${#FAILED_LANGS[@]}" -gt 0 ]; then
+        log "=== WARNING: ${#FAILED_LANGS[@]} language(s) failed: ${FAILED_LANGS[*]}"
+        log "    Re-run without deleting sentinels to retry only failed languages."
+    fi
 fi
 
 # ─── Plotting (local mode only — SLURM jobs run async) ────────────────────────
@@ -241,9 +339,9 @@ if [ "$SLURM_MODE" -eq 1 ]; then
     log "  python3 las_experiment/plot_code_eval_results.py \\"
     log "      --results-dir $RESULTS_BASE \\"
     log "      --output-dir ${RESULTS_BASE}/code_summary \\"
-    log "      --langs ${ALL_LANGS[*]}"
+    log "      --langs ${ALL_LANGS[*]:-}"
 
-elif [ "$SKIP_PLOTTING" -eq 0 ]; then
+elif [ "$SKIP_PLOTTING" -eq 0 ] && [ "${#FAILED_LANGS[@]:-0}" -eq 0 ]; then
     log "=== Generating plots ==="
     SUMMARY_DIR="${RESULTS_BASE}/code_summary"
     mkdir -p "$SUMMARY_DIR"
@@ -251,7 +349,7 @@ elif [ "$SKIP_PLOTTING" -eq 0 ]; then
     python3 las_experiment/plot_code_eval_results.py \
         --results-dir "$RESULTS_BASE" \
         --output-dir "$SUMMARY_DIR" \
-        --langs "${ALL_LANGS[@]}" \
+        --langs "${ALL_LANGS[@]:-}" \
         2>&1 | tee "${LOGS_DIR}/plotting.log"
 
     log "Plots saved to: $SUMMARY_DIR"
