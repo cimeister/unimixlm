@@ -162,8 +162,19 @@ install_runtime_deps() {
                 _apt_update && $SUDO apt-get install -y -qq dotnet-sdk-8.0
                 ;;
             csharp-csc)
-                log "  -> Installing Mono (csc compiler)..."
-                _apt_update && $SUDO apt-get install -y -qq mono-mcs
+                log "  -> Installing Mono C# compiler (csc)..."
+                _apt_update
+                # Try mono-roslyn first (provides /usr/bin/csc directly)
+                if $SUDO apt-get install -y -qq mono-roslyn 2>/dev/null; then
+                    log "  -> Installed mono-roslyn (csc)"
+                else
+                    # Fallback: install mono-mcs and symlink mcs -> csc
+                    $SUDO apt-get install -y -qq mono-mcs
+                    if command -v mcs &>/dev/null && ! command -v csc &>/dev/null; then
+                        log "  -> mono-roslyn not available; creating csc -> mcs symlink"
+                        $SUDO ln -sf "$(command -v mcs)" /usr/local/bin/csc
+                    fi
+                fi
                 ;;
             php)
                 log "  -> Installing PHP..."
