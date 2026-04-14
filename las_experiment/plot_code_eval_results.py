@@ -21,9 +21,12 @@ Usage:
 from __future__ import annotations
 
 import argparse
+import hashlib
 import json
 import re
+import time
 import warnings
+from datetime import datetime
 from pathlib import Path
 from typing import Optional
 
@@ -81,12 +84,29 @@ TASK_LABELS = {
     "bpb":                             "BpB\n(lower better)",
 }
 
-# Matplotlib style
+# Publication-quality matplotlib style
 plt.rcParams.update({
     "font.family": "DejaVu Sans",
+    "font.size": 11,
     "axes.spines.top": False,
     "axes.spines.right": False,
-    "figure.dpi": 150,
+    "axes.labelsize": 12,
+    "axes.titlesize": 14,
+    "axes.titleweight": "bold",
+    "axes.linewidth": 0.8,
+    "xtick.labelsize": 10,
+    "ytick.labelsize": 10,
+    "legend.fontsize": 10,
+    "legend.framealpha": 0.9,
+    "legend.edgecolor": "0.8",
+    "figure.dpi": 300,
+    "savefig.dpi": 300,
+    "savefig.bbox": "tight",
+    "savefig.pad_inches": 0.1,
+    "figure.facecolor": "white",
+    "axes.facecolor": "white",
+    "grid.alpha": 0.3,
+    "grid.linestyle": "--",
 })
 
 # Colour palette: base = steel blue, ft = coral
@@ -297,8 +317,9 @@ def plot_per_language(
     x = np.arange(len(all_tasks))
     width = 0.35
 
-    fig, ax = plt.subplots(figsize=(max(6, len(all_tasks) * 1.6), 5))
+    fig, ax = plt.subplots(figsize=(max(7, len(all_tasks) * 2.0), 5.5))
 
+    bars_list = []
     for i, (run_label, metrics, color) in enumerate([
         ("Base OLMo-3-7B", base_metrics, COLORS["base"]),
         ("LAS Finetuned", ft_metrics, COLORS["ft"]),
@@ -306,25 +327,38 @@ def plot_per_language(
         scores = [metrics.get(t, (0.0, 0.0))[0] for t in all_tasks]
         stderrs = [metrics.get(t, (0.0, 0.0))[1] for t in all_tasks]
         offset = (i - 0.5) * width
-        ax.bar(
+        bars = ax.bar(
             x + offset, scores, width,
             yerr=stderrs, capsize=4,
             color=color, alpha=0.88, label=run_label,
-            error_kw={"elinewidth": 1.2},
+            edgecolor="white", linewidth=0.5,
+            error_kw={"elinewidth": 1.0, "capthick": 1.0},
         )
+        bars_list.append((bars, scores))
+
+    # Add value labels on top of bars
+    for bars, scores in bars_list:
+        for bar, score in zip(bars, scores):
+            if score > 0:
+                ax.text(
+                    bar.get_x() + bar.get_width() / 2, bar.get_height() + 0.005,
+                    f"{score:.3f}", ha="center", va="bottom", fontsize=7.5,
+                    fontweight="medium",
+                )
 
     tick_labels = [TASK_LABELS.get(t, t) for t in all_tasks]
     ax.set_xticks(x)
     ax.set_xticklabels(tick_labels, fontsize=9)
     ax.set_ylabel("BpB (lower = better)" if is_bpb else "Score (pass@1)")
-    ax.set_title(f"Base vs. LAS Finetuned — {lang.upper()}", fontsize=12, fontweight="bold")
-    ax.legend(fontsize=9)
-    ax.grid(axis="y", linestyle="--", alpha=0.35)
+    ax.set_title(f"Base vs. LAS Finetuned — {lang.upper()}")
+    ax.legend(loc="upper right", frameon=True)
+    ax.grid(axis="y", linestyle="--", alpha=0.3)
 
     per_lang_dir = output_dir / "per_lang"
     per_lang_dir.mkdir(parents=True, exist_ok=True)
     fig.tight_layout()
     fig.savefig(per_lang_dir / f"bar_{lang}.png", bbox_inches="tight")
+    fig.savefig(per_lang_dir / f"bar_{lang}.pdf", bbox_inches="tight")
     plt.close(fig)
 
 
@@ -379,37 +413,40 @@ def plot_heatmap_scores(
     task_labels = [TASK_LABELS.get(t, t).replace("\n", " ") for t in df.index]
     lang_labels = [l.upper() for l in df.columns]
 
-    fig, ax = plt.subplots(figsize=(max(10, len(langs) * 1.1), max(4, len(df) * 0.65)))
+    fig, ax = plt.subplots(figsize=(max(11, len(langs) * 1.2), max(4.5, len(df) * 0.75)))
 
     if _SEABORN:
         sns.heatmap(
             df.values.astype(float),
             ax=ax,
             cmap="YlOrRd",
-            annot=True, fmt=".3f", annot_kws={"size": 8},
+            annot=True, fmt=".3f", annot_kws={"size": 9, "fontweight": "medium"},
             xticklabels=lang_labels,
             yticklabels=task_labels,
-            linewidths=0.4,
-            cbar_kws={"label": "Score (higher better; BpB shown as -BpB)"},
+            linewidths=0.6, linecolor="white",
+            cbar_kws={"label": "Score (higher better; BpB shown as -BpB)", "shrink": 0.8},
+            square=False,
         )
     else:
         data = df.values.astype(float)
         masked = np.ma.masked_invalid(data)
         im = ax.imshow(masked, cmap="YlOrRd", aspect="auto")
-        fig.colorbar(im, ax=ax, label="Score (higher better; BpB shown as -BpB)")
+        fig.colorbar(im, ax=ax, label="Score (higher better; BpB shown as -BpB)", shrink=0.8)
         ax.set_xticks(range(len(lang_labels)))
         ax.set_yticks(range(len(task_labels)))
-        ax.set_xticklabels(lang_labels, fontsize=9)
-        ax.set_yticklabels(task_labels, fontsize=9)
+        ax.set_xticklabels(lang_labels, fontsize=10)
+        ax.set_yticklabels(task_labels, fontsize=10)
         for i in range(data.shape[0]):
             for j in range(data.shape[1]):
                 v = data[i, j]
                 if not np.isnan(v):
-                    ax.text(j, i, f"{v:.3f}", ha="center", va="center", fontsize=7)
+                    ax.text(j, i, f"{v:.3f}", ha="center", va="center", fontsize=8,
+                            fontweight="medium")
 
-    ax.set_title("LAS Finetuned Scores Across Languages", fontsize=12, fontweight="bold", pad=12)
+    ax.set_title("LAS Finetuned Scores Across Languages", pad=14)
     fig.tight_layout()
     fig.savefig(output_dir / "heatmap_ft_scores.png", bbox_inches="tight")
+    fig.savefig(output_dir / "heatmap_ft_scores.pdf", bbox_inches="tight")
     plt.close(fig)
 
 
@@ -435,7 +472,7 @@ def plot_heatmap_delta(
     task_labels = [TASK_LABELS.get(t, t).replace("\n", " ") for t in delta.index]
     lang_labels = [l.upper() for l in delta.columns]
 
-    fig, ax = plt.subplots(figsize=(max(10, len(langs) * 1.1), max(4, len(delta) * 0.65)))
+    fig, ax = plt.subplots(figsize=(max(11, len(langs) * 1.2), max(4.5, len(delta) * 0.75)))
 
     data = delta.values.astype(float)
     vmax = max(abs(np.nanmax(data)), abs(np.nanmin(data)), 0.01)
@@ -447,31 +484,33 @@ def plot_heatmap_delta(
             cmap="RdBu_r",
             center=0,
             vmin=-vmax, vmax=vmax,
-            annot=True, fmt=".3f", annot_kws={"size": 8},
+            annot=True, fmt="+.3f", annot_kws={"size": 9, "fontweight": "medium"},
             xticklabels=lang_labels,
             yticklabels=task_labels,
-            linewidths=0.4,
-            cbar_kws={"label": "Delta Score (FT - Base, higher better)"},
+            linewidths=0.6, linecolor="white",
+            cbar_kws={"label": "Delta Score (FT - Base, higher better)", "shrink": 0.8},
+            square=False,
         )
     else:
         masked = np.ma.masked_invalid(data)
         norm = mcolors.TwoSlopeNorm(vmin=-vmax, vcenter=0, vmax=vmax)
         im = ax.imshow(masked, cmap="RdBu_r", norm=norm, aspect="auto")
-        fig.colorbar(im, ax=ax, label="Delta Score (FT - Base, higher better)")
+        fig.colorbar(im, ax=ax, label="Delta Score (FT - Base, higher better)", shrink=0.8)
         ax.set_xticks(range(len(lang_labels)))
         ax.set_yticks(range(len(task_labels)))
-        ax.set_xticklabels(lang_labels, fontsize=9)
-        ax.set_yticklabels(task_labels, fontsize=9)
+        ax.set_xticklabels(lang_labels, fontsize=10)
+        ax.set_yticklabels(task_labels, fontsize=10)
         for i in range(data.shape[0]):
             for j in range(data.shape[1]):
                 v = data[i, j]
                 if not np.isnan(v):
-                    ax.text(j, i, f"{v:+.3f}", ha="center", va="center", fontsize=7)
+                    ax.text(j, i, f"{v:+.3f}", ha="center", va="center", fontsize=8,
+                            fontweight="medium")
 
-    ax.set_title("Improvement: LAS Finetuned - Base OLMo-3-7B", fontsize=12,
-                 fontweight="bold", pad=12)
+    ax.set_title("Improvement: LAS Finetuned - Base OLMo-3-7B", pad=14)
     fig.tight_layout()
     fig.savefig(output_dir / "heatmap_delta.png", bbox_inches="tight")
+    fig.savefig(output_dir / "heatmap_delta.pdf", bbox_inches="tight")
     plt.close(fig)
 
 
@@ -513,18 +552,30 @@ def plot_summary_delta(
     stds   = [s for _, _, s in lang_means]
     colors = [COLORS["ft"] if m >= 0 else "#999999" for m in means]
 
-    fig, ax = plt.subplots(figsize=(max(8, len(labels) * 0.9), 5))
+    fig, ax = plt.subplots(figsize=(max(9, len(labels) * 1.0), 5.5))
     x = np.arange(len(labels))
-    ax.bar(x, means, yerr=stds, capsize=5, color=colors, alpha=0.88,
-           error_kw={"elinewidth": 1.2})
+    bars = ax.bar(x, means, yerr=stds, capsize=5, color=colors, alpha=0.88,
+                  edgecolor="white", linewidth=0.5,
+                  error_kw={"elinewidth": 1.0, "capthick": 1.0})
     ax.axhline(0, color="black", linewidth=0.8, linestyle="--")
+
+    # Value labels
+    for bar, mean in zip(bars, means):
+        va = "bottom" if mean >= 0 else "top"
+        offset = 0.003 if mean >= 0 else -0.003
+        ax.text(
+            bar.get_x() + bar.get_width() / 2, bar.get_height() + offset,
+            f"{mean:+.3f}", ha="center", va=va, fontsize=8.5, fontweight="medium",
+        )
+
     ax.set_xticks(x)
     ax.set_xticklabels(labels, fontsize=10)
     ax.set_ylabel("Mean Improvement (LAS-FT - Base)")
-    ax.set_title("Average Improvement per Language", fontsize=12, fontweight="bold")
-    ax.grid(axis="y", linestyle="--", alpha=0.35)
+    ax.set_title("Average Improvement per Language")
+    ax.grid(axis="y", linestyle="--", alpha=0.3)
     fig.tight_layout()
     fig.savefig(output_dir / "summary_delta.png", bbox_inches="tight")
+    fig.savefig(output_dir / "summary_delta.pdf", bbox_inches="tight")
     plt.close(fig)
 
 
@@ -570,6 +621,42 @@ def export_csv(
     print(df.to_string(index=False))
 
 
+# ─── Reusable plot generation ────────────────────────────────────────────────
+
+def generate_all_plots(
+    results_dir: Path,
+    output_dir: Path,
+    langs: list[str],
+) -> bool:
+    """Generate all plots from current results. Returns True if any data was found."""
+    all_data = load_all_results(results_dir, langs)
+    if not all_data:
+        return False
+
+    found_langs = sorted(all_data.keys())
+    print(f"Found results for: {found_langs}")
+
+    for lang in found_langs:
+        plot_per_language(lang, all_data[lang], output_dir)
+
+    plot_heatmap_scores(all_data, found_langs, output_dir)
+    plot_heatmap_delta(all_data, found_langs, output_dir)
+    plot_summary_delta(all_data, found_langs, output_dir)
+    export_csv(all_data, found_langs, output_dir)
+    return True
+
+
+def _compute_results_fingerprint(results_dir: Path, langs: list[str]) -> str:
+    """Hash based on result files and their modification times."""
+    h = hashlib.md5()
+    for lang in langs:
+        lang_dir = results_dir / f"code_{lang}"
+        if lang_dir.exists():
+            for f in sorted(lang_dir.glob("*.json")):
+                h.update(f"{f.name}:{f.stat().st_mtime}".encode())
+    return h.hexdigest()
+
+
 # ─── Main ────────────────────────────────────────────────────────────────────
 
 def main() -> None:
@@ -580,7 +667,17 @@ def main() -> None:
                         help="Directory to save all plots and CSV")
     parser.add_argument("--langs", nargs="+", default=ALL_LANGS,
                         help="Languages to include in plots")
+    parser.add_argument("--dpi", type=int, default=300,
+                        help="DPI for raster output (default: 300)")
+    parser.add_argument("--watch", action="store_true",
+                        help="Watch for new results and regenerate plots incrementally")
+    parser.add_argument("--watch-interval", type=int, default=60,
+                        help="Seconds between checks in watch mode (default: 60)")
     args = parser.parse_args()
+
+    # Apply DPI override
+    plt.rcParams["figure.dpi"] = args.dpi
+    plt.rcParams["savefig.dpi"] = args.dpi
 
     langs = [l.lower() for l in args.langs]
     output_dir = args.output_dir
@@ -589,43 +686,37 @@ def main() -> None:
     print(f"Loading results from: {args.results_dir}")
     print(f"Languages: {langs}")
 
-    all_data = load_all_results(args.results_dir, langs)
-
-    if not all_data:
+    # Initial plot generation
+    if not generate_all_plots(args.results_dir, output_dir, langs):
         print(f"No evaluation results found in {args.results_dir}/code_{{lang}}/")
-        print("Run 'bash scripts/run_code_eval.sh' first to generate results.")
-        return
-
-    found_langs = sorted(all_data.keys())
-    print(f"Found results for: {found_langs}")
-
-    # Plot 1: per-language bar charts
-    print("Generating per-language bar charts...")
-    for lang in found_langs:
-        plot_per_language(lang, all_data[lang], output_dir)
-
-    # Plot 2: cross-language heatmap (FT scores)
-    print("Generating cross-language score heatmap...")
-    plot_heatmap_scores(all_data, found_langs, output_dir)
-
-    # Plot 3: delta heatmap
-    print("Generating improvement delta heatmap...")
-    plot_heatmap_delta(all_data, found_langs, output_dir)
-
-    # Plot 4: summary bar chart
-    print("Generating summary improvement bar chart...")
-    plot_summary_delta(all_data, found_langs, output_dir)
-
-    # CSV export
-    print("Exporting CSV summary...")
-    export_csv(all_data, found_langs, output_dir)
+        if not args.watch:
+            print("Run 'bash scripts/run_code_eval.sh' first to generate results.")
+            return
+        print("Waiting for results to appear...")
 
     print(f"\nAll outputs saved to: {output_dir}")
-    print("  per_lang/bar_{lang}.png   — per-language grouped bar charts")
-    print("  heatmap_ft_scores.png     — cross-language score heatmap")
-    print("  heatmap_delta.png         — improvement delta heatmap")
-    print("  summary_delta.png         — mean improvement per language")
-    print("  results_summary.csv       — full numeric results table")
+    print("  per_lang/bar_{lang}.{png,pdf}  — per-language grouped bar charts")
+    print("  heatmap_ft_scores.{png,pdf}    — cross-language score heatmap")
+    print("  heatmap_delta.{png,pdf}        — improvement delta heatmap")
+    print("  summary_delta.{png,pdf}        — mean improvement per language")
+    print("  results_summary.csv            — full numeric results table")
+
+    # Watch mode: poll for changes and regenerate
+    if args.watch:
+        print(f"\nWatching for new results every {args.watch_interval}s (Ctrl+C to stop)...")
+        prev_fp = _compute_results_fingerprint(args.results_dir, langs)
+        try:
+            while True:
+                time.sleep(args.watch_interval)
+                cur_fp = _compute_results_fingerprint(args.results_dir, langs)
+                if cur_fp != prev_fp:
+                    ts = datetime.now().strftime("%H:%M:%S")
+                    print(f"[{ts}] Results changed, regenerating plots...")
+                    generate_all_plots(args.results_dir, output_dir, langs)
+                    prev_fp = cur_fp
+                    print(f"[{ts}] Plots updated.")
+        except KeyboardInterrupt:
+            print("\nWatch mode stopped.")
 
 
 if __name__ == "__main__":

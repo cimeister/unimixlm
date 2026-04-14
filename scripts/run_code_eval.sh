@@ -107,7 +107,8 @@ install_runtime_deps() {
     command -v node     &>/dev/null || missing+=(node)
     command -v tsc      &>/dev/null || missing+=(typescript)
     command -v g++      &>/dev/null || missing+=(cpp)
-    command -v dotnet   &>/dev/null || missing+=(csharp)
+    command -v dotnet   &>/dev/null || missing+=(csharp-dotnet)
+    command -v csc      &>/dev/null || missing+=(csharp-csc)
     command -v php      &>/dev/null || missing+=(php)
 
     [ ${#missing[@]} -eq 0 ] && return 0
@@ -156,9 +157,13 @@ install_runtime_deps() {
                 log "  -> Installing g++..."
                 _apt_update && $SUDO apt-get install -y -qq g++
                 ;;
-            csharp)
+            csharp-dotnet)
                 log "  -> Installing .NET SDK..."
                 _apt_update && $SUDO apt-get install -y -qq dotnet-sdk-8.0
+                ;;
+            csharp-csc)
+                log "  -> Installing Mono (csc compiler)..."
+                _apt_update && $SUDO apt-get install -y -qq mono-mcs
                 ;;
             php)
                 log "  -> Installing PHP..."
@@ -177,6 +182,7 @@ install_runtime_deps() {
     command -v tsc      &>/dev/null || failed+=(tsc)
     command -v g++      &>/dev/null || failed+=(g++)
     command -v dotnet   &>/dev/null || failed+=(dotnet)
+    command -v csc      &>/dev/null || failed+=(csc)
     command -v php      &>/dev/null || failed+=(php)
 
     if [ ${#failed[@]} -gt 0 ]; then
@@ -186,7 +192,7 @@ install_runtime_deps() {
         exit 1
     fi
 
-    log "All language runtimes verified: go javac node tsc g++ dotnet php"
+    log "All language runtimes verified: go javac node tsc g++ dotnet csc php"
 }
 
 install_runtime_deps
@@ -338,6 +344,22 @@ if [ "$TOTAL_JOBS" -gt 0 ]; then
 MONITOR_PID=$!
 fi
 
+# ─── Start incremental plot watcher ──────────────────────────────────────────
+PLOT_WATCHER_PID=""
+if [ "$SKIP_PLOTTING" -eq 0 ]; then
+    SUMMARY_DIR="${OUT_DIR}/code_summary"
+    mkdir -p "$SUMMARY_DIR"
+    log "=== Starting incremental plot watcher (updates every 120s) ==="
+    python3 las_experiment/plot_code_eval_results.py \
+        --results-dir "$OUT_DIR" \
+        --output-dir "$SUMMARY_DIR" \
+        --langs "${ALL_LANGS[@]}" \
+        --watch \
+        --watch-interval 120 \
+        > "${LOG_DIR}/plotting_watch.log" 2>&1 &
+    PLOT_WATCHER_PID=$!
+fi
+
 # ─── Wait for all jobs ───────────────────────────────────────────────────────
 log "=== Waiting for ${TOTAL_JOBS} jobs to complete ==="
 
@@ -394,9 +416,15 @@ if [ "${#FAILED_LANGS[@]}" -gt 0 ]; then
     log "    Re-run to retry only failed languages (sentinels prevent re-running passed ones)."
 fi
 
-# ─── Plotting ────────────────────────────────────────────────────────────────
+# ─── Kill incremental plot watcher ────────────────────────────────────────────
+if [ -n "${PLOT_WATCHER_PID:-}" ]; then
+    kill "$PLOT_WATCHER_PID" 2>/dev/null || true
+    wait "$PLOT_WATCHER_PID" 2>/dev/null || true
+fi
+
+# ─── Final plotting pass ─────────────────────────────────────────────────────
 if [ "$SKIP_PLOTTING" -eq 0 ]; then
-    log "=== Generating plots ==="
+    log "=== Generating final plots ==="
     SUMMARY_DIR="${OUT_DIR}/code_summary"
     mkdir -p "$SUMMARY_DIR"
 

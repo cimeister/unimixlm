@@ -92,7 +92,7 @@ RUNTIME_DEPS: dict[str, list[str]] = {
     "java":       ["javac", "java"],
     "javascript": ["node"],
     "cpp":        ["g++"],
-    "csharp":     ["dotnet"],
+    "csharp":     ["dotnet", "csc"],
     "php":        ["php"],
 }
 
@@ -269,6 +269,7 @@ def check_runtime_deps(lang: str) -> None:
             f"  tsc       -> sudo npm install -g typescript\n"
             f"  g++       -> sudo apt-get install -y g++\n"
             f"  dotnet    -> sudo apt-get install -y dotnet-sdk-8.0\n"
+            f"  csc       -> sudo apt-get install -y mono-mcs\n"
             f"  php       -> sudo apt-get install -y php-cli"
         )
 
@@ -450,10 +451,21 @@ def run_bigcode_eval(
     metric_path = output_dir / f"bigcode_metrics_{run_label}_{ts}.json"
     gen_path = output_dir / f"generations_{run_label}_{ts}.json"
 
+    # When a LAS tokenizer is provided, use the wrapper script so that
+    # bigcode-eval (which has no --tokenizer flag) loads the correct tokenizer.
+    if las_tokenizer_path:
+        wrapper_path = str(Path(__file__).parent / "bigcode_eval_wrapper.py")
+        target_script = wrapper_path
+        wrapper_args = ["--wrapped-main", bigcode_main, "--tokenizer", las_tokenizer_path]
+    else:
+        target_script = bigcode_main
+        wrapper_args = []
+
     cmd = [
         sys.executable, "-m", "accelerate.commands.launch",
         "--num_processes", "1",
-        bigcode_main,
+        target_script,
+        *wrapper_args,
         "--model", base_model_id,
         "--tasks", ",".join(tasks),
         "--max_length_generation", str(max_length_generation),
@@ -473,10 +485,6 @@ def run_bigcode_eval(
     # HumanEvalPack tasks require --prompt
     if prompt_type:
         cmd.extend(["--prompt", prompt_type])
-
-    # Use LAS tokenizer if available
-    if las_tokenizer_path:
-        cmd.extend(["--tokenizer", las_tokenizer_path])
 
     if n_samples > 1:
         cmd.extend(["--do_sample", "True"])
@@ -1089,7 +1097,7 @@ def main() -> None:
         all_tasks_preview = BIGCODE_TASK_MAP.get(lang, [])
         has_std = any(not t.startswith(PROMPT_REQUIRED_PREFIXES) for t in all_tasks_preview)
         has_prompt = any(t.startswith(PROMPT_REQUIRED_PREFIXES) for t in all_tasks_preview)
-        # [std base, std ft], [prompt base, prompt ft], BpB base, BpB ft
+        # BpB base, BpB ft, [std base, std ft], [prompt base, prompt ft]
         n_phases = 2 + (2 if has_std else 0) + (2 if has_prompt else 0)
     timer = EvalTimer(lang, total_phases=n_phases)
 
@@ -1146,22 +1154,68 @@ def main() -> None:
             merged["results"] = {**a.get("results", {}), **b.get("results", {})}
             return merged
 
-        # ── Run standard tasks ───────────────────────────────────────────
+        # ── BpB FIRST (fast, gives immediate signal) ───────────────────
+        logger.info(f"[bpb] Computing BpB for {lang} FIRST (before bigcode-eval)")
+        base_bpb = None
+        ft_bpb = None
+
+        timer.start_phase(f"BpB computation — base model ({lang})")
+        try:
+            bpb_base_res = run_bpb(
+                args.base_model, None, lang, out, "base_bpb", log_path,
+                args.max_bpb_samples, tokenizer_path=None,
+            )
+            base_bpb = bpb_base_res.get("results", {}).get("bpb")
+            logger.info(f"[bpb] Base BpB for {lang}: {base_bpb:.4f}")
+        except Exception as e:
+            logger.warning(f"[bpb] Base BpB computation failed (non-fatal): {e}")
+        timer.end_phase()
+
+        timer.start_phase(f"BpB computation — finetuned model ({lang})")
+        try:
+            bpb_ft_res = run_bpb(
+                args.base_model, args.adapter_repo, lang, out, "ft_bpb", log_path,
+                args.max_bpb_samples, tokenizer_path=las_tok_dir,
+            )
+            ft_bpb = bpb_ft_res.get("results", {}).get("bpb")
+            logger.info(f"[bpb] FT BpB for {lang}: {ft_bpb:.4f}")
+        except Exception as e:
+            logger.warning(f"[bpb] FT BpB computation failed (non-fatal): {e}")
+        timer.end_phase()
+
+        if base_bpb is not None and ft_bpb is not None:
+            delta = base_bpb - ft_bpb
+            logger.info(
+                f"[bpb] {lang} BpB delta: {delta:+.4f} "
+                f"({'improved' if delta > 0 else 'regressed'})"
+            )
+
+        # ── Run standard tasks (non-fatal) ──────────────────────────────
         base_res = {"results": {}}
         ft_res = {"results": {}}
 
         if std_tasks:
             timer.start_phase(f"bigcode-eval base model ({', '.join(std_tasks)})")
-            base_res = _run_task_group(
-                std_tasks, "base", peft_model=None, las_tokenizer_path=None,
-            )
+            try:
+                base_res = _run_task_group(
+                    std_tasks, "base", peft_model=None, las_tokenizer_path=None,
+                )
+            except Exception as e:
+                logger.error(
+                    f"[bigcode-eval] Base model standard tasks FAILED (non-fatal): {e}"
+                )
             timer.end_phase()
 
             timer.start_phase(f"bigcode-eval finetuned model ({', '.join(std_tasks)})")
-            ft_res = _run_task_group(
-                std_tasks, "ft", peft_model=args.adapter_repo,
-                las_tokenizer_path=las_tok_dir,
-            )
+            try:
+                ft_res = _run_task_group(
+                    std_tasks, "ft", peft_model=args.adapter_repo,
+                    las_tokenizer_path=las_tok_dir,
+                )
+            except Exception as e:
+                logger.error(
+                    f"[bigcode-eval] Finetuned model standard tasks FAILED (non-fatal): {e}"
+                )
             timer.end_phase()
         else:
             logger.info(f"[tasks] [{lang}] No standard tasks — skipping to HumanEvalPack")
@@ -1203,42 +1257,6 @@ def main() -> None:
             "base": extract_bigcode_metrics(base_res),
             "ft":   extract_bigcode_metrics(ft_res),
         }
-
-        # ── BpB for this language (computed for ALL languages) ───────────
-        logger.info(f"[bpb] Computing BpB for {lang} (all languages get BpB)")
-        base_bpb = None
-        ft_bpb = None
-
-        timer.start_phase(f"BpB computation — base model ({lang})")
-        try:
-            bpb_base_res = run_bpb(
-                args.base_model, None, lang, out, "base_bpb", log_path,
-                args.max_bpb_samples, tokenizer_path=None,
-            )
-            base_bpb = bpb_base_res.get("results", {}).get("bpb")
-            logger.info(f"[bpb] Base BpB for {lang}: {base_bpb:.4f}")
-        except Exception as e:
-            logger.warning(f"[bpb] Base BpB computation failed (non-fatal): {e}")
-        timer.end_phase()
-
-        timer.start_phase(f"BpB computation — finetuned model ({lang})")
-        try:
-            bpb_ft_res = run_bpb(
-                args.base_model, args.adapter_repo, lang, out, "ft_bpb", log_path,
-                args.max_bpb_samples, tokenizer_path=las_tok_dir,
-            )
-            ft_bpb = bpb_ft_res.get("results", {}).get("bpb")
-            logger.info(f"[bpb] FT BpB for {lang}: {ft_bpb:.4f}")
-        except Exception as e:
-            logger.warning(f"[bpb] FT BpB computation failed (non-fatal): {e}")
-        timer.end_phase()
-
-        if base_bpb is not None and ft_bpb is not None:
-            delta = base_bpb - ft_bpb
-            logger.info(
-                f"[bpb] {lang} BpB delta: {delta:+.4f} "
-                f"({'improved' if delta > 0 else 'regressed'})"
-            )
 
     # ── Perplexity path ───────────────────────────────────────────────────────
     else:
