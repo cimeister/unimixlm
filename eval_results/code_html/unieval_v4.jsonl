@@ -1,4 +1,4 @@
-{"event": "start", "lang": "html", "base_model": "allenai/OLMo-3-1025-7B", "adapter": "MultilingualUnigramLM/ft-code-las-olmo3-7b-thestack100M-html", "n_samples": 10, "_ts": "2026-04-13T19:37:10.675187"}
-{"event": "bpb_done", "run": "base", "bpb": 0.0437933782928423, "file": "eval_results/code_html/eval_results_base_20260413_193749.json", "_ts": "2026-04-13T19:37:49.678491"}
-{"event": "bpb_done", "run": "ft", "bpb": 0.03713869279977546, "file": "eval_results/code_html/eval_results_ft_20260413_193830.json", "_ts": "2026-04-13T19:38:30.904060"}
-{"event": "done", "lang": "html", "total_elapsed_seconds": 72.0, "phase_timings": {"BpB computation \u2014 base model (html)": 30.7, "BpB computation \u2014 finetuned model (html)": 41.3}, "_ts": "2026-04-13T19:38:31.018029"}
+{"event": "start", "lang": "html", "base_model": "allenai/OLMo-3-1025-7B", "adapter": "MultilingualUnigramLM/ft-code-las-olmo3-7b-thestack100M-html", "n_samples": 10, "_ts": "2026-04-13T22:10:21.363136"}
+{"event": "bpb_done", "run": "base", "bpb": 0.0437933782928423, "file": "eval_results/code_html/eval_results_base_20260413_221100.json", "_ts": "2026-04-13T22:11:00.235451"}
+{"event": "bpb_done", "run": "ft", "bpb": 0.03713869279977546, "file": "eval_results/code_html/eval_results_ft_20260413_221140.json", "_ts": "2026-04-13T22:11:40.667314"}
+{"event": "done", "lang": "html", "total_elapsed_seconds": 71.0, "phase_timings": {"BpB computation \u2014 base model (html)": 30.6, "BpB computation \u2014 finetuned model (html)": 40.4}, "_ts": "2026-04-13T22:11:40.725727"}

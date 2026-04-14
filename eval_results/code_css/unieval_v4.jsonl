@@ -1,4 +1,4 @@
-{"event": "start", "lang": "css", "base_model": "allenai/OLMo-3-1025-7B", "adapter": "MultilingualUnigramLM/ft-code-las-olmo3-7b-thestack100M-css", "n_samples": 10, "_ts": "2026-04-13T19:37:10.679454"}
-{"event": "bpb_done", "run": "base", "bpb": 0.0365287312500809, "file": "eval_results/code_css/eval_results_base_20260413_193746.json", "_ts": "2026-04-13T19:37:46.897436"}
-{"event": "bpb_done", "run": "ft", "bpb": 0.03574027193111675, "file": "eval_results/code_css/eval_results_ft_20260413_193823.json", "_ts": "2026-04-13T19:38:23.451133"}
-{"event": "done", "lang": "css", "total_elapsed_seconds": 63.8, "phase_timings": {"BpB computation \u2014 base model (css)": 27.2, "BpB computation \u2014 finetuned model (css)": 36.6}, "_ts": "2026-04-13T19:38:23.564393"}
+{"event": "start", "lang": "css", "base_model": "allenai/OLMo-3-1025-7B", "adapter": "MultilingualUnigramLM/ft-code-las-olmo3-7b-thestack100M-css", "n_samples": 10, "_ts": "2026-04-13T22:10:21.259662"}
+{"event": "bpb_done", "run": "base", "bpb": 0.0365287312500809, "file": "eval_results/code_css/eval_results_base_20260413_221056.json", "_ts": "2026-04-13T22:10:56.815728"}
+{"event": "bpb_done", "run": "ft", "bpb": 0.03574027193111675, "file": "eval_results/code_css/eval_results_ft_20260413_221132.json", "_ts": "2026-04-13T22:11:32.415130"}
+{"event": "done", "lang": "css", "total_elapsed_seconds": 63.4, "phase_timings": {"BpB computation \u2014 base model (css)": 27.8, "BpB computation \u2014 finetuned model (css)": 35.6}, "_ts": "2026-04-13T22:11:32.474292"}

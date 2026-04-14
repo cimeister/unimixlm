@@ -1,9 +1,7 @@
 {
-  "results": {
-    "humanevalsynthesize-cpp": {
-      "pass@1": 0.0,
-      "pass@10": 0.0
-    }
+  "multiple-js": {
+    "pass@1": 0.35279503105590077,
+    "pass@10": 0.5900621118012422
   },
   "config": {
     "prefix": "",
@@ -20,7 +18,7 @@
     "revision": null,
     "use_auth_token": false,
     "trust_remote_code": false,
-    "tasks": "humanevalsynthesize-cpp",
+    "tasks": "multiple-js",
     "instruction_tokens": null,
     "batch_size": 1,
     "max_length_generation": 512,
@@ -36,17 +34,14 @@
     "generation_only": false,
     "load_generations_path": null,
     "load_data_path": null,
-    "metric_output_path": "eval_results/code_cpp/bigcode_metrics_base_synth_20260413_193718.json",
+    "metric_output_path": "eval_results/code_javascript/bigcode_metrics_base_20260413_221029.json",
     "save_generations": true,
     "load_generations_intermediate_paths": null,
-    "save_generations_path": "eval_results/code_cpp/generations_base_synth_20260413_193718.json",
+    "save_generations_path": "eval_results/code_javascript/generations_base_20260413_221029.json",
     "save_references": false,
     "save_references_path": "references.json",
-    "prompt": "continue",
+    "prompt": "prompt",
     "max_memory_per_gpu": null,
     "check_references": false
-  },
-  "eval_engine": "bigcode-eval",
-  "lang": "",
-  "run_label": "base_synth"
+  }
 }

@@ -1,7 +1,17 @@
 {
-  "humanevalsynthesize-cpp": {
-    "pass@1": 0.0,
-    "pass@10": 0.0
+  "results": {
+    "humanevalplus": {
+      "pass@1": 0.13658536585365852,
+      "pass@10": 0.25
+    },
+    "humaneval": {
+      "pass@1": 0.14390243902439023,
+      "pass@10": 0.2865853658536585
+    },
+    "mbpp": {
+      "pass@1": 0.453,
+      "pass@10": 0.622
+    }
   },
   "config": {
     "prefix": "",
@@ -18,7 +28,7 @@
     "revision": null,
     "use_auth_token": false,
     "trust_remote_code": false,
-    "tasks": "humanevalsynthesize-cpp",
+    "tasks": "humaneval,mbpp,humanevalplus",
     "instruction_tokens": null,
     "batch_size": 1,
     "max_length_generation": 512,
@@ -34,14 +44,17 @@
     "generation_only": false,
     "load_generations_path": null,
     "load_data_path": null,
-    "metric_output_path": "eval_results/code_cpp/bigcode_metrics_base_synth_20260413_193718.json",
+    "metric_output_path": "eval_results/code_python/bigcode_metrics_base_20260413_221029.json",
     "save_generations": true,
     "load_generations_intermediate_paths": null,
-    "save_generations_path": "eval_results/code_cpp/generations_base_synth_20260413_193718.json",
+    "save_generations_path": "eval_results/code_python/generations_base_20260413_221029.json",
     "save_references": false,
     "save_references_path": "references.json",
-    "prompt": "continue",
+    "prompt": "prompt",
     "max_memory_per_gpu": null,
     "check_references": false
-  }
+  },
+  "eval_engine": "bigcode-eval",
+  "lang": "",
+  "run_label": "base"
 }

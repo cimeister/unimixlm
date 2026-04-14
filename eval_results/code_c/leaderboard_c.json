@@ -3,7 +3,7 @@
   "mode": "perplexity",
   "precision": "bfloat16",
   "eval_engine": "perplexity",
-  "timestamp": "2026-04-13T19:38:45.877148",
+  "timestamp": "2026-04-13T22:11:56.627509",
   "pass_at_k": {},
   "base_bpb": 0.043248814557865604,
   "ft_bpb": 0.043382528225228256,

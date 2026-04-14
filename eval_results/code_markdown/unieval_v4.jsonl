@@ -1,4 +1,4 @@
-{"event": "start", "lang": "markdown", "base_model": "allenai/OLMo-3-1025-7B", "adapter": "MultilingualUnigramLM/ft-code-las-olmo3-7b-thestack100M-markdown", "n_samples": 10, "_ts": "2026-04-13T19:37:10.700248"}
-{"event": "bpb_done", "run": "base", "bpb": 0.2263638104025951, "file": "eval_results/code_markdown/eval_results_base_20260413_193750.json", "_ts": "2026-04-13T19:37:50.074043"}
-{"event": "bpb_done", "run": "ft", "bpb": 0.22948970709513256, "file": "eval_results/code_markdown/eval_results_ft_20260413_193826.json", "_ts": "2026-04-13T19:38:26.197235"}
-{"event": "done", "lang": "markdown", "total_elapsed_seconds": 66.5, "phase_timings": {"BpB computation \u2014 base model (markdown)": 30.3, "BpB computation \u2014 finetuned model (markdown)": 36.2}, "_ts": "2026-04-13T19:38:26.305252"}
+{"event": "start", "lang": "markdown", "base_model": "allenai/OLMo-3-1025-7B", "adapter": "MultilingualUnigramLM/ft-code-las-olmo3-7b-thestack100M-markdown", "n_samples": 10, "_ts": "2026-04-13T22:10:21.275029"}
+{"event": "bpb_done", "run": "base", "bpb": 0.2263638104025951, "file": "eval_results/code_markdown/eval_results_base_20260413_221058.json", "_ts": "2026-04-13T22:10:58.641392"}
+{"event": "bpb_done", "run": "ft", "bpb": 0.22948970709513256, "file": "eval_results/code_markdown/eval_results_ft_20260413_221134.json", "_ts": "2026-04-13T22:11:34.449292"}
+{"event": "done", "lang": "markdown", "total_elapsed_seconds": 64.5, "phase_timings": {"BpB computation \u2014 base model (markdown)": 28.6, "BpB computation \u2014 finetuned model (markdown)": 35.9}, "_ts": "2026-04-13T22:11:34.553573"}
