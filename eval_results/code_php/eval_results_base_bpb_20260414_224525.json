@@ -1,0 +1,10 @@
+{
+  "lang": "php",
+  "eval_mode": "perplexity",
+  "run_label": "base_bpb",
+  "model_args": "pretrained=allenai/OLMo-3-1025-7B",
+  "n_samples": 200,
+  "results": {
+    "bpb": 0.10068038909517807
+  }
+}

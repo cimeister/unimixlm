@@ -1,3 +1,6 @@
 {"event": "start", "lang": "php", "base_model": "allenai/OLMo-3-1025-7B", "adapter": "MultilingualUnigramLM/ft-code-las-olmo3-7b-thestack100M-php", "n_samples": 10, "_ts": "2026-04-13T22:10:21.394890"}
 {"event": "bigcode_eval_done", "run": "base", "tasks": ["multiple-php"], "metric_file": "eval_results/code_php/bigcode_metrics_base_20260413_221030.json", "compat_file": "eval_results/code_php/eval_results_base_20260413_221030.json", "_ts": "2026-04-13T23:41:25.259001"}
 {"event": "fatal", "precision": "bf16", "error": "The following values were not passed to `accelerate launch` and had defaults used instead:\n\t`--num_machines` was set to a value of `1`\n\t`--mixed_precision` was set to a value of `'no'`\n\t`--dynamo_back", "_ts": "2026-04-13T23:41:32.452082"}
+{"event": "start", "lang": "php", "base_model": "allenai/OLMo-3-1025-7B", "adapter": "MultilingualUnigramLM/ft-code-las-olmo3-7b-thestack100M-php", "n_samples": 10, "_ts": "2026-04-14T22:44:54.811579"}
+{"event": "bpb_done", "run": "base_bpb", "bpb": 0.10068038909517807, "file": "eval_results/code_php/eval_results_base_bpb_20260414_224525.json", "_ts": "2026-04-14T22:45:25.566024"}
+{"event": "bpb_done", "run": "ft_bpb", "bpb": 0.09564781619221638, "file": "eval_results/code_php/eval_results_ft_bpb_20260414_224608.json", "_ts": "2026-04-14T22:46:08.371776"}

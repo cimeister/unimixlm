@@ -1,2 +1,5 @@
 {"event": "start", "lang": "csharp", "base_model": "allenai/OLMo-3-1025-7B", "adapter": "MultilingualUnigramLM/ft-code-las-olmo3-7b-thestack100M-csharp", "n_samples": 10, "_ts": "2026-04-13T22:10:21.154236"}
 {"event": "fatal", "precision": "bf16", "error": "The following values were not passed to `accelerate launch` and had defaults used instead:\n\t`--num_machines` was set to a value of `1`\n\t`--mixed_precision` was set to a value of `'no'`\n\t`--dynamo_back", "_ts": "2026-04-13T23:56:04.092460"}
+{"event": "start", "lang": "csharp", "base_model": "allenai/OLMo-3-1025-7B", "adapter": "MultilingualUnigramLM/ft-code-las-olmo3-7b-thestack100M-csharp", "n_samples": 10, "_ts": "2026-04-14T22:44:54.766800"}
+{"event": "bpb_done", "run": "base_bpb", "bpb": 0.08821571874005384, "file": "eval_results/code_csharp/eval_results_base_bpb_20260414_224525.json", "_ts": "2026-04-14T22:45:25.150598"}
+{"event": "bpb_done", "run": "ft_bpb", "bpb": 0.07925805191992898, "file": "eval_results/code_csharp/eval_results_ft_bpb_20260414_224600.json", "_ts": "2026-04-14T22:46:00.449079"}

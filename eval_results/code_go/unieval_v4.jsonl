@@ -1,3 +1,6 @@
 {"event": "start", "lang": "go", "base_model": "allenai/OLMo-3-1025-7B", "adapter": "MultilingualUnigramLM/ft-code-las-olmo3-7b-thestack100M-go", "n_samples": 10, "_ts": "2026-04-13T22:10:21.290529"}
 {"event": "bigcode_eval_done", "run": "base", "tasks": ["multiple-go"], "metric_file": "eval_results/code_go/bigcode_metrics_base_20260413_221029.json", "compat_file": "eval_results/code_go/eval_results_base_20260413_221029.json", "_ts": "2026-04-13T23:24:42.169865"}
 {"event": "fatal", "precision": "bf16", "error": "The following values were not passed to `accelerate launch` and had defaults used instead:\n\t`--num_machines` was set to a value of `1`\n\t`--mixed_precision` was set to a value of `'no'`\n\t`--dynamo_back", "_ts": "2026-04-13T23:24:50.018750"}
+{"event": "start", "lang": "go", "base_model": "allenai/OLMo-3-1025-7B", "adapter": "MultilingualUnigramLM/ft-code-las-olmo3-7b-thestack100M-go", "n_samples": 10, "_ts": "2026-04-14T22:44:54.751104"}
+{"event": "bpb_done", "run": "base_bpb", "bpb": 0.0651351488976901, "file": "eval_results/code_go/eval_results_base_bpb_20260414_224526.json", "_ts": "2026-04-14T22:45:26.431775"}
+{"event": "bpb_done", "run": "ft_bpb", "bpb": 0.0634360453891429, "file": "eval_results/code_go/eval_results_ft_bpb_20260414_224609.json", "_ts": "2026-04-14T22:46:09.919516"}
