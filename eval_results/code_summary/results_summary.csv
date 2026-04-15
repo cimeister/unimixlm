@@ -3,20 +3,22 @@ c,bpb,bpb (lower is better),0.04325,0.0,0.04338,0.0,-0.00013
 cpp,bpb,bpb (lower is better),0.07122,0.0,0.07275,0.0,-0.00153
 cpp,humanevalsynthesize-cpp,pass@1,0.0,0.0,,,
 csharp,bpb,bpb (lower is better),0.08822,0.0,0.07926,0.0,0.00896
+csharp,multiple-cs,pass@1,0.19255,0.0,0.17764,0.0,-0.01491
 css,bpb,bpb (lower is better),0.03653,0.0,0.03574,0.0,0.00079
 go,bpb,bpb (lower is better),0.06514,0.0,0.06344,0.0,0.0017
-go,multiple-go,pass@1,0.20325,0.0,,,
+go,humanevalsynthesize-go,pass@1,0.0,0.0,0.0,0.0,0.0
+go,multiple-go,pass@1,0.19503,0.0,0.17453,0.0,-0.0205
 html,bpb,bpb (lower is better),0.04379,0.0,0.03714,0.0,0.00665
 java,bpb,bpb (lower is better),0.06614,0.0,0.06759,0.0,-0.00145
-java,multiple-java,pass@1,0.00062,0.0,,,
+java,multiple-java,pass@1,0.00062,0.0,0.0,0.0,-0.00062
 javascript,bpb,bpb (lower is better),0.06808,0.0,0.06795,0.0,0.00013
-javascript,multiple-js,pass@1,0.3528,0.0,,,
+javascript,multiple-js,pass@1,0.3528,0.0,0.27205,0.0,-0.08075
 markdown,bpb,bpb (lower is better),0.22636,0.0,0.22949,0.0,-0.00313
 php,bpb,bpb (lower is better),0.10068,0.0,0.09565,0.0,0.00503
-php,multiple-php,pass@1,0.33416,0.0,,,
+php,multiple-php,pass@1,0.33416,0.0,0.23727,0.0,-0.09689
 python,bpb,bpb (lower is better),0.06899,0.0,0.07264,0.0,-0.00364
-python,humaneval,pass@1,0.1439,0.0,,,
-python,humanevalplus,pass@1,0.13659,0.0,,,
-python,mbpp,pass@1,0.453,0.0,,,
+python,humaneval,pass@1,0.1439,0.0,0.00183,0.0,-0.14207
+python,humanevalplus,pass@1,0.13659,0.0,0.00183,0.0,-0.13476
+python,mbpp,pass@1,0.453,0.0,0.437,0.0,-0.016
 typescript,bpb,bpb (lower is better),0.07415,0.0,0.07153,0.0,0.00262
-typescript,multiple-ts,pass@1,0.33975,0.0,,,
+typescript,multiple-ts,pass@1,0.33416,0.0,0.14286,0.0,-0.1913

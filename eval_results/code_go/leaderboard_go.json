@@ -1,0 +1,35 @@
+{
+  "lang": "go",
+  "mode": "bigcode",
+  "precision": "bf16",
+  "eval_engine": "bigcode-eval",
+  "timestamp": "2026-04-15T03:32:12.738562",
+  "pass_at_k": {
+    "base": {
+      "multiple-go": {
+        "pass@1": 0.19503105590062123,
+        "pass@10": 0.34782608695652173
+      },
+      "humanevalsynthesize-go": {
+        "pass@1": 0.0,
+        "pass@10": 0.0
+      }
+    },
+    "ft": {
+      "multiple-go": {
+        "pass@1": 0.1745341614906833,
+        "pass@10": 0.3167701863354037
+      },
+      "humanevalsynthesize-go": {
+        "pass@1": 0.0,
+        "pass@10": 0.0
+      }
+    }
+  },
+  "base_score": 0.09751552795031061,
+  "ft_score": 0.08726708074534165,
+  "delta": -0.010248447204968966,
+  "base_bpb": 0.0651351488976901,
+  "ft_bpb": 0.0634360453891429,
+  "delta_bpb": 0.0016991035085472117
+}

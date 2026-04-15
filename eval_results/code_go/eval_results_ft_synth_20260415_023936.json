@@ -1,0 +1,52 @@
+{
+  "results": {
+    "humanevalsynthesize-go": {
+      "pass@1": 0.0,
+      "pass@10": 0.0
+    }
+  },
+  "config": {
+    "prefix": "",
+    "do_sample": true,
+    "temperature": 0.2,
+    "top_k": 0,
+    "top_p": 0.95,
+    "n_samples": 10,
+    "eos": "<|endoftext|>",
+    "seed": 0,
+    "model": "allenai/OLMo-3-1025-7B",
+    "modeltype": "causal",
+    "peft_model": "MultilingualUnigramLM/ft-code-las-olmo3-7b-thestack100M-go",
+    "revision": null,
+    "use_auth_token": false,
+    "trust_remote_code": false,
+    "tasks": "humanevalsynthesize-go",
+    "instruction_tokens": null,
+    "batch_size": 1,
+    "max_length_generation": 512,
+    "precision": "bf16",
+    "load_in_8bit": false,
+    "load_in_4bit": false,
+    "left_padding": false,
+    "limit": null,
+    "limit_start": 0,
+    "save_every_k_tasks": -1,
+    "postprocess": true,
+    "allow_code_execution": true,
+    "generation_only": false,
+    "load_generations_path": null,
+    "load_data_path": null,
+    "metric_output_path": "eval_results/code_go/bigcode_metrics_ft_synth_20260415_023936.json",
+    "save_generations": true,
+    "load_generations_intermediate_paths": null,
+    "save_generations_path": "eval_results/code_go/generations_ft_synth_20260415_023936.json",
+    "save_references": false,
+    "save_references_path": "references.json",
+    "prompt": "continue",
+    "max_memory_per_gpu": null,
+    "check_references": false
+  },
+  "eval_engine": "bigcode-eval",
+  "lang": "",
+  "run_label": "ft_synth"
+}
