@@ -20,7 +20,6 @@ class EMUnigramTrainer:
         max_iterations=20,
         em_mode="hard",
         convergence_threshold=1e-6,
-        whitespace_token_boundaries=True,
         pretokenizer=None,
         byte_level=False,
     ):
@@ -39,7 +38,6 @@ class EMUnigramTrainer:
         self.max_iterations = max_iterations
         self.em_mode = em_mode
         self.convergence_threshold = convergence_threshold
-        self.whitespace_token_boundaries = whitespace_token_boundaries
         self.pretokenizer = pretokenizer
         self.byte_level = byte_level
 
@@ -99,7 +97,6 @@ class EMUnigramTrainer:
                 self.unk_token,
                 num_processes=num_processes,
                 mode=self.em_mode,
-                whitespace_boundaries=self.whitespace_token_boundaries,
                 pretokenizer=self.pretokenizer,
                 byte_level=self.byte_level,
             )
