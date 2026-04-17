@@ -62,7 +62,26 @@ def _build_unigramlm_hf_tokenizer_with_new_lprobs(
     vocab = _load_vocab_from_hf_tokenizer(base_tokenizer)
     tuples = [(t, max(new_log_probs[t], MIN_TOKEN_LOG_PROB)) for t in vocab]
 
-    unk_id = base_tokenizer.get_vocab()[unk_token]
+    # Find unk_id within the actual tuples list (not base_tokenizer.get_vocab(),
+    # which includes added tokens that may not appear in the trainable vocab).
+    unk_id = None
+    for i, (t, _) in enumerate(tuples):
+        if t == unk_token:
+            unk_id = i
+            break
+    if unk_id is None:
+        # unk_token is an added token not in the trainable vocab (e.g. Qwen3's
+        # <|im_end|>).  Use index 0 as the Unigram-internal unk_id fallback.
+        # The actual unk behaviour is handled by the added_tokens section,
+        # which is preserved by _build_unigramlm_hf_tokenizer_from_lprobs
+        # via the base_json rebuild.  We must NOT append the token here
+        # because that would change the vocab size and break validation.
+        logger.warning(
+            f"unk_token {unk_token!r} not in trainable vocab; "
+            f"using unk_id=0 as Unigram-internal fallback"
+        )
+        unk_id = 0
+
     tok = _build_unigramlm_hf_tokenizer_from_lprobs(
         tuples, unk_id, base_tokenizer=base_tokenizer
     )
@@ -84,7 +103,6 @@ class LanguageSpecificUnigramLMTokenizer(StandardUnigramLMTokenizer):
         reestimation_em_mode: str = "soft",
         num_iterations: int = NUM_FINETUNE_EM_ITERATIONS,
         byte_level: bool = False,
-        whitespace_token_boundaries: bool = False,
     ):
         super().__init__(
             vocab_size=vocab_size,
@@ -93,7 +111,6 @@ class LanguageSpecificUnigramLMTokenizer(StandardUnigramLMTokenizer):
             em_mode=reestimation_em_mode,
             num_iterations=num_iterations,
             byte_level=byte_level,
-            whitespace_token_boundaries=whitespace_token_boundaries,
         )
 
         self.reestimation_em_mode = reestimation_em_mode
@@ -188,8 +205,10 @@ class LanguageSpecificUnigramLMTokenizer(StandardUnigramLMTokenizer):
             )
 
             hf_processed_text_path = os.path.join(tmpdir, "hf_text.txt")
+            normalizer = self.base_tokenizer.normalizer if self.base_tokenizer else None
             write_hf_bytelevel_corpus(
-                corpus_file, hf_processed_text_path, self._get_pretokenizer()
+                corpus_file, hf_processed_text_path, self._get_pretokenizer(),
+                normalizer=normalizer,
             )
 
             # The exact vocab size must account for meta pieces
@@ -208,8 +227,6 @@ class LanguageSpecificUnigramLMTokenizer(StandardUnigramLMTokenizer):
                 f"--unk_piece={self.unk_token}",
                 f"--num_threads={min(20, multiprocessing.cpu_count() - 1)}",
             ] + SP_DEFAULT_ARGS
-            # if self.whitespace_token_boundaries:
-            #     command.append("--split_by_whitespace=true")
 
             # 3. Execute the command
             logger.info(f"Running SentencePiece CLI command:\n{' '.join(command)}")
@@ -334,7 +351,7 @@ class LanguageSpecificUnigramLMTokenizer(StandardUnigramLMTokenizer):
                     em_mode=self.reestimation_em_mode, lang_code=lang_code
                 )
             )
-            if load_tokenizers_if_exists and tk_path.is_file() and False:
+            if load_tokenizers_if_exists and tk_path.is_file():
                 tok = Tokenizer.from_file(str(tk_path))
                 self.per_lang_tok[lang_code] = {
                     "tokenizer": tok,
@@ -376,7 +393,8 @@ class LanguageSpecificUnigramLMTokenizer(StandardUnigramLMTokenizer):
                     error_msg = f"Language-specific training failed for {lang}: {e}"
                     logging.error(error_msg)
                     failures.append((lang, e))
-                self.per_lang_tok[lang_code] = {
+                    continue
+                self.per_lang_tok[lang] = {
                     "tokenizer": tok,
                     "scores": _extract_log_scores(tok),
                     "path": str(tk_path),
@@ -414,7 +432,6 @@ class LanguageSpecificUnigramLMTokenizer(StandardUnigramLMTokenizer):
                 special_tokens=self.special_tokens,
                 em_mode=self.reestimation_em_mode,
                 max_iterations=self.num_reestimation_iterations,
-                whitespace_token_boundaries=self.whitespace_token_boundaries,
                 pretokenizer=self._get_pretokenizer(),
                 byte_level=self.byte_level,
             )

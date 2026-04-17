@@ -29,43 +29,32 @@ def segment_text_viterbi(
     max_sub_len=MAX_CHAR_TOKEN_LEN,
     beam_width=5.0,
     pretok=None,
-    whitespace_boundaries=None,
 ):
     """
-    Segment `text` into tokens using a whitespace split + Viterbi subword approach,
-    under the distribution given by `token_probs` (a dict mapping token->prob).
-    Returns a list of tokens.
+    Segment `text` into tokens using pretokenizer + Viterbi subword approach.
+
+    The pretokenizer splits text into pieces (handling word boundaries,
+    whitespace, etc.), then Viterbi operates on each piece independently.
 
     Args:
         text: A string (possibly containing multiple words).
-        token_probs: dict(token -> float probability).
+        token_log_probs: dict(token -> float log probability).
         unk_token: which token to use when no match can be found.
         max_sub_len: maximum subword length to consider in Viterbi.
         beam_width: pruning parameter, paths with score < best_score - beam_width are pruned
+        pretok: HuggingFace pretokenizer object.
 
     Returns:
         A list of tokens (subwords).
     """
-    # The final list of subword tokens across all whitespace-delimited words
-    text = _apply_pretok_mapping_hf(text, pretok, whitespace_boundaries)
-    if not isinstance(text, list):
-        # For byte-level, treat the entire text as one sequence (no whitespace splitting)
-        return _segment_word_viterbi_sp(
-            text, token_log_probs, unk_token, max_sub_len, beam_width
-        )
-
+    pieces = _apply_pretok_mapping_hf(text, pretok)
     all_tokens = []
-    if not text:
-        return all_tokens
-
-    # Here we process the whole batch of words together
-    for word in text:
-        # 2) For each word, run Viterbi
-        sub_tokens = _segment_word_viterbi_sp(
-            word, token_log_probs, unk_token, max_sub_len, beam_width
-        )
-        all_tokens.extend(sub_tokens)
-
+    for piece in pieces:
+        if piece:
+            sub_tokens = _segment_word_viterbi_sp(
+                piece, token_log_probs, unk_token, max_sub_len, beam_width
+            )
+            all_tokens.extend(sub_tokens)
     return all_tokens
 
 
@@ -274,26 +263,23 @@ def forward_backward_unigram_log_space(
     unk_token="<unk>",
     max_sub_len=MAX_CHAR_TOKEN_LEN,
     pretok=None,
-    whitespace_boundaries=False,
 ):
     """
     Forward–backward for UnigramLM in log-space, with UNK gating:
     UNK is allowed exactly at positions where *no real token* can start.
 
     Args:
-        text: input string (the whole line is treated as one 'word'; leading spaces matter)
+        text: input string
         log_p_lang: dict {token: log_prob} including <unk>
         unk_token: the unknown-token string
         max_sub_len: maximum subword length to consider
-        byte_level: if True, apply your byte-level mapping before DP (expects _apply_bytelevel_mapping_hf)
+        pretok: HuggingFace pretokenizer object
 
     Returns:
         dict {token: expected_count} (fractional EM counts)
     """
 
-    texts = _apply_pretok_mapping_hf(
-        text, pretok, whitespace_boundaries
-    )  # .rstrip("\n")
+    texts = _apply_pretok_mapping_hf(text, pretok)
 
     # Use membership (not thresholds) to decide which substrings are valid tokens.
     if unk_token not in log_p_lang or not np.isfinite(log_p_lang[unk_token]):
@@ -418,7 +404,6 @@ def forward_backward_unigram(
     max_sub_len=MAX_CHAR_TOKEN_LEN,
     prob_threshold=MIN_TOKEN_PROB,
     pretok=None,
-    whitespace_boundaries=False,
 ):
     """
     Forward-backward algorithm for unigram language model training that matches SentencePiece's
@@ -429,7 +414,7 @@ def forward_backward_unigram(
     # Get probability for unknown token
     p_unk = p_lang.get(unk_token, prob_threshold)
 
-    texts = _apply_pretok_mapping_hf(text, pretok, whitespace_boundaries)
+    texts = _apply_pretok_mapping_hf(text, pretok)
     # Initialize global counts
     total_counts = {}
 
@@ -577,7 +562,7 @@ def _accumulate_usage_worker_soft(args):
     """
     Worker for the 'soft' E-step, i.e. forward-backward to accumulate fractional usage.
     """
-    chunk_lines, p_lang, unk_token, whitespace_boundaries, pretok, max_token_len = args
+    chunk_lines, p_lang, unk_token, pretok, max_token_len = args
 
     c_dict = defaultdict(float)
     total = 0.0
@@ -589,7 +574,6 @@ def _accumulate_usage_worker_soft(args):
             unk_token=unk_token,
             pretok=pretok,
             max_sub_len=max_token_len,
-            whitespace_boundaries=whitespace_boundaries,
         )
         line_count = sum(
             usage_line.values()
@@ -610,9 +594,7 @@ def _accumulate_usage_worker_hard(args):
         unk_token: string for unknown token
     Returns: (counts_dict, total_subwords)
     """
-    chunk_lines, logp_lang, unk_token, whitespace_boundaries, pretok, max_token_len = (
-        args
-    )
+    chunk_lines, logp_lang, unk_token, pretok, max_token_len = args
 
     c_dict = defaultdict(float)
     total = 0
@@ -624,14 +606,12 @@ def _accumulate_usage_worker_hard(args):
         batch = chunk_lines[i : i + batch_size]
 
         for line in batch:
-            # Apply beam search pruning in Viterbi (5.0 is a reasonable default beam width)
             tokens = segment_text_viterbi(
                 line,
                 logp_lang,
                 unk_token=unk_token,
                 max_sub_len=max_token_len,
                 pretok=pretok,
-                whitespace_boundaries=whitespace_boundaries,
             )
 
             total += len(tokens)
@@ -647,7 +627,6 @@ def _accumulate_usage(
     unk_token,
     num_processes=None,
     mode="soft",
-    whitespace_boundaries=False,
     pretokenizer=None,
     byte_level=False,
 ):
@@ -694,7 +673,6 @@ def _accumulate_usage(
                 ch,
                 log_plang,
                 unk_token,
-                whitespace_boundaries,
                 pretokenizer,
                 max_token_len,
             )
