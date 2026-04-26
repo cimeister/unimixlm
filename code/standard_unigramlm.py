@@ -155,6 +155,7 @@ class StandardUnigramLMTokenizer:
         pruning_criterion: str = "exact_loss",  # "exact_loss", "approx_loss", "probability"
         use_sp_seed_vocab: bool = True,
         use_sp_em: bool = True,
+        target_vocab_size: Optional[int] = None,
     ) -> None:
         """
         Initialize StandardUnigramLMTokenizer.
@@ -208,6 +209,9 @@ class StandardUnigramLMTokenizer:
         self.pruning_criterion = pruning_criterion
         self.use_sp_seed_vocab = use_sp_seed_vocab
         self.use_sp_em = use_sp_em
+        # When set, overrides the default target_vocab_size logic (see __train_em).
+        # Used by the EMNLP vocab-size axis to prune even when from_base_tokenizer is set.
+        self.target_vocab_size = target_vocab_size
 
         if self.from_base_tokenizer and not os.path.exists(self.from_base_tokenizer):
             raise FileNotFoundError(
@@ -755,9 +759,13 @@ class StandardUnigramLMTokenizer:
         current_vocab_size = len(
             state.all_tokens
         )  # Keep track of the current vocab size
-        target_vocab_size = (
-            current_vocab_size if self.from_base_tokenizer else self.vocab_size
-        )  # The final vocabulary size we are aiming for
+        if self.target_vocab_size is not None:
+            target_vocab_size = self.target_vocab_size
+        elif self.from_base_tokenizer:
+            target_vocab_size = current_vocab_size
+        else:
+            target_vocab_size = self.vocab_size
+        # The final vocabulary size we are aiming for
 
         # This loop continues until the vocabulary is pruned down to the target size.
         pruning_iteration = 0

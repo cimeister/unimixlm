@@ -53,6 +53,7 @@ def main(cfg: DictConfig) -> None:
         model_name=cfg.model.model_name,
         training_cfg=dict(cfg.training),
         is_push_to_hf=cfg.hf.push,
+        vocab_size=cfg.training.get("vocab_size", None),
     )
 
 

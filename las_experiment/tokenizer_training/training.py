@@ -40,6 +40,7 @@ def train_base_tokenizer(
     base_output_path: Path,
     em_mode: str = "soft",
     unk_token: str = None,
+    target_vocab_size: int = None,
 ) -> None:
     """
     Train a single shared base Unigram tokenizer from all language corpora.
@@ -63,7 +64,10 @@ def train_base_tokenizer(
     # Create and train the tokenizer
 
     base_tokenizer = StandardUnigramLMTokenizer(
-        em_mode=em_mode, from_base_tokenizer=model_tokenizer_path, unk_token=unk_token
+        em_mode=em_mode,
+        from_base_tokenizer=model_tokenizer_path,
+        unk_token=unk_token,
+        target_vocab_size=target_vocab_size,
     )
     base_tokenizer.train(train_files, base_output_path, corpus_info=corpus_info)
 
@@ -117,6 +121,7 @@ def run_tokenizer_training(
     model_name="allenai/Olmo-3-1025-7B",
     training_cfg=None,
     is_push_to_hf=True,
+    vocab_size=None,
 ):
     """
     End-to-end pipeline for training a family of language-specific tokenizers.
@@ -189,6 +194,7 @@ def run_tokenizer_training(
             base_output_path=str(base_tokenizer_path),
             em_mode=str(training_cfg.get("em_mode", "soft")),
             unk_token=unk_token,  # Use auto-detected value
+            target_vocab_size=vocab_size,
         )
         validate_tokenizers(model_tokenizer_path, base_tokenizer_path)
     else:

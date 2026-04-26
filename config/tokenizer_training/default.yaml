@@ -54,6 +54,10 @@ model:
 training:
   train_new_base_tokenizer: true
   em_mode: soft   # "soft" | "hard"
+  # Target vocabulary size for the LAS base tokenizer. When null, the trainer
+  # preserves the seed (model) tokenizer's vocab size. Set to 100000, 150000,
+  # or 256000 for the EMNLP vocab-size sweep.
+  vocab_size: null
 
 hf:
   username: MultilingualUnigramLM

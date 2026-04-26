@@ -58,10 +58,16 @@ def resolve_fineweb2_dataset(size: str) -> str:
         return "MultilingualUnigramLM/FineWeb2-5M"
     elif size == "10M":
         return "MultilingualUnigramLM/FineWeb2-10M"
+    elif size == "50M":
+        return "MultilingualUnigramLM/FineWeb2-50M"
     elif size == "100M":
         return "MultilingualUnigramLM/FineWeb2-100M-olmo3-7b-toks"
+    elif size == "500M":
+        return "MultilingualUnigramLM/FineWeb2-500M"
     else:
-        raise ValueError(f"Invalid FineWeb2 size: {size} (use '5M', '10M' or '100M')")
+        raise ValueError(
+            f"Invalid FineWeb2 size: {size} (use '5M', '10M', '50M', '100M', or '500M')"
+        )
 
 
 def resolve_code_dataset(lang: str, size: str) -> str:
@@ -71,8 +77,11 @@ def resolve_code_dataset(lang: str, size: str) -> str:
       MultilingualUnigramLM/LangMap-TheStack-{lang}-{size}
     """
     size = size.upper()
-    if size not in {"5M", "10M", "100M"}:
-        raise ValueError(f"Invalid code dataset size: {size} (use '5M', '10M' or '100M')")
+    if size not in {"5M", "10M", "50M", "100M", "500M"}:
+        raise ValueError(
+            f"Invalid code dataset size: {size} "
+            f"(use '5M', '10M', '50M', '100M', or '500M')"
+        )
     return f"MultilingualUnigramLM/LangMap-TheStack-{lang}-{size}"
 
 
@@ -314,14 +323,19 @@ def run_finetune(cfg):
         domain = str(cfg.get("domain", "natural_language"))
 
         if domain == "code":
-            # Code tokenizers: langspec_{lang}.json, no English special case
+            # Code tokenizers: langspec_{lang}.json. English is allowed as a
+            # rehearsal slice on the code path; it has no langspec tokenizer
+            # so it falls back to the model tokenizer.
+            non_eng_code_langs = [lang for lang in langs if lang != "eng"]
             lang_toks = {
                 lang: load_las_tokenizer_with_eos_pad(
                     las_dir / f"langspec_{lang}.json", model_tokenizer
                 )
-                for lang in langs
+                for lang in non_eng_code_langs
             }
             tokenizer_for_lang = {lang: t[0] for lang, t in lang_toks.items()}
+            if "eng" in langs:
+                tokenizer_for_lang["eng"] = model_tokenizer.backend_tokenizer
         else:
             # Natural language: langspec_{lang}_Latn.json with eng special case
             non_eng_langs = [lang for lang in langs if lang != "eng"]
@@ -367,10 +381,16 @@ def run_finetune(cfg):
     domain = str(cfg.get("domain", "natural_language"))
     lang_texts = {}
     for lang in langs:
-        if domain == "code":
+        if domain == "code" and lang != "eng":
             hf_name = resolve_code_dataset(lang, dataset_size)
             logging.info(f"Loading {hf_name} (code)")
             ds = load_dataset(hf_name, split="train", streaming=False, data_dir="data")
+        elif domain == "code" and lang == "eng":
+            # English rehearsal on the code path: pull the same FineWeb2 slice
+            # used by the NL path so the model retains general-text fluency.
+            hf_name = resolve_fineweb2_dataset(dataset_size)
+            logging.info(f"Loading {hf_name} :: eng_Latn (code-path English rehearsal)")
+            ds = load_dataset(hf_name, "eng_Latn", split="train", streaming=False)
         else:
             hf_name = resolve_fineweb2_dataset(dataset_size)
             logging.info(f"Loading {hf_name} :: {lang}_Latn")

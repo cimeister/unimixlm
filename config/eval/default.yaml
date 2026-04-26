@@ -19,6 +19,11 @@ tasks:
   - mmlu
   - belebele
   - piqa
+  # EMNLP main-paper compositional / NER tasks. Add/remove per-experiment as
+  # the harness only implements certain (task, language) pairs.
+  - xnli
+  - wikiann
+  - multiblimp
 
 batch_size: "auto:4"
 dtype: bfloat16

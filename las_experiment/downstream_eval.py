@@ -159,6 +159,39 @@ def build_piqa_tasks(langs: list[str]) -> list[str]:
     return [f"global_piqa_completions_{lang}_latn" for lang in langs]
 
 
+# ----------------------------------------------------------------------------
+# EMNLP main-paper compositional / NER evals.
+#
+# All three tasks are wired through lm-eval-harness. Task IDs follow these
+# canonical conventions (verify availability per harness version):
+#
+#   XNLI    : xnli_<iso639-1>           e.g. xnli_tr
+#   WikiANN : wikiann_<iso639-1>        e.g. wikiann_fi
+#   MultiBLiMP : multiblimp_<iso639-3>  e.g. multiblimp_hun
+#
+# Only XNLI(Turkish), WikiANN(Turkish/Finnish/Hungarian), and MultiBLiMP for
+# the three Tier-2 languages are guaranteed by the harness. For any (task,
+# language) the harness does not implement, the call returns an error which
+# we surface to the caller — driver scripts should filter unsupported pairs
+# upstream rather than hardcoding a whitelist here.
+# ----------------------------------------------------------------------------
+
+
+def build_xnli_tasks(langs: list[str]) -> list[str]:
+    """XNLI uses 2-letter codes (tr, fi, hu, etc.)."""
+    return [f"xnli_{to_iso639_2(lang)}" for lang in langs]
+
+
+def build_wikiann_tasks(langs: list[str]) -> list[str]:
+    """WikiANN NER uses 2-letter codes."""
+    return [f"wikiann_{to_iso639_2(lang)}" for lang in langs]
+
+
+def build_multiblimp_tasks(langs: list[str]) -> list[str]:
+    """MultiBLiMP uses 3-letter (ISO 639-3) codes; pass through verbatim."""
+    return [f"multiblimp_{lang.lower()}" for lang in langs]
+
+
 def run_eval_one_model(model, model_args, cfg: DictConfig) -> tuple:
     langs = list(cfg.eval_langs)
 
@@ -207,7 +240,56 @@ def run_eval_one_model(model, model_args, cfg: DictConfig) -> tuple:
         else None
     )
 
-    return results1, results2, results3
+    # XNLI — 0-shot natural-language inference (Turkish in our suite).
+    results_xnli = (
+        lm_eval.simple_evaluate(
+            model=model,
+            model_args=model_args,
+            tasks=build_xnli_tasks(langs),
+            num_fewshot=0,
+            batch_size=str(cfg.batch_size),
+            log_samples=bool(cfg.log_samples),
+        )
+        if "xnli" in tasks_list
+        else None
+    )
+
+    # WikiANN — span-level NER, 0-shot.
+    results_wikiann = (
+        lm_eval.simple_evaluate(
+            model=model,
+            model_args=model_args,
+            tasks=build_wikiann_tasks(langs),
+            num_fewshot=0,
+            batch_size=str(cfg.batch_size),
+            log_samples=bool(cfg.log_samples),
+        )
+        if "wikiann" in tasks_list
+        else None
+    )
+
+    # MultiBLiMP — minimal-pair grammaticality, 0-shot.
+    results_multiblimp = (
+        lm_eval.simple_evaluate(
+            model=model,
+            model_args=model_args,
+            tasks=build_multiblimp_tasks(langs),
+            num_fewshot=0,
+            batch_size=str(cfg.batch_size),
+            log_samples=bool(cfg.log_samples),
+        )
+        if "multiblimp" in tasks_list
+        else None
+    )
+
+    return (
+        results1,
+        results2,
+        results3,
+        results_xnli,
+        results_wikiann,
+        results_multiblimp,
+    )
 
 
 def run_eval(cfg: DictConfig) -> None:
@@ -221,12 +303,21 @@ def run_eval(cfg: DictConfig) -> None:
         base_model_args = f"pretrained={cfg.model_args.pretrained},dtype={dtype}"
 
         logging.info(f"Evaluating base model: {model} with args: {base_model_args}")
-        r1, r2, r3 = run_eval_one_model(model, base_model_args, cfg)
+        r1, r2, r3, r_xnli, r_wikiann, r_mblimp = run_eval_one_model(
+            model, base_model_args, cfg
+        )
 
         output_path = output_dir / f"eval_results_base_{timestamp}.json"
         with open(output_path, "w") as f:
             json.dump(
-                {"mmlu": r1, "belebele": r2, "piqa": r3},
+                {
+                    "mmlu": r1,
+                    "belebele": r2,
+                    "piqa": r3,
+                    "xnli": r_xnli,
+                    "wikiann": r_wikiann,
+                    "multiblimp": r_mblimp,
+                },
                 f,
                 indent=2,
                 default=handle_non_serializable,
@@ -237,7 +328,9 @@ def run_eval(cfg: DictConfig) -> None:
         logging.info(
             f"Evaluating finetuned model with original tokenizer: {model} with args: {finetuned_model_args}"
         )
-        r1, r2, r3 = run_eval_one_model(model, finetuned_model_args, cfg=cfg)
+        r1, r2, r3, r_xnli, r_wikiann, r_mblimp = run_eval_one_model(
+            model, finetuned_model_args, cfg=cfg
+        )
 
         output_path = output_dir / f"eval_results_ft_{timestamp}.json"
         with open(output_path, "w") as f:
@@ -246,6 +339,9 @@ def run_eval(cfg: DictConfig) -> None:
                     "mmlu": r1,
                     "belebele": r2,
                     "piqa": r3,
+                    "xnli": r_xnli,
+                    "wikiann": r_wikiann,
+                    "multiblimp": r_mblimp,
                 },
                 f,
                 indent=2,
@@ -271,7 +367,9 @@ def run_eval(cfg: DictConfig) -> None:
         logging.info(
             f"Evaluating finetuned model with LAS tokenizer: {model} with args: {model_args}"
         )
-        r1, r2, r3 = run_eval_one_model(model, model_args, cfg)
+        r1, r2, r3, r_xnli, r_wikiann, r_mblimp = run_eval_one_model(
+            model, model_args, cfg
+        )
 
         output_path = output_dir / f"eval_results_ft_las_{timestamp}.json"
         with open(output_path, "w") as f:
@@ -280,6 +378,9 @@ def run_eval(cfg: DictConfig) -> None:
                     "mmlu": r1,
                     "belebele": r2,
                     "piqa": r3,
+                    "xnli": r_xnli,
+                    "wikiann": r_wikiann,
+                    "multiblimp": r_mblimp,
                 },
                 f,
                 indent=2,

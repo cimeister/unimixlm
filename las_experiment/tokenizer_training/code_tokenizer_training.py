@@ -256,6 +256,7 @@ def train_base_tokenizer(
     base_output_path: str | Path,
     em_mode: str = "soft",
     unk_token: str | None = None,
+    target_vocab_size: int | None = None,
 ) -> None:
     """
     Train a single shared base Unigram tokenizer from all code corpora.
@@ -286,6 +287,7 @@ def train_base_tokenizer(
         em_mode=em_mode,
         from_base_tokenizer=str(model_tokenizer_path),
         unk_token=unk_token,
+        target_vocab_size=target_vocab_size,
     )
 
     try:
@@ -328,6 +330,7 @@ def run_code_tokenizer_training(
     model_name: str = "allenai/OLMo-2-1124-7B",
     training_cfg: dict | None = None,
     is_push_to_hf: bool = True,
+    vocab_size: int | None = None,
 ) -> None:
     """
     End-to-end pipeline: stream → sanitise → train base → re-estimate per
@@ -418,6 +421,7 @@ def run_code_tokenizer_training(
             base_output_path=base_tokenizer_path,
             em_mode=em_mode,
             unk_token=unk_token,
+            target_vocab_size=vocab_size,
         )
         validate_tokenizers(model_tokenizer_path, base_tokenizer_path)
     else:
