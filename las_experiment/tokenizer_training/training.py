@@ -72,13 +72,59 @@ def train_base_tokenizer(
     base_tokenizer.train(train_files, base_output_path, corpus_info=corpus_info)
 
 
-# ---------------------- FineWeb2-10K streaming / reading ----------------------
-def prepare_language_corpora(langs, lines_per_lang=10000, output_dir="./data/parallel"):
-    """
-    Build per-language text files either by:
-    - streaming FineWeb2-10K for each language.
+# ---------------------- FineWeb2 streaming / reading ----------------------
+# Two layouts are supported:
+#   1. Single repo with per-lang splits/configs (FineWeb2-10K, FineWeb2-10M).
+#   2. Per-lang repos (FineWeb2-{lang}-100M, mirroring the LangMap-TheStack-*
+#      code datasets) — preferred for large-vocab training because each repo
+#      contains 100M tokens of single-lang text.
+#
+# When the caller passes ``corpus_repo_template`` containing ``{lang}``, we
+# treat each language as a separate repo. Otherwise we treat ``corpus_repo``
+# as a single repo and stream by split or config name.
+DEFAULT_CORPUS_REPO = "MultilingualUnigramLM/FineWeb2-10K"
 
-    Returns a dict mapping language code -> local text file path.
+
+def _stream_lang(repo: str, lang: str):
+    """Return a streaming dataset for `lang` from `repo`, trying multiple layouts."""
+    last_err = None
+    # Per-lang repo: just stream the default train split.
+    try:
+        return load_dataset(repo, split="train", streaming=True)
+    except Exception as e:
+        last_err = e
+    # Single-repo split=<lang> (FineWeb2-10K layout).
+    try:
+        return load_dataset(repo, split=lang, streaming=True)
+    except Exception as e:
+        last_err = e
+    # Single-repo config=<lang>, split=train (FineWeb2-10M layout).
+    try:
+        return load_dataset(repo, name=lang, split="train", streaming=True)
+    except Exception as e:
+        last_err = e
+    raise last_err if last_err else RuntimeError(f"cannot stream {repo}::{lang}")
+
+
+def prepare_language_corpora(
+    langs,
+    lines_per_lang=10000,
+    output_dir="./data/parallel",
+    corpus_repo: str | None = None,
+    corpus_repo_template: str | None = None,
+    char_budget_per_lang: int | None = None,
+):
+    """
+    Stream text per language and write each language to its own text file.
+
+    Resolution order for the source repo for a given lang:
+      1. ``corpus_repo_template`` formatted with ``{lang}`` (one repo per lang)
+      2. ``corpus_repo`` (single repo, split or config = lang)
+      3. ``DEFAULT_CORPUS_REPO`` fallback
+
+    Streaming is bounded by either ``lines_per_lang`` or, when
+    ``char_budget_per_lang`` is given, by aggregate char count (whichever hits
+    first). Languages with no streamable data are logged WARNING and skipped.
     """
     output_dir = Path(output_dir)
     output_dir.mkdir(parents=True, exist_ok=True)
@@ -87,25 +133,39 @@ def prepare_language_corpora(langs, lines_per_lang=10000, output_dir="./data/par
     for lang in langs:
         out_file = output_dir / f"{lang}.txt"
 
-        logging.info(f"Streaming {lang} from FineWeb2-10K...")
+        if corpus_repo_template and "{lang}" in corpus_repo_template:
+            repo = corpus_repo_template.format(lang=lang)
+        else:
+            repo = corpus_repo or DEFAULT_CORPUS_REPO
+
+        logging.info(f"Streaming {lang} from {repo}...")
         try:
-            ds_stream = load_dataset(
-                "MultilingualUnigramLM/FineWeb2-10K", split=lang, streaming=True
-            )
+            ds_stream = _stream_lang(repo, lang)
         except Exception as e:
-            logging.warning(f"Skipping {lang}: {e}")
+            logging.warning(f"Skipping {lang} (no data in {repo}): {e}")
             continue
 
         lines = []
+        chars = 0
         for ex in itertools.islice(ds_stream, lines_per_lang):
             text = ex.get("text", "").strip()
-            if text:
-                lines.append(text)
+            if not text:
+                continue
+            lines.append(text)
+            chars += len(text)
+            if char_budget_per_lang and chars >= char_budget_per_lang:
+                break
+
+        if not lines:
+            logging.warning(f"Skipping {lang}: streamed 0 non-empty lines from {repo}")
+            continue
 
         with open(out_file, "w", encoding="utf-8") as f:
             for line in lines:
                 f.write(line + "\n")
-        logging.info(f"Wrote {len(lines)} lines for {lang} to {out_file}")
+        logging.info(
+            f"Wrote {len(lines)} lines / {chars:,} chars for {lang} to {out_file}"
+        )
         corpus_info[lang] = str(out_file)
 
     return corpus_info
@@ -164,15 +224,35 @@ def run_tokenizer_training(
 
     # 2) Prepare per-language corpora (stream from FineWeb2-10K or read from disk)
     logging.info(f"Preparing corpora for {len(langs)} languages...")
+    def _cfg_get(key):
+        if training_cfg is None:
+            return None
+        if isinstance(training_cfg, dict):
+            return training_cfg.get(key)
+        try:
+            return training_cfg.get(key)  # type: ignore[attr-defined]
+        except Exception:
+            return None
+
+    corpus_repo = _cfg_get("corpus_repo")
+    corpus_repo_template = _cfg_get("corpus_repo_template")
+    char_budget_per_lang = _cfg_get("char_budget_per_lang") or _cfg_get("char_budget")
     corpus_info = prepare_language_corpora(
         langs,
         lines_per_lang=lines_per_lang,
         output_dir=output_dir / "corpora",
+        corpus_repo=corpus_repo,
+        corpus_repo_template=corpus_repo_template,
+        char_budget_per_lang=char_budget_per_lang,
     )
 
     if not corpus_info:
         logging.error("No corpora prepared. Exiting.")
-        return
+        raise RuntimeError(
+            f"prepare_language_corpora returned empty for langs={langs!r} "
+            f"(corpus_repo_template={corpus_repo_template!r}); upstream "
+            "data fetch likely hit 429 / 404. Re-run after rate window."
+        )
 
     # 3) Create final tokenizer directory named after the HF repo
     # Determine repository name based on languages (truncate to 3 letters)
@@ -205,10 +285,14 @@ def run_tokenizer_training(
     logging.info(
         f"Training {len(corpus_info)} language-specific tokenizers in parallel..."
     )
-    las_tokenizer = LanguageSpecificUnigramLMTokenizer(
+    _iters_override = training_cfg.get("iters") if training_cfg else None
+    _las_kwargs = dict(
         reestimation_em_mode=str(training_cfg.get("em_mode", "soft")),
         unk_token=unk_token,
     )
+    if _iters_override is not None:
+        _las_kwargs["num_iterations"] = int(_iters_override)
+    las_tokenizer = LanguageSpecificUnigramLMTokenizer(**_las_kwargs)
     las_tokenizer.train(
         corpus_info=corpus_info,
         base_tokenizer_path=str(base_tokenizer_path),

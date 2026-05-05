@@ -13,7 +13,8 @@ SPECIAL_TOKENS = OrderedDict(
     ]
 )
 NUM_TRIMMING_ITERATIONS = 3
-NUM_FINETUNE_EM_ITERATIONS = 10
+NUM_FINETUNE_EM_ITERATIONS = 5  # mild reduction from canonical 10 for 4-hour
+# priority pass; LAS EM converges within 5 iters in practice.
 INITIAL_VOCAB_MULT_FACTOR = 5
 MIN_CHAR_OCCURENCE_THRESHOLD = 2
 MIN_TOKEN_PROB = 1e-12

@@ -110,24 +110,25 @@ def prepare_code_corpora(
     langs: list[str],
     char_budget: int = DEFAULT_CHAR_BUDGET,
     output_dir: str | Path = "./data/code_parallel",
+    corpus_repo_template: str | None = None,
 ) -> dict[str, str]:
     """
-    Stream source-code files from MultilingualUnigramLM/The-Stack-10K and
-    write one sanitised plain-text corpus file per programming language.
+    Stream source-code files and write one sanitised plain-text corpus file
+    per programming language.
+
+    Two source modes:
+      1. ``corpus_repo_template`` formatted with ``{lang}`` (one repo per lang)
+         e.g. "MultilingualUnigramLM/LangMap-TheStack-{lang}-100M". Each repo
+         is loaded with ``streaming=True`` and no config name.
+      2. Default fallback: ``MultilingualUnigramLM/The-Stack-10K`` with the
+         lang as a BuilderConfig (``c++`` / ``c-sharp`` style names required).
 
     Each source file becomes one document separated by a double-newline so
     the Unigram trainer sees clean boundaries without splitting on internal
     newlines (critical for indentation-sensitive languages like Python).
 
-    Args:
-        langs:       Programming-language names matching The-Stack-10K config
-                     names, e.g. ["python", "rust", "java"].
-        char_budget: Max UTF-8 characters to collect *before* sanitisation.
-                     Sampling stops once this budget is reached.
-        output_dir:  Directory for per-language .txt corpus files.
-
     Returns:
-        corpus_info: {lang: absolute_path_to_txt_file}
+        corpus_info: {lang: absolute_path_to_txt_file}.
                      Languages that fail to stream are omitted.
     """
     output_dir = Path(output_dir)
@@ -141,18 +142,25 @@ def prepare_code_corpora(
         # "-" as a flag separator inside comma-separated --input file lists.
         out_file = output_dir / f"{safe_name(lang)}.txt"
 
-        logging.info(
-            f"[{lang}] Streaming from The-Stack-10K "
-            f"(budget={char_budget:,} chars)..."
-        )
-
         try:
-            ds_stream = load_dataset(
-                "MultilingualUnigramLM/The-Stack-10K",
-                name=lang,
-                split="train",
-                streaming=True,
-            )
+            if corpus_repo_template and "{lang}" in corpus_repo_template:
+                repo = corpus_repo_template.format(lang=lang)
+                logging.info(
+                    f"[{lang}] Streaming from {repo} "
+                    f"(budget={char_budget:,} chars)..."
+                )
+                ds_stream = load_dataset(repo, split="train", streaming=True)
+            else:
+                logging.info(
+                    f"[{lang}] Streaming from The-Stack-10K "
+                    f"(budget={char_budget:,} chars)..."
+                )
+                ds_stream = load_dataset(
+                    "MultilingualUnigramLM/The-Stack-10K",
+                    name=lang,
+                    split="train",
+                    streaming=True,
+                )
         except Exception as exc:
             logging.warning(f"[{lang}] Skipping – could not load dataset: {exc}")
             continue
@@ -385,16 +393,21 @@ def run_code_tokenizer_training(
     # ------------------------------------------------------------------
     # 2. Stream + sanitise corpora
     # ------------------------------------------------------------------
+    corpus_repo_template = training_cfg.get("corpus_repo_template")
     logging.info(f"Preparing code corpora for {len(langs)} language(s)…")
     corpus_info = prepare_code_corpora(
         langs,
         char_budget=char_budget,
         output_dir=output_dir / "corpora",
+        corpus_repo_template=corpus_repo_template,
     )
 
     if not corpus_info:
         logging.error("No corpora prepared – aborting.")
-        return
+        raise RuntimeError(
+            f"prepare_code_corpora returned empty for langs={langs!r} "
+            f"(corpus_repo_template={corpus_repo_template!r})"
+        )
 
     # ------------------------------------------------------------------
     # 3. Output directory (named after the future HF repo)

@@ -1606,14 +1606,66 @@ class StandardUnigramLMTokenizer:
         tmpdir = self._temp_dir
         out_prefix = os.path.join(tmpdir, "model")
         vocab_path = os.path.join(tmpdir, "vocab.tsv")
+
+        # ---- SEED AUGMENTATION ------------------------------------------
+        # Why: with monolingual corpora the seed pieces from the parent
+        # tokenizer (e.g. Qwen 151K, Gemma 256K) include many tokens that
+        # don't appear in the target language's text. When spm_train EM-prunes
+        # those, the final vocab caps far below target. Augmenting the seed
+        # with corpus-derived pieces guarantees enough survivable candidates.
+        #
+        # Strategy: when target_vocab is set and seed has fewer than
+        # 1.5 × target useful pieces, do a one-shot spm_train pass without
+        # seed at vocab_size = target × 2 to extract corpus-grounded pieces,
+        # cache them on `self`, and merge into vocab_dict before writing the
+        # seed file. Cached after first call so subsequent EM iters are cheap.
+        target = getattr(self, "target_vocab_size", None)
+        # Only augment when the seed is *materially* smaller than target
+        # (target_vocab > seed_size). For native-vocab training (target ≈ seed)
+        # augmentation is wasted work — the seed already has enough candidates
+        # and adding more pieces just slows down the EM iterations.
+        if target is not None and len(vocab_dict) < int(target * 0.95):
+            corpus_pieces = self._maybe_extract_corpus_pieces(
+                text_paths, target_size=target * 2
+            )
+            if corpus_pieces:
+                merged = dict(vocab_dict)
+                # Pick the median seed log-prob as the "neutral" score for
+                # added corpus pieces — they will compete on equal footing
+                # during EM rather than being deprioritised.
+                neutral = -10.0
+                if vocab_dict:
+                    vals = sorted(float(v) for v in vocab_dict.values())
+                    neutral = vals[len(vals) // 2]
+                added = 0
+                for tk in corpus_pieces:
+                    if tk and tk not in merged:
+                        merged[tk] = neutral
+                        added += 1
+                if added:
+                    logger.info(
+                        "Seed augmentation: added %d corpus-derived pieces "
+                        "(seed %d -> %d, target %d)",
+                        added, len(vocab_dict), len(merged), target,
+                    )
+                vocab_dict = merged
+
         # 1. Prepare the vocabulary file
         token_count = _write_sp_seed_vocab_file(
             list(vocab_dict.items()), vocab_path, self.unk_token
         )
 
-        # The exact vocab size must account for meta pieces
-        # <unk>, <s> and </s>
+        # The exact vocab size must account for meta pieces <unk>, <s>, </s>.
+        # When the caller has set a target_vocab_size that's smaller than the
+        # current seed vocab (e.g. seeding from a 151K base but targeting 50K),
+        # pass the target directly so spm_train prunes seeds to target rather
+        # than failing with "Vocabulary size too high".
         expected_vocab_size = token_count + 3
+        if (
+            getattr(self, "target_vocab_size", None) is not None
+            and self.target_vocab_size + 3 < expected_vocab_size
+        ):
+            expected_vocab_size = self.target_vocab_size + 3
 
         # 2. Construct the spm_train command
         command = (
@@ -1631,11 +1683,51 @@ class StandardUnigramLMTokenizer:
             ]
         )
 
-        # 3. Execute the command
+        # 3. Execute the command (with adaptive cap recovery).
+        # When the corpus can't actually support the requested vocab_size,
+        # spm_train aborts with "Vocabulary size too high (X). Please set it
+        # to a value <= Y." We catch that, drop to Y, and retry once. This
+        # lets EM iterate on small corpora (fin/hun in FineWeb2-10K) where
+        # the seed-based trainer would otherwise dead-end.
+        import re as _re
         logger.info(f"Running SentencePiece CLI command:\n{' '.join(command)}")
-        output = subprocess.run(
-            command, check=True, capture_output=True, text=True, encoding="utf-8"
-        )
+        attempt = 0
+        while True:
+            attempt += 1
+            try:
+                output = subprocess.run(
+                    command, check=True, capture_output=True, text=True, encoding="utf-8"
+                )
+                break
+            except subprocess.CalledProcessError as e:
+                m = _re.search(r"Vocabulary size too high \((\d+)\)\. Please set it to a value <= (\d+)", e.stderr or "")
+                if m and attempt == 1:
+                    new_cap = int(m.group(2))
+                    logger.warning(
+                        f"spm_train cap-recovery: target {expected_vocab_size} not "
+                        f"reachable from this corpus; retrying with vocab_size={new_cap}."
+                    )
+                    expected_vocab_size = new_cap
+                    # Update --vocab_size argument in-place.
+                    command = [
+                        f"--vocab_size={new_cap}" if c.startswith("--vocab_size=") else c
+                        for c in command
+                    ]
+                    continue
+                logger.error(
+                    f"spm_train failed (rc={e.returncode}, attempt={attempt}). "
+                    f"STDOUT:\n{e.stdout}\nSTDERR:\n{e.stderr}"
+                )
+                try:
+                    import shutil as _shutil
+                    debug_dir = "/tmp/spm_failed"
+                    os.makedirs(debug_dir, exist_ok=True)
+                    _shutil.copy(vocab_path, debug_dir)
+                    _shutil.copy(text_paths.split(",")[0], debug_dir)
+                    logger.error(f"Persisted failed inputs to {debug_dir}/")
+                except Exception:
+                    pass
+                raise
         logger.info("SentencePiece training successful.")
         logger.info(f"SentencePiece STDOUT: {output.stdout}")
         logger.info(f"SentencePiece STDERR (logs + errors): : {output.stderr}")
@@ -1679,9 +1771,19 @@ class StandardUnigramLMTokenizer:
     ) -> Tuple[List[Tuple[str, float]], int]:
         normalized_lprobs = self._log_normalize(lprobs, use_floor=True)
         if self.parent_tokenizer:
+            # Tokens may be pruned during EM. Skip those rather than raising.
+            seed_vocab = _load_vocab_from_hf_tokenizer(self.from_base_tokenizer)
+            missing = [tk for tk in seed_vocab if tk not in normalized_lprobs]
+            if missing:
+                logger.warning(
+                    "Final vocab assembly: %d seed tokens were pruned by EM "
+                    "(e.g. %s); excluding from final vocab.",
+                    len(missing), missing[:5],
+                )
             vocab_list = [
                 (tk, normalized_lprobs[tk])
-                for tk in _load_vocab_from_hf_tokenizer(self.from_base_tokenizer)
+                for tk in seed_vocab
+                if tk in normalized_lprobs
             ]
         else:
             sorted_items = sorted(
@@ -1706,12 +1808,25 @@ class StandardUnigramLMTokenizer:
 
     def _build_tokenizer(self, lprobs: Dict[str, float], output_path):
         vocab_list, unk_id = self._build_final_vocab(lprobs)
-        tok = _build_unigramlm_hf_tokenizer_from_lprobs(
-            vocab_list,
-            unk_id,
-            pretokenizer=self._get_pretokenizer(),
-            decoder=self._get_decoder(),
-        )
+        # Clone parent's full tokenizer config (normalizer, pre_tokenizer, decoder,
+        # post_processor) when available, so SP-style bases (gemma/mistral/llama-2
+        # use Replace(" "→"▁") normalizer with no pre_tokenizer) roundtrip
+        # correctly. Without this we'd fall through to Metaspace(prepend_scheme=
+        # "always") which prepends a stray space on decode, breaking emRT.
+        if self.parent_tokenizer is not None:
+            tok = _build_unigramlm_hf_tokenizer_from_lprobs(
+                vocab_list,
+                unk_id,
+                base_tokenizer=self.parent_tokenizer,
+                clone_specials=False,
+            )
+        else:
+            tok = _build_unigramlm_hf_tokenizer_from_lprobs(
+                vocab_list,
+                unk_id,
+                pretokenizer=self._get_pretokenizer(),
+                decoder=self._get_decoder(),
+            )
         self.base_tokenizer = tok
         if output_path:
             Path(output_path).parent.mkdir(parents=True, exist_ok=True)
@@ -1733,10 +1848,15 @@ class StandardUnigramLMTokenizer:
             return "standard"
 
     def _get_pretokenizer(self):
-        if self.parent_tokenizer:
+        # SentencePiece-style seed tokenizers (Gemma, Mistral, Llama-2) leave
+        # ``parent_tokenizer.pre_tokenizer`` as None — they tokenize directly
+        # via SP at the model level. We fall through to a Metaspace pretok
+        # (the closest HF analogue) so EM corpus processing still has a
+        # non-None pretok object to call ``pre_tokenize_str`` on.
+        if self.parent_tokenizer is not None and self.parent_tokenizer.pre_tokenizer is not None:
             logger.info("Using pretokenizer from parent tokenizer")
             return self.parent_tokenizer.pre_tokenizer
-        if self.base_tokenizer:
+        if self.base_tokenizer is not None and self.base_tokenizer.pre_tokenizer is not None:
             logger.info("Using pretokenizer from base tokenizer")
             return self.base_tokenizer.pre_tokenizer
         if self.byte_level:
@@ -1744,28 +1864,119 @@ class StandardUnigramLMTokenizer:
             return pre_tokenizers.ByteLevel(
                 add_prefix_space=True, use_regex=self.whitespace_token_boundaries
             )
-        elif self.whitespace_token_boundaries:
+        if self.whitespace_token_boundaries:
             logger.info("Using whitespace pretokenizer")
             return pre_tokenizers.Whitespace()
-        else:
-            logger.info("No pretokenizer found")
-            return None
+        # SentencePiece (Gemma/Mistral/Llama-2) fallback.
+        logger.info("Falling back to Metaspace pretokenizer (SentencePiece-style seed)")
+        return pre_tokenizers.Metaspace(replacement="▁", prepend_scheme="always")
 
     def _get_decoder(self):
-        if self.parent_tokenizer:
+        if self.parent_tokenizer is not None and self.parent_tokenizer.decoder is not None:
             logger.info("Using decoder from parent tokenizer")
             return self.parent_tokenizer.decoder
-        if self.base_tokenizer:
+        if self.base_tokenizer is not None and self.base_tokenizer.decoder is not None:
             logger.info("Using decoder from base tokenizer")
             return self.base_tokenizer.decoder
         if self.byte_level:
             logger.info("Using byte-level decoder")
             return decoders.ByteLevel()
-        elif self.whitespace_token_boundaries:
+        if self.whitespace_token_boundaries:
             raise NotImplementedError
-        else:
-            logger.info("No HF decoder founc")
-            return None
+        # Match the Metaspace pretok fallback for SP-style models.
+        logger.info("Falling back to Metaspace decoder")
+        return decoders.Metaspace(replacement="▁", prepend_scheme="always")
+
+    # ------------------------------------------------------------------
+    # 6.5. corpus-piece extraction for seed augmentation
+    # ------------------------------------------------------------------
+    def _maybe_extract_corpus_pieces(self, text_paths: str, target_size: int):
+        """Run a single seedless spm_train pass to extract corpus-derived
+        pieces, then cache the result on ``self`` so subsequent EM iterations
+        of the same training reuse it.
+
+        Returns a list of HF-format pieces (already mapped from SP pieces)
+        ready to be merged into a seed vocab dict. Returns [] on any failure.
+        """
+        cache_key = (text_paths, target_size)
+        if getattr(self, "_corpus_piece_cache_key", None) == cache_key:
+            return self._corpus_piece_cache
+        # Recompute when target_size changes; cache results.
+        import os as _os
+        import subprocess as _subprocess
+        import tempfile as _tempfile
+        import re as _re
+
+        tmpdir = _tempfile.mkdtemp(prefix="seedaug_")
+        prefix = _os.path.join(tmpdir, "augm")
+        cmd = [
+            "spm_train",
+            *constants.SP_DEFAULT_ARGS,
+            f"--input={text_paths}",
+            f"--model_prefix={prefix}",
+            f"--vocab_size={target_size}",
+            "--num_sub_iterations=1",
+            f"--unk_piece={self.unk_token}",
+            f"--num_threads={min(20, multiprocessing.cpu_count() - 1)}",
+        ]
+        logger.info(
+            "Seed-aug: running seedless spm_train at vocab_size=%d "
+            "to extract corpus pieces.", target_size,
+        )
+        attempt = 0
+        new_target = target_size
+        while True:
+            attempt += 1
+            try:
+                _subprocess.run(
+                    cmd, check=True, capture_output=True,
+                    text=True, encoding="utf-8",
+                )
+                break
+            except _subprocess.CalledProcessError as e:
+                m = _re.search(
+                    r"Vocabulary size too high \((\d+)\)\. Please set it to a value <= (\d+)",
+                    e.stderr or "",
+                )
+                if m and attempt == 1:
+                    new_target = int(m.group(2))
+                    logger.warning(
+                        "Seed-aug: spm_train cap-recovery, retrying at "
+                        "vocab_size=%d", new_target,
+                    )
+                    cmd = [
+                        f"--vocab_size={new_target}" if c.startswith("--vocab_size=") else c
+                        for c in cmd
+                    ]
+                    continue
+                logger.warning(
+                    "Seed-aug spm_train failed (rc=%s); skipping augmentation. "
+                    "STDERR tail: %s", e.returncode, (e.stderr or "")[-500:],
+                )
+                self._corpus_piece_cache_key = cache_key
+                self._corpus_piece_cache = []
+                return []
+
+        try:
+            sp = spm.SentencePieceProcessor()
+            sp.load(prefix + ".model")
+            pieces: list[str] = []
+            for i in range(sp.get_piece_size()):
+                p = sp.id_to_piece(i)
+                if p in {self.unk_token, "<s>", "</s>", "<pad>"}:
+                    continue
+                pieces.append(p)
+        except Exception as e:
+            logger.warning("Seed-aug: failed to read .model: %s", e)
+            pieces = []
+
+        self._corpus_piece_cache_key = cache_key
+        self._corpus_piece_cache = pieces
+        logger.info(
+            "Seed-aug: extracted %d corpus pieces (cached for this training).",
+            len(pieces),
+        )
+        return pieces
 
     # ------------------------------------------------------------------
     # 7. metadata collection

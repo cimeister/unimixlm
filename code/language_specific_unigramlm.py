@@ -60,9 +60,34 @@ def _build_unigramlm_hf_tokenizer_with_new_lprobs(
     Turn a plain probability dictionary into a HF Unigram tokenizer.
     """
     vocab = _load_vocab_from_hf_tokenizer(base_tokenizer)
-    tuples = [(t, max(new_log_probs[t], MIN_TOKEN_LOG_PROB)) for t in vocab]
+    # Use .get() with floor for tokens whose lprob wasn't updated by EM.
+    tuples = [
+        (t, max(new_log_probs.get(t, MIN_TOKEN_LOG_PROB), MIN_TOKEN_LOG_PROB))
+        for t in vocab
+    ]
 
-    unk_id = base_tokenizer.get_vocab()[unk_token]
+    # `unk_token` may have been dropped from the base vocab during pruning if
+    # the seed-file writer skipped it. Fall back to ID 0 (SP's --unk_id=0)
+    # which is always reserved for unk in the spm-trained models.
+    base_vocab_dict = base_tokenizer.get_vocab()
+    unk_id = base_vocab_dict.get(unk_token)
+    if unk_id is None:
+        # Look for any of the canonical unk-like tokens; else default to 0.
+        for cand in ("<|endoftext|>", "<unk>", "<|unk|>"):
+            if cand in base_vocab_dict:
+                unk_id = base_vocab_dict[cand]
+                logger.warning(
+                    "unk token %r not found in base vocab; using %r (id=%d)",
+                    unk_token, cand, unk_id,
+                )
+                break
+        else:
+            unk_id = 0
+            logger.warning(
+                "unk token %r not found in base vocab; defaulting unk_id=0",
+                unk_token,
+            )
+
     tok = _build_unigramlm_hf_tokenizer_from_lprobs(
         tuples, unk_id, base_tokenizer=base_tokenizer
     )
@@ -181,8 +206,12 @@ class LanguageSpecificUnigramLMTokenizer(StandardUnigramLMTokenizer):
  
             initial_log_score = np.log(1.0 / num_pieces) if num_pieces > 0 else -10.0
 
+            # Seed SP with the *base* tokenizer's trained log-scores. Falling
+            # back to a flat 1/V for missing tokens collapses EM onto single
+            # characters within 5 sub-iterations, so the langspec ends up
+            # downweighting whole words it should be reinforcing.
             token_count = _write_sp_seed_vocab_file(
-                [(t, initial_log_score) for t in base_vocab],
+                [(t, vocab_dict.get(t, initial_log_score)) for t in base_vocab],
                 vocab_path,
                 self.unk_token,
             )
@@ -211,11 +240,45 @@ class LanguageSpecificUnigramLMTokenizer(StandardUnigramLMTokenizer):
             # if self.whitespace_token_boundaries:
             #     command.append("--split_by_whitespace=true")
 
-            # 3. Execute the command
+            # 3. Execute the command (with adaptive cap recovery — mirrors
+            # the patch in StandardUnigramLMTokenizer._sp_em). When the corpus
+            # for this language can't reach the requested seed-vocab size,
+            # spm_train aborts with "Vocabulary size too high (X). Please set
+            # it to a value <= Y." We catch that, drop to Y, and retry once.
+            import re as _re
             logger.info(f"Running SentencePiece CLI command:\n{' '.join(command)}")
-            output = subprocess.run(
-                command, check=True, capture_output=True, text=True, encoding="utf-8"
-            )
+            attempt = 0
+            while True:
+                attempt += 1
+                try:
+                    output = subprocess.run(
+                        command, check=True, capture_output=True,
+                        text=True, encoding="utf-8",
+                    )
+                    break
+                except subprocess.CalledProcessError as e:
+                    m = _re.search(
+                        r"Vocabulary size too high \((\d+)\)\. Please set it to a value <= (\d+)",
+                        e.stderr or "",
+                    )
+                    if m and attempt == 1:
+                        new_cap = int(m.group(2))
+                        logger.warning(
+                            f"LAS spm_train cap-recovery for this lang: target "
+                            f"{expected_vocab_size} not reachable; retrying with "
+                            f"vocab_size={new_cap}."
+                        )
+                        expected_vocab_size = new_cap
+                        command = [
+                            f"--vocab_size={new_cap}" if c.startswith("--vocab_size=") else c
+                            for c in command
+                        ]
+                        continue
+                    logger.error(
+                        f"LAS spm_train failed (rc={e.returncode}, attempt={attempt}). "
+                        f"STDERR tail:\n{(e.stderr or '')[-2000:]}"
+                    )
+                    raise
             logger.info("SentencePiece training successful.")
             logger.info(f"SentencePiece STDOUT: {output.stdout}")
             logger.info(f"SentencePiece STDERR (logs + errors): : {output.stderr}")
@@ -367,7 +430,12 @@ class LanguageSpecificUnigramLMTokenizer(StandardUnigramLMTokenizer):
                     "path": str(tk_path),
                 }
         if futures_by_lang:
-            # Wait for all language-specific training to complete and collect failures
+            # Wait for all language-specific training to complete and collect failures.
+            # Two upstream bugs fixed here:
+            #   (1) The success-path dict assignment was outside the try/except,
+            #       so a failed future left `tok` undefined → UnboundLocalError.
+            #   (2) The dict was keyed by the OUTER loop's `lang_code` instead
+            #       of the inner `lang`, so all langs overwrote the same entry.
             failures = []
             for lang, future in futures_by_lang.items():
                 try:
@@ -376,7 +444,8 @@ class LanguageSpecificUnigramLMTokenizer(StandardUnigramLMTokenizer):
                     error_msg = f"Language-specific training failed for {lang}: {e}"
                     logging.error(error_msg)
                     failures.append((lang, e))
-                self.per_lang_tok[lang_code] = {
+                    continue
+                self.per_lang_tok[lang] = {
                     "tokenizer": tok,
                     "scores": _extract_log_scores(tok),
                     "path": str(tk_path),

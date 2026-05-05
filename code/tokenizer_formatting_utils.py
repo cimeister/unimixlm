@@ -225,16 +225,65 @@ def _write_sp_seed_vocab_file_with_conversion(
 def _write_sp_seed_vocab_file(
     vocab_with_scores: list[tuple[str, float]], out_path: str, unk_token: str
 ):
-    """One token per line: token<TAB>log_score (uniform log prob)."""
+    """One token per line: token<TAB>integer_count.
+
+    NOTE: SentencePiece >=0.2 parses --seed_sentencepieces_file lines with
+    absl::SimpleAtoi on the second column (unigram_model_trainer.cc:226),
+    which requires a *positive integer*. Earlier versions accepted floats /
+    log-probs; current versions terminate with an unrecoverable error if a
+    float is encountered.
+
+    We therefore convert log-prob scores to relative integer counts. When all
+    seed scores are uniform (the common case in this trainer), every piece
+    gets count=1, which is exactly the prior SentencePiece would build itself.
+    """
+    import math as _math
+
     specials = set(constants.SPECIAL_TOKENS.values()) | {unk_token}
+
+    # Pre-pass to find min log-prob so we can shift to non-negative.
+    valid = [
+        (t, s) for (t, s) in vocab_with_scores
+        if t not in specials and "\t" not in t and "\n" not in t and "\r" not in t
+    ]
+    if not valid:
+        # nothing to write; preserve old fail-loudly semantics on bad tokens
+        for t, _ in vocab_with_scores:
+            if t in specials:
+                continue
+            if ("\t" in t) or ("\n" in t) or ("\r" in t):
+                # Some seed vocabs (Gemma, Llama) contain whitespace-only or
+                # newline-containing pieces that cannot be encoded in the SP
+                # seed-file TSV format. Drop them — they're not useful as
+                # seeds and SP will rebuild any whitespace pieces from the
+                # corpus during EM.
+                continue
+        with open(out_path, "w", encoding="utf-8", newline="") as f:
+            pass
+        return 0
+
+    log_min = min(s for _, s in valid)
+
     count = 0
     with open(out_path, "w", encoding="utf-8", newline="") as f:
         for t, score in vocab_with_scores:
             if t in specials:
                 continue
             if ("\t" in t) or ("\n" in t) or ("\r" in t):
-                raise ValueError(f"Token contains tab/newline: {repr(t)}")
-            f.write(f"{t}\t{score}\n")
+                # Some seed vocabs (Gemma, Llama) contain whitespace-only or
+                # newline-containing pieces that cannot be encoded in the SP
+                # seed-file TSV format. Drop them — they're not useful as
+                # seeds and SP will rebuild any whitespace pieces from the
+                # corpus during EM.
+                continue
+            # Convert log-prob to a positive integer "count". When scores are
+            # uniform, every piece ends up with count=1.
+            try:
+                weight = _math.exp(score - log_min)
+            except OverflowError:
+                weight = 1.0
+            n = max(1, int(round(weight)))
+            f.write(f"{t}\t{n}\n")
             count += 1
     return count
 
@@ -309,11 +358,25 @@ def _build_unigramlm_hf_tokenizer_from_lprobs(
     pretokenizer: Any = None,
     decoder: Any = None,
     base_tokenizer: Any = None,
+    byte_fallback: bool = True,
+    clone_specials: bool = True,
 ) -> Tokenizer:
     """
     Turn a plain log probability dictionary into a HF Unigram tokenizer.
+
+    When ``clone_specials`` is False, the parent's ``post_processor`` and
+    ``added_tokens`` are dropped during config cloning. Use this when cloning
+    across vocabularies (e.g. base BPE → LAS Unigram); the parent's
+    post-processor template references absolute IDs in the parent vocab and
+    will inject the wrong tokens (or collide with regular vocab entries) when
+    grafted onto a Unigram vocab with a different ID order. Within a single
+    model class (LAS base → langspec overlay) the specials stay valid, so
+    leave the default True.
     """
-    model = Unigram(lprobs_tuples, unk_id)
+    # byte_fallback=True so any byte sequence not directly in the vocab can
+    # still be encoded as its constituent <0xNN> bytes — eliminates UNKs and
+    # gives Viterbi a path through tokens that SP pruned during langspec EM.
+    model = Unigram(lprobs_tuples, unk_id, byte_fallback=byte_fallback)
     tok = Tokenizer(model)
     if base_tokenizer is not None:
         # 1) Clone base config
@@ -325,15 +388,16 @@ def _build_unigramlm_hf_tokenizer_from_lprobs(
         # 2) Replace only the model (keep *everything else* intact)
         base_json["model"] = model_json
 
+        if not clone_specials:
+            base_json["post_processor"] = None
+            base_json["added_tokens"] = []
+
         # 3) Rebuild tokenizer from modified JSON
         tok = Tokenizer.from_str(json.dumps(base_json))
-        # NOTE: All of these are preserved automatically from base:
-        # - normalizer
-        # - pre_tokenizer
-        # - decoder
-        # - post_processor (templates for BOS/EOS/CLS/SEP, etc.)
-        # - added_tokens (special + regular added tokens)
-        # - truncation & padding settings
+        # NOTE: Preserved automatically from base when clone_specials is True:
+        # normalizer, pre_tokenizer, decoder, post_processor, added_tokens,
+        # truncation & padding settings. When False, post_processor and
+        # added_tokens are dropped (safe across vocabularies).
 
     if pretokenizer:
         tok.pre_tokenizer = pretokenizer
