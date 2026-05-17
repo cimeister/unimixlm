@@ -1,0 +1,6 @@
+name: gemma2-2b
+
+# Highest-headroom base tokenizer in the intrinsic results
+# (Δbpb_fin ≈ 0.296 — the largest populated cell in scoreboard.csv),
+# carried at only 2.6B params. Primary model for the core sweep.
+model_name: google/gemma-2-2b

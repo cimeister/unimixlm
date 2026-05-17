@@ -246,7 +246,16 @@ def load_las_tokenizer_with_eos_pad(path, model_tokenizer):
 
 
 def infer_lora_targets(model_type: str):
-    if model_type in {"llama", "mistral", "qwen2", "gemma", "olmo", "olmo3"}:
+    if model_type in {
+        "llama",
+        "mistral",
+        "qwen2",
+        "gemma",
+        "gemma2",
+        "phi3",
+        "olmo",
+        "olmo3",
+    }:
         return [
             "q_proj",
             "k_proj",
@@ -292,10 +301,21 @@ def run_finetune(cfg):
     if model_tokenizer.pad_token is None:
         model_tokenizer.pad_token = model_tokenizer.eos_token
 
+    # Precision auto-detect: bf16 on capable GPUs (A100), fp16 on older
+    # cards without bf16 (Pascal/Maxwell local node), fp32 on CPU. Same code
+    # is correct on every tier; no per-host editing.
+    _bf16 = torch.cuda.is_available() and torch.cuda.is_bf16_supported()
+    _dtype = (
+        torch.bfloat16
+        if _bf16
+        else (torch.float16 if torch.cuda.is_available() else torch.float32)
+    )
+    logging.info(f"Precision: bf16={_bf16}, model dtype={_dtype}")
+
     model = AutoModelForCausalLM.from_pretrained(
         model_name,
         trust_remote_code=True,
-        torch_dtype=torch.bfloat16 if torch.cuda.is_available() else torch.float32,
+        torch_dtype=_dtype,
     )
 
     # ---- LAS tokenizer mode ----
@@ -316,20 +336,28 @@ def run_finetune(cfg):
         )
         tokenizer_for_lang = {lang: base_tok for lang in langs}
 
-    elif las_mode == "langspec":
+    elif las_mode in ("langspec", "placebo"):
+        # `placebo` = the langspec machinery with a scrambled score table
+        # (same vocab + IDs, permuted unigram scores). It is the causal
+        # control: it must show NO gain. Files are produced by
+        # scripts/make_placebo.py as placebo_{lang}[_Latn].json next to the
+        # langspec files, so only the filename prefix changes here.
+        prefix = "langspec" if las_mode == "langspec" else "placebo"
         if not las_dir:
-            raise ValueError("las_tokenizer_path required for las_mode='langspec'")
+            raise ValueError(
+                f"las_tokenizer_path required for las_mode='{las_mode}'"
+            )
 
         domain = str(cfg.get("domain", "natural_language"))
 
         if domain == "code":
-            # Code tokenizers: langspec_{lang}.json. English is allowed as a
-            # rehearsal slice on the code path; it has no langspec tokenizer
+            # Code tokenizers: {prefix}_{lang}.json. English is allowed as a
+            # rehearsal slice on the code path; it has no overlay tokenizer
             # so it falls back to the model tokenizer.
             non_eng_code_langs = [lang for lang in langs if lang != "eng"]
             lang_toks = {
                 lang: load_las_tokenizer_with_eos_pad(
-                    las_dir / f"langspec_{lang}.json", model_tokenizer
+                    las_dir / f"{prefix}_{lang}.json", model_tokenizer
                 )
                 for lang in non_eng_code_langs
             }
@@ -337,12 +365,12 @@ def run_finetune(cfg):
             if "eng" in langs:
                 tokenizer_for_lang["eng"] = model_tokenizer.backend_tokenizer
         else:
-            # Natural language: langspec_{lang}_Latn.json with eng special case
+            # Natural language: {prefix}_{lang}_Latn.json with eng special case
             non_eng_langs = [lang for lang in langs if lang != "eng"]
 
             lang_toks = {
                 lang: load_las_tokenizer_with_eos_pad(
-                    las_dir / f"langspec_{lang}_Latn.json", model_tokenizer
+                    las_dir / f"{prefix}_{lang}_Latn.json", model_tokenizer
                 )
                 for lang in non_eng_langs
             }
@@ -360,7 +388,8 @@ def run_finetune(cfg):
 
     else:
         raise ValueError(
-            f"Unknown las_mode: {las_mode}. Use 'original', 'base', or 'langspec'."
+            f"Unknown las_mode: {las_mode}. "
+            f"Use 'original', 'base', 'langspec', or 'placebo'."
         )
 
     if pad_token_id is None:
@@ -515,11 +544,13 @@ def run_finetune(cfg):
         remove_unused_columns=False,
         save_strategy="epoch",
         eval_strategy="steps",
-        eval_steps=300,
         logging_strategy="steps",
         logging_steps=1,
         report_to=["wandb"] if cfg.logger.enabled else [],
-        bf16=True,
+        bf16=_bf16,
+        fp16=(torch.cuda.is_available() and not _bf16),
+        gradient_checkpointing=bool(cfg.get("gradient_checkpointing", False)),
+        eval_steps=int(cfg.get("eval_steps", 300)),
         learning_rate=cfg.learning_rate,
         gradient_accumulation_steps=cfg.gradient_accumulation_steps,
         lr_scheduler_type="cosine",

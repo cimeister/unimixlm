@@ -1,0 +1,8 @@
+name: phi3-mini
+
+# Paradigm-different robustness model: 32k classic BPE vocab,
+# consistent intrinsic gain across fin/hun/tur (Δbpb ≈ 0.18).
+# NOTE: Phi-3 has no separate public *base* checkpoint; the 4k-instruct
+# weights are used. This is acceptable here because the metric is the
+# PAIRED Δ across arms on the SAME model — instruct vs base cancels.
+model_name: microsoft/Phi-3-mini-4k-instruct
