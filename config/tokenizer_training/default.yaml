@@ -46,6 +46,13 @@ data:
   # Character budget per language corpus streamed from The-Stack-10K.
   # ~5 MB gives good EM signal; reduce for quick experiments.
   char_budget: 5000000
+  # NL pipeline keys. run_las_tok_training.py reads cfg.data.lines_per_lang;
+  # the orchestrator overrides corpus_repo_template/corpus_size per sweep.
+  # Declared here so OmegaConf struct-mode `key=val` overrides are valid
+  # (Day-0 K1 surfaced their absence — see RESULTS_LEDGER).
+  lines_per_lang: 10000
+  corpus_repo_template: null
+  corpus_size: null
 
 model:
   # Seed tokenizer – byte-level models (GPT-2, StarCoder) recommended for code.
@@ -58,6 +65,9 @@ training:
   # preserves the seed (model) tokenizer's vocab size. Set to 100000, 150000,
   # or 256000 for the EMNLP vocab-size sweep.
   vocab_size: null
+  # EM re-estimation iteration count (the intrinsic-node PRIMARY frontier IV).
+  # null → trainer default num_iterations; the sweep overrides per cell.
+  iters: null
 
 hf:
   username: MultilingualUnigramLM
