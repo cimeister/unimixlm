@@ -537,12 +537,43 @@ def run_finetune(cfg):
             f"{unfrozen}"
         )
 
+    # ---- Checkpoint cadence ----
+    # num_checkpoints == 0  -> legacy: one checkpoint per epoch.
+    # num_checkpoints  > 0  -> save_strategy="steps" with save_steps spaced
+    # to land roughly that many evenly across the run. For a single-epoch
+    # 500M-token run, num_checkpoints=5 ≈ one checkpoint per ~100M tokens.
+    # The step estimate assumes single-process training (one `python
+    # run_finetune.py` per GPU, as the LangMAP launchers do); under DDP the
+    # spacing would widen by world_size but the run stays correct.
+    num_checkpoints = int(cfg.get("num_checkpoints", 0))
+    if num_checkpoints > 0:
+        import math as _math
+
+        eff_batch = int(cfg.per_device_batch_size) * int(
+            cfg.gradient_accumulation_steps
+        )
+        steps_per_epoch = max(1, _math.ceil(train_size / eff_batch))
+        total_steps = steps_per_epoch * int(cfg.epochs)
+        save_steps = max(1, total_steps // num_checkpoints)
+        save_kwargs = dict(
+            save_strategy="steps",
+            save_steps=save_steps,
+            save_total_limit=None,  # keep every milestone checkpoint
+        )
+        logging.info(
+            f"Checkpointing: {num_checkpoints} requested -> save_steps="
+            f"{save_steps} (~{total_steps} total steps, {steps_per_epoch}/epoch, "
+            f"eff_batch={eff_batch})"
+        )
+    else:
+        save_kwargs = dict(save_strategy="epoch")
+        logging.info("Checkpointing: legacy save_strategy=epoch")
+
     # ---- Trainer ----
     training_args = TrainingArguments(
         num_train_epochs=cfg.epochs,
         per_device_train_batch_size=cfg.per_device_batch_size,
         remove_unused_columns=False,
-        save_strategy="epoch",
         eval_strategy="steps",
         logging_strategy="steps",
         logging_steps=1,
@@ -557,6 +588,7 @@ def run_finetune(cfg):
         warmup_ratio=0.05,
         weight_decay=0.01,
         seed=cfg.seed,
+        **save_kwargs,
     )
     trainer = BpBTrainer(
         model=model,

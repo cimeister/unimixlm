@@ -4,9 +4,15 @@ defaults:
   - lora: r16-k32
   - _self_
 
-# langs:
-#   fil: 1.0
-#   eng: 0.2
+# Languages are supplied at the CLI as a mapping, e.g.
+#   langs="{tur:1.0,eng:0.2}"
+# Declared null here so a struct override works WITHOUT a leading '+'
+# (Hydra struct mode rejects undeclared keys). parse_langs() consumes it.
+langs: null
+
+# "natural_language" = FineWeb2 multilingual pipeline (this file's default)
+# "code"             = TheStack per-language pipeline (see code_default.yaml)
+domain: natural_language
 
 output_dir: ./finetuned_model
 
@@ -21,6 +27,18 @@ las_mode: "original"
 las_tokenizer_path: ./olmo3_las_tokenizers/las-tokenizers-Olmo-3-1025-7B-fil
 model_tokenizer_path: ./olmo3_las_tokenizers/model_tokenizer
 
+# Unfreeze embed_tokens + lm_head alongside LoRA (LangMAP runs use true).
+unfreeze_embeddings: false
+# Activation checkpointing — trades compute for memory (only if OOM).
+gradient_checkpointing: false
+# Eval cadence (optimizer steps) for the BpB metric.
+eval_steps: 300
+# Intermediate checkpoints across a single run. 0 = legacy save-per-epoch.
+# >0 = save_strategy="steps" with save_steps spaced to give roughly this
+# many evenly-spaced checkpoints over the run (e.g. 5 over a 500M-token
+# 1-epoch run ≈ one checkpoint per ~100M tokens). All checkpoints kept.
+num_checkpoints: 0
+
 seed: 42
 epochs: 1
 per_device_batch_size: 6
@@ -29,5 +47,5 @@ learning_rate: 2e-4
 val_fraction: 0.05
 
 dataset:
-  size: 100M  # Options: 5M 10M 100M
+  size: 100M  # Options: 5M 10M 50M 100M 500M
   max_seq_len: 1024
