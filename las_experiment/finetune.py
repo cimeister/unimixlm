@@ -646,6 +646,10 @@ def run_finetune(cfg):
         warmup_ratio=0.05,
         weight_decay=0.01,
         seed=cfg.seed,
+        # Weights-only periodic checkpoints (no optimizer/scheduler/rng)
+        # for dense, cheap learning-dynamics snapshots. Default false ->
+        # P1/P2 and every other caller are byte-identical.
+        save_only_model=bool(cfg.get("save_only_model", False)),
         **save_kwargs,
     )
     trainer = BpBTrainer(
@@ -658,4 +662,32 @@ def run_finetune(cfg):
     logging.info("Starting fine-tuning...")
     trainer.train()
     trainer.save_model(str(output_dir))
+    # Optional single resumable bundle: with save_only_model the periodic
+    # checkpoints carry no optimizer state, so persist ONE full state at
+    # the end (under final-full/) for continual pretraining. Gated +
+    # rank-0 only; default false -> no effect on P1/P2.
+    if bool(cfg.get("save_only_model", False)) and bool(
+        cfg.get("save_final_full_state", False)
+    ) and trainer.is_world_process_zero():
+        import os as _os
+
+        ff = _os.path.join(str(output_dir), "final-full")
+        _os.makedirs(ff, exist_ok=True)
+        trainer.save_model(ff)
+        try:
+            torch.save(
+                trainer.optimizer.state_dict(),
+                _os.path.join(ff, "optimizer.pt"),
+            )
+            if getattr(trainer, "lr_scheduler", None) is not None:
+                torch.save(
+                    trainer.lr_scheduler.state_dict(),
+                    _os.path.join(ff, "scheduler.pt"),
+                )
+            trainer.state.save_to_json(
+                _os.path.join(ff, "trainer_state.json")
+            )
+            logging.info(f"Saved resumable final-full state -> {ff}")
+        except Exception as e:  # noqa: BLE001
+            logging.warning(f"final-full state save failed: {e}")
     logging.info("Fine-tuning complete.")

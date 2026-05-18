@@ -33,6 +33,14 @@ unfreeze_embeddings: false
 # true (with unfreeze_embeddings) or the trained embeddings are dropped
 # at save time. Declared here so struct overrides need no leading '+'.
 save_embeddings: false
+# Learning-dynamics checkpointing: when true, periodic checkpoints are
+# weights-only (no optimizer/scheduler/rng) — small, ideal for many
+# downstream-eval snapshots. Default false (P1/P2 unaffected).
+save_only_model: false
+# With save_only_model, also persist ONE resumable bundle (optimizer +
+# scheduler + trainer_state + rng) under <output_dir>/final-full/ at end
+# of training so continual pretraining (e.g. 100M->500M) stays possible.
+save_final_full_state: false
 # Activation checkpointing — trades compute for memory (only if OOM).
 gradient_checkpointing: false
 # Eval cadence (optimizer steps) for the BpB metric.

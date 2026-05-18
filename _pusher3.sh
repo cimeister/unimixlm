@@ -32,8 +32,11 @@ while true; do
     hf repo create "$repo" --repo-type model -y >/dev/null 2>&1 || true
     if hf upload "$repo" "$ck" "$cstep" --repo-type model \
          >>"$SHM/logs/pusher3.log" 2>&1; then
-      touch "$ck/.pushed"
-      echo "[pusher3][$(date -u +%T)] OK $repo/$cstep"
+      echo "[pusher3][$(date -u +%T)] OK $repo/$cstep (freeing local)"
+      # Dense weights-only ckpts -> delete after a confirmed push so
+      # /dev/shm never fills. It's already on HF; end-of-cell RUN_DIR
+      # upload covers root model + final-full/ (not checkpoint-* dirs).
+      rm -rf "$ck"
     else
       echo "[pusher3][$(date -u +%T)] retry-later $repo/$cstep"
     fi

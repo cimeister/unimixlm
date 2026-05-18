@@ -80,8 +80,9 @@ ARGS=(
   model_tokenizer_path="./_modeltok_${MODEL}"
   langs="{${LANG}:1.0,eng:0.2}"
   dataset.size="$SIZE" dataset.max_seq_len=1024
-  num_checkpoints="${NUM_CKPT:-10}"
+  num_checkpoints="${NUM_CKPT:-20}"
   unfreeze_embeddings=true save_embeddings=true gradient_checkpointing=false
+  save_only_model=true save_final_full_state=true
   epochs=1 seed=42 logger.enabled=false
   output_dir="$OUTDIR"
   hydra.job.chdir=False hydra.output_subdir=null

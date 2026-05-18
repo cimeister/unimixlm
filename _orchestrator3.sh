@@ -14,7 +14,9 @@
 set -uo pipefail
 cd /workspace/unimixlm
 source ./_driver_env.sh
-export NUM_CKPT=10
+# ~20 weights-only checkpoints/run ≈ one per ~5M tokens for downstream
+# learning-dynamics analysis (+ a single final-full resumable bundle).
+export NUM_CKPT=20
 SIZE=100M; LORA=r16-k32
 
 # Longest-job-first (LPT): the slower gemma2-2b cells first so the final
