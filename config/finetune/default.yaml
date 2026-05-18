@@ -29,6 +29,10 @@ model_tokenizer_path: ./olmo3_las_tokenizers/model_tokenizer
 
 # Unfreeze embed_tokens + lm_head alongside LoRA (LangMAP runs use true).
 unfreeze_embeddings: false
+# Persist the unfrozen embed/LM-head via PEFT modules_to_save. Must be
+# true (with unfreeze_embeddings) or the trained embeddings are dropped
+# at save time. Declared here so struct overrides need no leading '+'.
+save_embeddings: false
 # Activation checkpointing — trades compute for memory (only if OOM).
 gradient_checkpointing: false
 # Eval cadence (optimizer steps) for the BpB metric.

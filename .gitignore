@@ -92,3 +92,5 @@ slurm-*.err
 # =========================
 *.sqlite
 *.db
+# Secret: HF token lives here — never commit
+_driver_env.sh

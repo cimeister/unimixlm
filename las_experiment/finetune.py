@@ -52,6 +52,27 @@ def parse_langs(raw_langs):
     return lang_codes, lang_proportions
 
 
+def resolve_fineweb2_lang(lang: str, size: str):
+    """(repo, config) for a FineWeb2 language slice as actually published.
+
+    Hub layout (verified): every non-English language is its own repo
+    ``FineWeb2-<lang>_Latn-<size>`` with a single default ``train`` split
+    and no named config; English lives as the ``eng_Latn`` config of the
+    multi-language ``FineWeb2-100M-olmo3-7b-toks`` repo. (The old
+    ``FineWeb2-<size>`` single-repo-with-configs layout the code assumed
+    only ever existed for a different language set.)
+    """
+    size = size.upper()
+    if lang == "eng":
+        return "MultilingualUnigramLM/FineWeb2-100M-olmo3-7b-toks", "eng_Latn"
+    # The 500M slices were published with the inverse name ordering
+    # (FineWeb2-500M-<lang>_Latn) versus the 100M layout
+    # (FineWeb2-<lang>_Latn-100M); honour both.
+    if size == "500M":
+        return f"MultilingualUnigramLM/FineWeb2-500M-{lang}_Latn", None
+    return f"MultilingualUnigramLM/FineWeb2-{lang}_Latn-{size}", None
+
+
 def resolve_fineweb2_dataset(size: str) -> str:
     size = size.upper()
     if size == "5M":
@@ -252,6 +273,8 @@ def infer_lora_targets(model_type: str):
         "qwen2",
         "gemma",
         "gemma2",
+        "gemma3",
+        "gemma3_text",
         "phi3",
         "olmo",
         "olmo3",
@@ -417,13 +440,17 @@ def run_finetune(cfg):
         elif domain == "code" and lang == "eng":
             # English rehearsal on the code path: pull the same FineWeb2 slice
             # used by the NL path so the model retains general-text fluency.
-            hf_name = resolve_fineweb2_dataset(dataset_size)
+            hf_name, cfg_name = resolve_fineweb2_lang("eng", dataset_size)
             logging.info(f"Loading {hf_name} :: eng_Latn (code-path English rehearsal)")
-            ds = load_dataset(hf_name, "eng_Latn", split="train", streaming=False)
+            ds = load_dataset(hf_name, cfg_name, split="train", streaming=False)
         else:
-            hf_name = resolve_fineweb2_dataset(dataset_size)
-            logging.info(f"Loading {hf_name} :: {lang}_Latn")
-            ds = load_dataset(hf_name, f"{lang}_Latn", split="train", streaming=False)
+            hf_name, cfg_name = resolve_fineweb2_lang(lang, dataset_size)
+            logging.info(f"Loading {hf_name} :: {cfg_name or 'train'}")
+            ds = (
+                load_dataset(hf_name, cfg_name, split="train", streaming=False)
+                if cfg_name
+                else load_dataset(hf_name, split="train", streaming=False)
+            )
 
         texts = [x["text"] for x in ds]
         if not texts:
@@ -516,13 +543,21 @@ def run_finetune(cfg):
         if cfg.lora.target_modules
         else infer_lora_targets(model.config.model_type)
     )
-    lora_config = LoraConfig(
+    lora_kwargs = dict(
         r=cfg.lora.r,
         lora_alpha=cfg.lora.alpha,
         lora_dropout=cfg.lora.dropout,
         target_modules=lora_targets,
         task_type=TaskType.CAUSAL_LM,
     )
+    # save_embeddings=true => register embed/LM-head as modules_to_save so
+    # PEFT actually serialises them. Without this, unfreeze_embeddings only
+    # sets requires_grad and trainer.save_model() (PEFT) drops the trained
+    # embeddings — the adapter-only artifact bug. Gated + absent-by-default
+    # so existing runs are byte-for-byte unchanged.
+    if cfg.get("save_embeddings", False):
+        lora_kwargs["modules_to_save"] = ["embed_tokens", "lm_head"]
+    lora_config = LoraConfig(**lora_kwargs)
     model = get_peft_model(model, lora_config)
 
     # ---- Optionally unfreeze embedding + LM head alongside LoRA ----
@@ -571,6 +606,13 @@ def run_finetune(cfg):
 
     # ---- Trainer ----
     training_args = TrainingArguments(
+        # MUST set output_dir: without it HF Trainer defaults to a
+        # CWD-relative "trainer_output/", so intermediate checkpoints
+        # (a) land on the tiny 20G volume, and (b) collide across
+        # concurrent cells sharing the repo CWD. Pin it to the unique
+        # per-cell dir so checkpoints are isolated and on /dev/shm
+        # where the pusher uploads them.
+        output_dir=str(output_dir),
         num_train_epochs=cfg.epochs,
         per_device_train_batch_size=cfg.per_device_batch_size,
         remove_unused_columns=False,
