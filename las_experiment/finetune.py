@@ -572,6 +572,23 @@ def run_finetune(cfg):
             f"{unfrozen}"
         )
 
+    # ---- Distributed (DDP) awareness ----
+    # Under torchrun WORLD_SIZE>1. Hold the GLOBAL effective batch
+    # invariant by shrinking grad-accum by world_size, so DDP results
+    # stay comparable to single-GPU AND the checkpoint cadence (computed
+    # from the global batch below) is independent of world_size — i.e.
+    # num_checkpoints still lands evenly over the token budget.
+    _world_size = int(os.environ.get("WORLD_SIZE", "1") or "1")
+    _grad_accum = int(cfg.gradient_accumulation_steps)
+    if _world_size > 1:
+        _grad_accum = max(1, _grad_accum // _world_size)
+        logging.info(
+            f"DDP world_size={_world_size}: grad_accum "
+            f"{int(cfg.gradient_accumulation_steps)} -> {_grad_accum} "
+            f"(global effective batch held constant)"
+        )
+    _global_batch = int(cfg.per_device_batch_size) * _grad_accum * _world_size
+
     # ---- Checkpoint cadence ----
     # num_checkpoints == 0  -> legacy: one checkpoint per epoch.
     # num_checkpoints  > 0  -> save_strategy="steps" with save_steps spaced
@@ -584,9 +601,7 @@ def run_finetune(cfg):
     if num_checkpoints > 0:
         import math as _math
 
-        eff_batch = int(cfg.per_device_batch_size) * int(
-            cfg.gradient_accumulation_steps
-        )
+        eff_batch = _global_batch  # true global batch (DDP-aware)
         steps_per_epoch = max(1, _math.ceil(train_size / eff_batch))
         total_steps = steps_per_epoch * int(cfg.epochs)
         save_steps = max(1, total_steps // num_checkpoints)
@@ -625,7 +640,8 @@ def run_finetune(cfg):
         gradient_checkpointing=bool(cfg.get("gradient_checkpointing", False)),
         eval_steps=int(cfg.get("eval_steps", 300)),
         learning_rate=cfg.learning_rate,
-        gradient_accumulation_steps=cfg.gradient_accumulation_steps,
+        gradient_accumulation_steps=_grad_accum,
+        ddp_find_unused_parameters=(_world_size > 1),
         lr_scheduler_type="cosine",
         warmup_ratio=0.05,
         weight_decay=0.01,

@@ -15,7 +15,11 @@ cd /workspace/unimixlm
 source ./_driver_env.sh
 source .venv/bin/activate
 
-GPU="$1"; MODEL="$2"; LANG="$3"; SIZE="$4"; LORA="$5"   # LORA = hydra group, e.g. r64-k128
+GPUS="$1"; MODEL="$2"; LANG="$3"; SIZE="$4"; LORA="$5"  # GPUS = CSV, e.g. "0,1"
+GPU="$GPUS"                                              # used in labels/manifest
+NPROC="$(awk -F, '{print NF}' <<< "$GPUS")"              # GPUs in this cell
+FIRST_GPU="${GPUS%%,*}"
+MASTER_PORT=$(( 29500 + FIRST_GPU ))                     # unique per GPU-pair
 LORATAG="${LORA//-/}"                                    # r64-k128 -> r64k128
 TAG="${MODEL}_${LANG}_original_${SIZE}_${LORATAG}_s42"
 MAN="$RUNS/${TAG}.json"
@@ -27,7 +31,7 @@ mkdir -p "$OUTDIR" "$RUNS"
 
 manifest() {
   local st="$1"; shift
-  { printf '{"tag":"%s","phase":"2","model":"%s","lang":"%s","gpu":%s,"size":"%s","lora":"%s","hf_repo":"%s","status":"%s","ts":%s' \
+  { printf '{"tag":"%s","phase":"2","model":"%s","lang":"%s","gpu":"%s","size":"%s","lora":"%s","hf_repo":"%s","status":"%s","ts":%s' \
       "$TAG" "$MODEL" "$LANG" "$GPU" "$SIZE" "$LORATAG" "$HF_REPO" "$st" "$(date +%s)"
     while [ "$#" -ge 2 ]; do printf ',"%s":"%s"' "$1" "$2"; shift 2; done
     printf '}\n'; } > "$MAN"
@@ -52,16 +56,29 @@ then
 echo "[GPU$GPU][$(date -u +%T)] START $TAG -> $HF_REPO"
 manifest started
 
-CUDA_VISIBLE_DEVICES="$GPU" python3 run_finetune.py \
-  model="$MODEL" lora="$LORA" \
-  las_mode=original las_tokenizer_path=null \
-  model_tokenizer_path="./_modeltok_${MODEL}" \
-  langs="{${LANG}:1.0,eng:0.2}" \
-  dataset.size="$SIZE" dataset.max_seq_len=1024 \
-  num_checkpoints="${NUM_CKPT:-12}" \
-  unfreeze_embeddings=true save_embeddings=true gradient_checkpointing=false \
-  epochs=1 seed=42 logger.enabled=false \
-  output_dir="$OUTDIR" > "$LOG" 2>&1
+ARGS=(
+  model="$MODEL" lora="$LORA"
+  las_mode=original las_tokenizer_path=null
+  model_tokenizer_path="./_modeltok_${MODEL}"
+  langs="{${LANG}:1.0,eng:0.2}"
+  dataset.size="$SIZE" dataset.max_seq_len=1024
+  num_checkpoints="${NUM_CKPT:-10}"
+  unfreeze_embeddings=true save_embeddings=true gradient_checkpointing=false
+  epochs=1 seed=42 logger.enabled=false
+  output_dir="$OUTDIR"
+  # DDP-safe Hydra: no per-rank chdir, no .hydra dir / log-file races
+  hydra.job.chdir=False hydra.output_subdir=null
+  hydra/job_logging=disabled hydra/hydra_logging=disabled
+  hydra.run.dir="/tmp/hyd_${TAG}"
+)
+if [[ "$NPROC" -gt 1 ]]; then
+  echo "[GPU$GPU][$(date -u +%T)] DDP torchrun nproc=$NPROC port=$MASTER_PORT"
+  CUDA_VISIBLE_DEVICES="$GPUS" python3 -m torch.distributed.run \
+    --nproc_per_node="$NPROC" --master_port="$MASTER_PORT" \
+    run_finetune.py "${ARGS[@]}" > "$LOG" 2>&1
+else
+  CUDA_VISIBLE_DEVICES="$GPUS" python3 run_finetune.py "${ARGS[@]}" > "$LOG" 2>&1
+fi
 rc=$?
 if [[ $rc -ne 0 ]]; then
   echo "[GPU$GPU][FAIL rc=$rc] $TAG (see $LOG)"

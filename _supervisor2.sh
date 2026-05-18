@@ -7,12 +7,13 @@
 # orchestrator `wait`s on all workers incl. uploads before it exits, so
 # "no _orchestrator.sh + no _supervisor.sh + no GPU compute procs" means
 # Phase-1 has released the hardware. Then it (re)launches
-# _orchestrator2.sh until all 9 Phase-2 cells are completed. Resumable:
+# _orchestrator2.sh until all Phase-2 cells (TARGET) are completed.
+# Resumable:
 # completed / already-on-HF cells skip; bounded passes.
 set -uo pipefail
 cd /workspace/unimixlm
 source ./_driver_env.sh
-TARGET=9
+TARGET=2
 MAX_PASSES="${MAX_PASSES:-6}"
 POLL="${POLL:-30}"
 
