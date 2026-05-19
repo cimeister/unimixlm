@@ -23,9 +23,10 @@ while true; do
     loratag="$(basename "$(dirname "$run_dir")")"
     arm="$(basename "$(dirname "$(dirname "$run_dir")")")"
     model="$(basename "$(dirname "$(dirname "$(dirname "$run_dir")")")")"
-    base="$(basename "$run_dir")"; base="${base#ft_}" # <lang>-eng_<size>
-    lang="${base%%-*}"
-    size="${base##*_}"
+    base="$(basename "$run_dir")"          # ft-las-<arm>_<lang>-eng_<size>
+    tmp="${base#*_}"                       # <lang>-eng_<size>
+    lang="${tmp%%-*}"                      # <lang>  (was wrongly "ft")
+    size="${base##*_}"                     # <size>
     repo="${HF_ORG}/ft-langmap-${model}-fineweb${size}-${lang}-${arm}-${loratag}"
     cstep="$(basename "$ck")"
     echo "[pusher4][$(date -u +%T)] $model/$arm/$loratag/$lang/$size $cstep -> $repo"
