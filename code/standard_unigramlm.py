@@ -145,7 +145,6 @@ class StandardUnigramLMTokenizer:
         multigram: bool = False,
         mixture_weights: Optional[Dict[str, float]] = None,
         byte_level: bool = True,
-        whitespace_token_boundaries: bool = False,
         min_char_occurence_threshold: Optional[int] = None,
         dataset_size_normalization: bool = True,
         use_intersection_pruning: bool = False,
@@ -156,6 +155,8 @@ class StandardUnigramLMTokenizer:
         use_sp_seed_vocab: bool = True,
         use_sp_em: bool = True,
         target_vocab_size: Optional[int] = None,
+        pretokenizer: Optional[Any] = None,
+        decoder_override: Optional[Any] = None,
     ) -> None:
         """
         Initialize StandardUnigramLMTokenizer.
@@ -169,7 +170,6 @@ class StandardUnigramLMTokenizer:
             multigram: Whether to use multigram mode (per-language distributions)
             mixture_weights: Language mixture weights for multigram mode
             byte_level: Whether to use byte-level tokenization
-            whitespace_token_boundaries: Whether to use whitespace as token boundaries
             min_char_occurence_threshold: Minimum character occurrence threshold
             dataset_size_normalization: Whether to normalize loss by dataset size in multigram mode.
                 When True, prevents bias toward larger datasets during pruning. Recommended for
@@ -191,13 +191,14 @@ class StandardUnigramLMTokenizer:
         self.unk_token = unk_token
         self.special_tokens = special_tokens or list(constants.SPECIAL_TOKENS.values())
         self.byte_level = byte_level
-        self.whitespace_token_boundaries = whitespace_token_boundaries
         self.min_char_occurence_threshold = min_char_occurence_threshold
         if not self.min_char_occurence_threshold:
             self.min_char_occurence_threshold = constants.MIN_CHAR_OCCURENCE_THRESHOLD
 
         self.base_tokenizer = None
         self.parent_tokenizer = None
+        self._pretokenizer_override = pretokenizer
+        self._decoder_override = decoder_override
         self.em_mode = em_mode
         self.num_iterations = num_iterations
         self.multigram = multigram
@@ -725,17 +726,22 @@ class StandardUnigramLMTokenizer:
             text_files = list(corpus_info.values()) if per_lang else corpus_files
 
             num_workers = min(min(os.cpu_count() or 1, 20), len(text_files))
-            logger.info(f"Using {num_workers} worker processes.")
+            logger.info(f"Using {num_workers} worker threads.")
 
             # Prepare arguments for each worker
+            # Include normalizer from parent tokenizer if available (e.g., NFC for Qwen3)
+            # Use ThreadPoolExecutor instead of multiprocessing.Pool because
+            # some normalizers (e.g., Gemma's Replace) can't be pickled.
+            normalizer = self.parent_tokenizer.normalizer if self.parent_tokenizer else None
             worker_args = [
-                (path, self._temp_dir, self._get_pretokenizer(), i)
+                (path, self._temp_dir, self._get_pretokenizer(), i, normalizer)
                 for i, path in enumerate(text_files)
             ]
 
-            with multiprocessing.Pool(processes=num_workers) as pool:
+            from concurrent.futures import ThreadPoolExecutor
+            with ThreadPoolExecutor(max_workers=num_workers) as executor:
                 # preserves order of input
-                processed_file_paths = pool.map(_process_file_worker, worker_args)
+                processed_file_paths = list(executor.map(_process_file_worker, worker_args))
                 processed_mapping = {
                     orig: processed
                     for orig, processed in zip(text_files, processed_file_paths)
@@ -1039,7 +1045,6 @@ class StandardUnigramLMTokenizer:
                     state.per_lang_lprobs[lc],
                     self.unk_token,
                     mode=self.em_mode,
-                    whitespace_boundaries=self.whitespace_token_boundaries,
                     pretokenizer=self._get_pretokenizer(),
                 )
                 for tk, v in c_dict.items():
@@ -1074,7 +1079,6 @@ class StandardUnigramLMTokenizer:
                     state.global_lprobs,
                     self.unk_token,
                     mode=self.em_mode,
-                    whitespace_boundaries=self.whitespace_token_boundaries,
                     pretokenizer=self._get_pretokenizer(),
                 )
                 for tk, v in c_dict.items():
@@ -1501,7 +1505,7 @@ class StandardUnigramLMTokenizer:
                     f"--model_prefix={out_prefix}",
                     f"--seed_sentencepiece_size={seed_vocab_size}",
                     f"--max_sentencepiece_length={constants.MAX_BYTE_TOKEN_LEN if self.byte_level else constants.MAX_CHAR_TOKEN_LEN}",
-                    f"--split_by_whitespace={'true' if self.whitespace_token_boundaries else 'false'}",
+                    "--split_by_whitespace=false",
                     # -----------------------
                     "--num_sub_iterations=0",
                     f"--unk_piece={self.unk_token}",
@@ -1827,6 +1831,13 @@ class StandardUnigramLMTokenizer:
                 pretokenizer=self._get_pretokenizer(),
                 decoder=self._get_decoder(),
             )
+        tok = _build_unigramlm_hf_tokenizer_from_lprobs(
+            vocab_list,
+            unk_id,
+            pretokenizer=self._get_pretokenizer(),
+            decoder=self._get_decoder(),
+            base_tokenizer=self.parent_tokenizer,
+        )
         self.base_tokenizer = tok
         if output_path:
             Path(output_path).parent.mkdir(parents=True, exist_ok=True)
@@ -1835,8 +1846,41 @@ class StandardUnigramLMTokenizer:
             # Add metadata to the saved JSON
             self._save_tokenizer_metadata_file(output_path)
 
+            # Verify the saved tokenizer's pretokenizer matches what was used
+            # during training. Catches post-hoc patching bugs.
+            self._verify_saved_pretokenizer(output_path)
+
             logger.info("Tokenizer with metadata saved to %s", output_path)
         return tok
+
+    def _verify_saved_pretokenizer(self, output_path: str):
+        """Verify that the saved tokenizer's pretokenizer matches the one used
+        during training. Prevents bugs where the pretokenizer is patched after
+        saving, causing a train/inference mismatch."""
+        import json as _json
+
+        training_pretok = self._get_pretokenizer()
+        if training_pretok is None:
+            return
+
+        # Serialize the training pretokenizer to JSON for comparison
+        tmp_tok = Tokenizer(Unigram())
+        tmp_tok.pre_tokenizer = training_pretok
+        training_pretok_json = _json.loads(tmp_tok.to_str()).get("pre_tokenizer")
+
+        # Load what was actually saved to disk
+        with open(output_path, "r", encoding="utf-8") as f:
+            saved_data = _json.load(f)
+        saved_pretok_json = saved_data.get("pre_tokenizer")
+
+        assert training_pretok_json == saved_pretok_json, (
+            f"Saved tokenizer pretokenizer does not match training pretokenizer!\n"
+            f"Training: {_json.dumps(training_pretok_json, indent=2)}\n"
+            f"Saved:    {_json.dumps(saved_pretok_json, indent=2)}\n"
+            f"This indicates the tokenizer was modified after saving, which "
+            f"causes a train/inference mismatch."
+        )
+        logger.info("✓ Saved pretokenizer matches training pretokenizer")
 
     def _get_tokenizer_type(self):
         """Determine tokenizer type string"""
@@ -1854,6 +1898,10 @@ class StandardUnigramLMTokenizer:
         # (the closest HF analogue) so EM corpus processing still has a
         # non-None pretok object to call ``pre_tokenize_str`` on.
         if self.parent_tokenizer is not None and self.parent_tokenizer.pre_tokenizer is not None:
+        if self._pretokenizer_override:
+            logger.info("Using provided pretokenizer override")
+            return self._pretokenizer_override
+        if self.parent_tokenizer:
             logger.info("Using pretokenizer from parent tokenizer")
             return self.parent_tokenizer.pre_tokenizer
         if self.base_tokenizer is not None and self.base_tokenizer.pre_tokenizer is not None:
@@ -1862,7 +1910,7 @@ class StandardUnigramLMTokenizer:
         if self.byte_level:
             logger.info("Using byte-level pretokenizer")
             return pre_tokenizers.ByteLevel(
-                add_prefix_space=True, use_regex=self.whitespace_token_boundaries
+                add_prefix_space=True, use_regex=False
             )
         if self.whitespace_token_boundaries:
             logger.info("Using whitespace pretokenizer")
@@ -1873,6 +1921,15 @@ class StandardUnigramLMTokenizer:
 
     def _get_decoder(self):
         if self.parent_tokenizer is not None and self.parent_tokenizer.decoder is not None:
+        else:
+            logger.info("No pretokenizer found")
+            return None
+
+    def _get_decoder(self):
+        if self._decoder_override:
+            logger.info("Using provided decoder override")
+            return self._decoder_override
+        if self.parent_tokenizer:
             logger.info("Using decoder from parent tokenizer")
             return self.parent_tokenizer.decoder
         if self.base_tokenizer is not None and self.base_tokenizer.decoder is not None:
@@ -1977,6 +2034,9 @@ class StandardUnigramLMTokenizer:
             len(pieces),
         )
         return pieces
+        else:
+            logger.info("No HF decoder found")
+            return None
 
     # ------------------------------------------------------------------
     # 7. metadata collection

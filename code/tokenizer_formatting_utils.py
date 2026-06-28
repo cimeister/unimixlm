@@ -21,15 +21,20 @@ logger = logging.getLogger(__name__)
 # ---------------------------------------------------------------------------
 # HF helpers
 # ---------------------------------------------------------------------------
-def _apply_pretok_mapping_hf(
-    text: str, pretok: Any, return_individual_pieces: bool = False
-) -> str:
+def _apply_pretok_mapping_hf(text: str, pretok: Any, normalizer: Any = None) -> list:
+    """Apply optional normalization and pretokenizer, return individual pieces.
 
+    The pretokenizer is the authority on how to split text (word boundaries,
+    whitespace, regex patterns, etc.). Always returns a list of pieces.
+
+    If a normalizer is provided (e.g., NFC for Qwen3), it is applied to the
+    text before pretokenization. This ensures the EM training corpus matches
+    what the tokenizer sees at inference time.
+    """
+    if normalizer is not None:
+        text = normalizer.normalize_str(text)
     normalized = pretok.pre_tokenize_str(text)
-    pieces = [piece[0] for piece in normalized]
-    if return_individual_pieces:
-        return pieces
-    return ["".join(pieces)]
+    return [piece[0] for piece in normalized]
 
 
 def _hf_to_sp_piece(token: str) -> str:
@@ -105,7 +110,7 @@ def _get_hf_unigram_tokenizer_vocab(tokenizer):
     return vocab
 
 
-def write_hf_bytelevel_corpus(in_path: str, out_path: str, pretok: Any):
+def write_hf_bytelevel_corpus(in_path: str, out_path: str, pretok: Any, normalizer: Any = None):
     """Convert raw UTF-8 text to HF-style text (e.g., with 'Ġ' markers)."""
     # TODO: make sure this works for larger corpora
     with (
@@ -115,15 +120,14 @@ def write_hf_bytelevel_corpus(in_path: str, out_path: str, pretok: Any):
         for line in fin:
             line = line.rstrip("\n")
             # Pre-tokenize to HF pieces, then concatenate the HF strings.
-            pieces = _apply_pretok_mapping_hf(
-                line, pretok, return_individual_pieces=True
-            )
+            pieces = _apply_pretok_mapping_hf(line, pretok, normalizer)
             # The pieces already contain 'Ġ' where spaces were in the *raw* text
             fout.write("".join(pieces) + "\n")
 
 
 def write_hf_bytelevel_corpus_optimized(
-    in_path: str, out_path: str, pretok: Any, chunk_size_bytes: int = 1024 * 1024
+    in_path: str, out_path: str, pretok: Any, chunk_size_bytes: int = 1024 * 1024,
+    normalizer: Any = None,
 ):
     """
     An optimized version of the corpus writing function that reads and writes
@@ -135,6 +139,8 @@ def write_hf_bytelevel_corpus_optimized(
         pretok (Any): A HuggingFace pre-tokenizer object.
         chunk_size_bytes (int): The approximate size of chunks (in bytes) to
                                 read from the input file at a time.
+        normalizer (Any): Optional HF normalizer (e.g., NFC). Applied to text
+                          before pretokenization to match inference behavior.
     """
     logger.info(
         f"Processing {os.path.basename(in_path)} -> {os.path.basename(out_path)}"
@@ -156,9 +162,7 @@ def write_hf_bytelevel_corpus_optimized(
             # processed lines in memory at once.
             processed_lines_generator = (
                 "".join(
-                    _apply_pretok_mapping_hf(
-                        line.rstrip("\n"), pretok, return_individual_pieces=True
-                    )
+                    _apply_pretok_mapping_hf(line.rstrip("\n"), pretok, normalizer)
                 )
                 + "\n"
                 for line in lines
@@ -171,16 +175,20 @@ def write_hf_bytelevel_corpus_optimized(
     logger.info(f"Finished processing {os.path.basename(in_path)}")
 
 
-def _process_file_worker(args: Tuple[str, str, Any]) -> str:
+def _process_file_worker(args) -> str:
     """
     Helper function for multiprocessing.Pool. It unpacks arguments to call
     the optimized processing function. This function must be at the top level
     of the module so it can be pickled.
     """
-    train_file, output_dir, pretok, i = args
+    if len(args) == 5:
+        train_file, output_dir, pretok, i, normalizer = args
+    else:
+        train_file, output_dir, pretok, i = args
+        normalizer = None
     base_name = os.path.basename(train_file)
     output_file_path = os.path.join(output_dir, f"processed_{i}_{base_name}")
-    write_hf_bytelevel_corpus_optimized(train_file, output_file_path, pretok)
+    write_hf_bytelevel_corpus_optimized(train_file, output_file_path, pretok, normalizer=normalizer)
     return output_file_path
 
 
@@ -284,6 +292,8 @@ def _write_sp_seed_vocab_file(
                 weight = 1.0
             n = max(1, int(round(weight)))
             f.write(f"{t}\t{n}\n")
+                continue  # Skip tokens with tab/newline — incompatible with TSV format
+            f.write(f"{t}\t{score}\n")
             count += 1
     return count
 
