@@ -4,8 +4,12 @@ defaults:
   - logger: wandb-andrzej
   - lora: r64-k128
 
-langs:
-  afr: 1.0
+# Languages are supplied at the CLI, either as a list (langs=[eng,tur], all
+# proportion 1.0) or a mapping (langs="{tur:1.0,eng:0.2}"). Declared null so a
+# mapping override with new keys works in Hydra struct mode WITHOUT '+'
+# (a typed dict default rejects unknown keys on merge). parse_langs consumes it;
+# finetune.py raises if langs is empty/null.
+langs: null
 
 output_dir: /iopsstor/scratch/cscs/cmeister747/unimix_ckpts
 
