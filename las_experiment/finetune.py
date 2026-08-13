@@ -267,15 +267,34 @@ def _resolve_embed_modules(model):
 
 
 def resolve_fineweb2_dataset(size: str) -> str:
+    raise RuntimeError(
+        "resolve_fineweb2_dataset is retired: it encoded the old single-repo "
+        "hub layout (FineWeb2-100M-gpt2-toks) which no longer matches what is "
+        "published. Use resolve_fineweb2_lang(lang, size) instead."
+    )
+
+
+def resolve_fineweb2_lang(lang: str, size: str):
+    """(repo, config) for a FineWeb2 language slice as actually published.
+
+    Hub layout (verified 2026-08-13): every non-English language is its own
+    repo ``FineWeb2-<lang>_Latn-<size>`` with a single default ``train`` split
+    and no named config; English lives as the ``eng_Latn`` config of the
+    multi-language ``FineWeb2-100M-olmo3-7b-toks`` repo. Ported verbatim from
+    the suchir-code-tok branch so reruns load the exact repos its runs used.
+    """
     size = size.upper()
-    if size == "5M":
-        return "MultilingualUnigramLM/FineWeb2-5M"
-    elif size == "10M":
-        return "MultilingualUnigramLM/FineWeb2-10M"
-    elif size == "100M":
-        return "MultilingualUnigramLM/FineWeb2-100M-gpt2-toks"
-    else:
-        raise ValueError(f"Invalid FineWeb2 size: {size} (use '5M', '10M' or '100M')")
+    if lang == "eng":
+        if size != "100M":
+            raise ValueError(
+                f"resolve_fineweb2_lang: only a 100M eng slice is published "
+                f"(FineWeb2-100M-olmo3-7b-toks); refusing to pair size={size!r} "
+                f"non-eng data with a 100M eng slice."
+            )
+        return "MultilingualUnigramLM/FineWeb2-100M-olmo3-7b-toks", "eng_Latn"
+    if size == "500M":
+        return f"MultilingualUnigramLM/FineWeb2-500M-{lang}_Latn", None
+    return f"MultilingualUnigramLM/FineWeb2-{lang}_Latn-{size}", None
 
 
 def _parse_size_spec(size) -> tuple[str, int | None]:
@@ -684,6 +703,14 @@ class BpBTrainer(Trainer):
         return loss
 
     def prediction_step(self, model, inputs, prediction_loss_only, ignore_keys=None):
+        # Load-bearing ordering: popping num_bytes HERE (before the super()
+        # call) is what keeps compute_loss safe under eval. The base
+        # Trainer.prediction_step internally re-dispatches to our
+        # compute_loss with return_outputs=True, where super().compute_loss
+        # returns a (loss, outputs) TUPLE; because num_bytes was already
+        # popped, compute_loss's `num_bytes is not None` guard skips the
+        # accumulation block, so tuple.item() is never attempted. Verified
+        # against transformers 4.57.5 and 5.3.0 (trainer.py re-dispatch).
         num_bytes = inputs.pop("num_bytes", None)
         labels = inputs.get("labels")
 
@@ -897,10 +924,15 @@ def run_finetune(cfg):
         )
         tokenizer_for_lang = {lang: pp_tok for lang in langs}
 
-    elif las_mode == "langspec":
+    elif las_mode in ("langspec", "placebo"):
+        # "placebo" = langspec machinery with a scrambled score table
+        # (scripts/make_placebo.py): same vocab, same IDs, permuted Unigram
+        # scores. Control arm separating language-specific re-weighting from
+        # any-segmentation-perturbation-plus-finetuning.
         if not las_dir:
-            raise ValueError("las_tokenizer_path required for las_mode='langspec'")
+            raise ValueError(f"las_tokenizer_path required for las_mode='{las_mode}'")
 
+        file_prefix = "langspec" if las_mode == "langspec" else "placebo"
         lang_suffix = getattr(cfg.dataset, "lang_suffix", "_Latn")
 
         # English is a special case: use the original model tokenizer
@@ -908,7 +940,7 @@ def run_finetune(cfg):
 
         lang_toks = {
             lang: load_las_tokenizer_with_eos_pad(
-                las_dir / f"langspec_{lang}{lang_suffix}.json", model_tokenizer
+                las_dir / f"{file_prefix}_{lang}{lang_suffix}.json", model_tokenizer
             )
             for lang in non_eng_langs
         }
@@ -927,7 +959,7 @@ def run_finetune(cfg):
 
     else:
         raise ValueError(
-            f"Unknown las_mode: {las_mode}. Use 'original', 'base', 'pathpiece', or 'langspec'."
+            f"Unknown las_mode: {las_mode}. Use 'original', 'base', 'pathpiece', 'langspec', or 'placebo'."
         )
 
     if pad_token_id is None:
@@ -1014,11 +1046,18 @@ def run_finetune(cfg):
             lang_heldout_texts[lang] = heldout_texts
             lang_heldout_manifests[lang] = manifest
         else:
-            HF_DATASET_NAME = resolve_fineweb2_dataset(dataset_size)
-            resolved_lang_paths[lang] = f"hf://{HF_DATASET_NAME}::{lang}{lang_suffix}"
-            logging.info(f"Loading {HF_DATASET_NAME} :: {lang}{lang_suffix}")
-            ds = load_dataset(
-                HF_DATASET_NAME, f"{lang}{lang_suffix}", split="train", streaming=False
+            # Published hub layout (see resolve_fineweb2_lang): per-language
+            # repos FineWeb2-<lang>_Latn-<size>; eng is the eng_Latn config of
+            # the multi-language FineWeb2-100M-olmo3-7b-toks repo. This is the
+            # layout the PR #21 branch runs trained on; using the same repos
+            # keeps rerun data identical to those runs.
+            hf_name, hf_cfg = resolve_fineweb2_lang(lang, dataset_size)
+            resolved_lang_paths[lang] = f"hf://{hf_name}::{hf_cfg or 'train'}"
+            logging.info(f"Loading {hf_name} :: {hf_cfg or 'train'}")
+            ds = (
+                load_dataset(hf_name, hf_cfg, split="train", streaming=False)
+                if hf_cfg
+                else load_dataset(hf_name, split="train", streaming=False)
             )
             texts = [x[text_column] for x in ds]
 
