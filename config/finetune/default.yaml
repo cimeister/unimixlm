@@ -1,14 +1,13 @@
 defaults:
+  - _self_         # default.yaml top-level FIRST, so model-group overrides win
   - model: olmo3-1025-7b
   - logger: wandb-andrzej
-  - lora: r16-k32
-  - _self_
+  - lora: r64-k128
 
 langs:
-  fil: 1.0
-  eng: 0.2
+  afr: 1.0
 
-output_dir: ./finetuned_model
+output_dir: /iopsstor/scratch/cscs/cmeister747/unimix_ckpts
 
 
 # LAS tokenizer configuration
@@ -18,16 +17,80 @@ output_dir: ./finetuned_model
 las_mode: "langspec"
 # Path to directory containing base_tokenizer.json and langspec_{lang}_Latn.json files.
 # Required for las_mode "base" or "langspec", ignored for "original".
-las_tokenizer_path: /home/as3623/unimixlm/olmo3_las_tokenizers/las-tokenizers-Olmo-3-1025-7B-fil
-model_tokenizer_path: /home/as3623/unimixlm/olmo3_las_tokenizers/model_tokenizer
+las_tokenizer_path: ./las_tokenizers/olmo3-7b_v100k_fineweb2sample_10klines_afr-ind-ron-swh_softem
+# model_tokenizer_path interpolates the active model group's `model_name`
+# so it can never silently disagree with the model. A 2026-05-14 ordering
+# bug had `_self_` last in `defaults`, which silently overwrote model-group
+# values with the OLMo default — invalidating every Qwen3/Gemma3 BPE training
+# run done up to that point. Interpolation tracks model_name automatically,
+# so the bug pattern is structurally impossible now.
+model_tokenizer_path: ${model.model_name}
 
 seed: 42
 epochs: 1
-per_device_batch_size: 4
-gradient_accumulation_steps: 8
-learning_rate: 2e-4
+# Interpolated from the active model group so a model's memory profile
+# (vocab × hidden = embedding size) can't be silently overridden by a
+# global default. 2026-05-15 bug: gemma3-1b.yaml's batch override landed
+# in cfg.model.* (unread) and Hydra served the 4/8 default → OOM. Every
+# model config MUST declare per_device_batch_size + gradient_accumulation_steps;
+# Hydra errors loudly if one is missing. Effective batch is kept at 128
+# across all models (per_device × 4 GPUs × grad_accum) for comparability.
+per_device_batch_size: ${model.per_device_batch_size}
+gradient_accumulation_steps: ${model.gradient_accumulation_steps}
+learning_rate: 1e-4
 val_fraction: 0.001
+eval_steps: 300
+
+# When true, `_cap_texts_to_token_budget` will not raise if the corpus provides
+# fewer tokens than `dataset.size=target:<N>`. Instead the dataset is returned
+# at its natural size and the Trainer loops it (via max_steps) to hit the
+# budget. Intended for the Qwen3 three-way (P4) comparison where some langs
+# have short corpora and we want matched per-lang training-token budgets.
+# Default false preserves the fail-loud behavior for all other experiments.
+allow_repetition: false
+
+# Observation-point schedule. When set, each entry is a token count at which a
+# checkpoint is saved, and the last entry becomes max_steps (overriding the
+# cfg.epochs path). Converted to step counts at launch time using the actual
+# (per_device_batch × world × grad_accum × seq_len). Leave null to preserve
+# the cfg.epochs + save_strategy="epoch" behavior.
+eval_token_budgets: null
+
+# When true, fully unfreeze embed_tokens and lm_head alongside LoRA adapters.
+# This lets the model adapt token representations to a new tokenizer.
+unfreeze_embeddings: false
+
+# When false, skip LoRA entirely and only train embed_tokens + lm_head.
+use_lora: true
+
+# Checkpoint-resume policy:
+#   never   - abort if checkpoints exist in output_dir (default; prevents silent
+#             continuation of a stale run)
+#   auto    - silently resume from the latest checkpoint (for SLURM requeue)
+#   require - error if no checkpoint is present (for verifying resume)
+resume_policy: never
+
+# Optional EXPERIMENTS.md section identifier this run contributes to (e.g. "§8").
+# When set, a `section:<value>` tag is emitted to WandB so runs are easy to
+# group by the section they belong to. Leave null unless you know the mapping;
+# better to omit than mis-tag.
+section: null
 
 dataset:
-  size: 100M  # Options: 5M 10M 100M
+  # dataset.size semantics:
+  #   "5M" | "10M" | "100M"  - HF-hub path (requires local_dir: null)
+  #   "local"                - use entire local_dir as-is
+  #   "target:500M"          - first-N tokens from local_dir up to the budget
+  #                            (suffix K/M/B). This is the only way to cap a
+  #                            local corpus; previous silent cap-to-local has
+  #                            been removed (bug 1 of 2026-04-13 audit).
+  size: local
   max_seq_len: 1024
+  text_column: text  # Column name in parquet (text for FineWeb2, content for StarCoder)
+  lang_suffix: "_Latn"  # Appended to lang code for data dirs and tokenizer files ("" for code)
+  # Local parquet directory. When set, data is loaded from {local_dir}/{lang}{lang_suffix}/
+  # instead of HuggingFace Hub. Set to null to use HF datasets.
+  # NOTE: the previous default pointed at a tokenizer-training sample under
+  # datasets/tokenizer_training/downstream_lm_training_data/fineweb2_sample
+  # which is NOT an LM-training corpus. Set explicitly per-experiment.
+  local_dir: null

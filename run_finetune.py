@@ -31,9 +31,22 @@ def main(cfg: DictConfig) -> None:
     mode_prefix = {
         "original": "ft",
         "base": "ft-las-base",
+        "pathpiece": "ft-pathpiece",
         "langspec": "ft-las-langspec",
     }[cfg.las_mode]
-    cfg.output_dir = str(base_output_dir / f"{mode_prefix}_{langs}_{dataset_size}")
+    epoch_suffix = f"_ep{cfg.epochs}" if cfg.epochs > 1 else ""
+    lr_str = f"{cfg.learning_rate:.0e}".replace("+", "")  # e.g. "1e-04"
+    use_lora = getattr(cfg, "use_lora", True)
+    if use_lora:
+        lora_suffix = f"_r{cfg.lora.r}"
+        uf_suffix = "_uf" if cfg.unfreeze_embeddings else ""
+    else:
+        lora_suffix = "_embedonly"
+        uf_suffix = ""
+    cfg.output_dir = str(
+        base_output_dir
+        / f"{mode_prefix}_{langs}_{dataset_size}{epoch_suffix}_lr{lr_str}{lora_suffix}{uf_suffix}"
+    )
     logging.info("Loaded configuration:")
     logging.info(cfg)
     logging.info(f"Output directory set to: {cfg.output_dir}")
