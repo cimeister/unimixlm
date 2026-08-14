@@ -44,6 +44,10 @@ def main(cfg: DictConfig) -> None:
     else:
         lora_suffix = "_embedonly"
         uf_suffix = ""
+    if getattr(cfg, "reinit_embeddings", False):
+        uf_suffix += "_reinitemb"
+    if getattr(cfg, "true_tie", False):
+        uf_suffix += "_truetie"
     cfg.output_dir = str(
         base_output_dir
         / f"{mode_prefix}_{langs}_{dataset_size}{epoch_suffix}_lr{lr_str}{lora_suffix}{uf_suffix}"

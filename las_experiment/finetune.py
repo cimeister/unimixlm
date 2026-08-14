@@ -173,6 +173,8 @@ def write_run_metadata(output_dir, *, cfg, model_path, adapt_mode, is_tied,
             "adaptation_mode": adapt_mode,
             "lora_rank": getattr(cfg.lora, "r", None) if cfg.use_lora else None,
             "unfreeze_embeds": bool(getattr(cfg, "unfreeze_embeddings", False)),
+            "reinit_embeddings": bool(getattr(cfg, "reinit_embeddings", False)),
+            "true_tie": bool(getattr(cfg, "true_tie", False)),
         },
         "data_sources": [
             {
@@ -897,6 +899,43 @@ def run_finetune(cfg):
         torch_dtype=torch.bfloat16 if torch.cuda.is_available() else torch.float32,
     )
 
+    # ---- Optional embedding re-initialization (F14b ablation) ----
+    # MUST run before get_peft_model: PEFT's modules_to_save deep-copies the
+    # embedding module at wrap time, so a re-init after wrapping would leave
+    # the trained copy (or the tie) inconsistent with the base weights.
+    if bool(getattr(cfg, "reinit_embeddings", False)):
+        if not getattr(cfg, "unfreeze_embeddings", False):
+            raise ValueError(
+                "reinit_embeddings=true requires unfreeze_embeddings=true — "
+                "re-initialized embeddings that are frozen can never recover."
+            )
+        emb = model.get_input_embeddings()
+        out_emb = model.get_output_embeddings()
+        tied = (
+            out_emb is not None
+            and out_emb.weight.data_ptr() == emb.weight.data_ptr()
+        )
+        if out_emb is not None and not tied:
+            raise ValueError(
+                "reinit_embeddings currently supports only tied models "
+                "(output re-init would otherwise be silently skipped)."
+            )
+        std = float(getattr(model.config, "initializer_range", 0.02))
+        # Deterministic on CPU in fp32, seeded by cfg.seed ONLY: within a
+        # (lang, seed) cell every arm gets the identical random matrix, so
+        # arms still differ only in tokenizer.
+        gen = torch.Generator(device="cpu").manual_seed(int(cfg.seed))
+        with torch.no_grad():
+            new_w = torch.empty(
+                emb.weight.shape, device="cpu", dtype=torch.float32
+            ).normal_(0.0, std, generator=gen)
+            emb.weight.data.copy_(new_w.to(emb.weight.dtype))
+        logging.info(
+            f"reinit_embeddings: {tuple(emb.weight.shape)} re-initialized "
+            f"N(0, {std}) with generator seed {int(cfg.seed)}; tied output "
+            f"follows (data_ptr shared={tied})."
+        )
+
     # ---- LAS tokenizer mode ----
     las_mode = str(cfg.las_mode)
     las_dir = Path(cfg.las_tokenizer_path) if cfg.las_tokenizer_path else None
@@ -1253,27 +1292,50 @@ def run_finetune(cfg):
         )
 
         unfreeze_embeds = getattr(cfg, "unfreeze_embeddings", False)
+        true_tie = bool(getattr(cfg, "true_tie", False))
         modules_to_save = None
+        ensure_weight_tying = False
         if unfreeze_embeds:
             input_name, output_name, is_tied = _resolve_embed_modules(model)
             # Prefer the object-identity result from the resolver (authoritative)
             is_tied_weights = bool(is_tied)
             if is_tied:
-                # CRITICAL: PEFT's modules_to_save deep-copies each listed module,
-                # which breaks tied input/output weights. Include only the input
-                # embedding; output rides the tie. See downstream_eval.py:71-89
-                # for the eval-side workaround history.
-                modules_to_save = [input_name]
+                # WARNING (measured 2026-08-14, peft 0.18.1): with only the
+                # input embedding in modules_to_save, PEFT trains a deep COPY
+                # for the input lookup while lm_head keeps the FROZEN original
+                # Parameter — the tie is broken at wrap time and the output
+                # head never trains. This is the wiring of every F10/F12/F14
+                # "tie-preserving" cell (memory: modules-to-save-tie-not-
+                # preserved). For a genuinely tied trainable embedding set
+                # cfg.true_tie=true, which adds ensure_weight_tying=True so
+                # PEFT wraps BOTH modules around ONE shared trained Parameter.
+                # PEFT's ensure_weight_tying tie-detection only recognizes the
+                # tied pair when modules_to_save carries the BARE module name
+                # ("embed_tokens"); with the prefixed name ("model.embed_tokens")
+                # it wraps the embedding but silently skips wrapping/sharing
+                # the head (measured on peft 0.18.1; the data_ptr verification
+                # below is the backstop). Non-true-tie keeps the full name to
+                # stay byte-identical with the as-run F14 configuration.
+                modules_to_save = (
+                    [input_name.rsplit(".", 1)[-1]] if true_tie else [input_name]
+                )
+                ensure_weight_tying = true_tie
                 logging.info(
-                    f"Unfreezing tied embedding: {input_name} (output={output_name} rides tie). "
-                    f"Including both in modules_to_save would produce independently trained "
-                    f"copies and silently break tie_word_embeddings=True."
+                    f"Unfreezing tied embedding: {input_name} "
+                    f"(true_tie={true_tie}: output head "
+                    f"{'shares the trained Parameter' if true_tie else 'stays the FROZEN original'})."
                 )
             else:
+                if true_tie:
+                    raise ValueError(
+                        "true_tie=true set on an untied model — misconfigured."
+                    )
                 modules_to_save = [n for n in (input_name, output_name) if n]
                 logging.info(f"Unfreezing untied embeddings: {modules_to_save}")
+        elif true_tie:
+            raise ValueError("true_tie=true requires unfreeze_embeddings=true.")
 
-        lora_config = LoraConfig(
+        lora_kwargs = dict(
             r=cfg.lora.r,
             lora_alpha=cfg.lora.alpha,
             lora_dropout=cfg.lora.dropout,
@@ -1281,7 +1343,28 @@ def run_finetune(cfg):
             modules_to_save=modules_to_save,
             task_type=TaskType.CAUSAL_LM,
         )
+        if ensure_weight_tying:
+            lora_kwargs["ensure_weight_tying"] = True
+        lora_config = LoraConfig(**lora_kwargs)
         model = get_peft_model(model, lora_config)
+        if ensure_weight_tying:
+            # Hard verification, not trust: the trained embed copy and the
+            # output head must be ONE Parameter.
+            _inner = model.base_model.model
+            _wrap = _inner.get_input_embeddings()
+            _copy = _wrap.modules_to_save["default"].weight
+            _head = _inner.get_output_embeddings()
+            _head_w = (
+                _head.modules_to_save["default"].weight
+                if hasattr(_head, "modules_to_save") else _head.weight
+            )
+            if _head_w.data_ptr() != _copy.data_ptr():
+                raise RuntimeError(
+                    "true_tie: ensure_weight_tying did NOT share the trained "
+                    "Parameter between embed copy and output head — peft "
+                    "version drift? Refusing to train a mislabeled cell."
+                )
+            logging.info("true_tie verified: embed copy and output head share one Parameter.")
     else:
         # Embed-only: freeze all params, then unfreeze input+output embedding
         # modules. Uses object-identity resolver (handles GPT-2's `wte`, tied
