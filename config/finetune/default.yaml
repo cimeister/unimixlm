@@ -64,6 +64,18 @@ eval_token_budgets: null
 # This lets the model adapt token representations to a new tokenizer.
 unfreeze_embeddings: false
 
+# F14b ablation: re-initialize the (tied) token embedding N(0, initializer_range)
+# before PEFT wrapping, seeded by cfg.seed only (identical matrix across arms of
+# one cell). Requires unfreeze_embeddings=true. Output-dir name gains _reinitemb.
+reinit_embeddings: false
+
+# Genuinely tied trainable embedding (peft ensure_weight_tying): ONE trained
+# Parameter feeds both input lookup and output head. Without this, modules_to_save
+# trains an input-only copy while lm_head stays the FROZEN original (measured
+# 2026-08-14; memory modules-to-save-tie-not-preserved). Requires
+# unfreeze_embeddings=true on a tied model. Output-dir name gains _truetie.
+true_tie: false
+
 # When false, skip LoRA entirely and only train embed_tokens + lm_head.
 use_lora: true
 
