@@ -25,3 +25,10 @@ outputs/
 
 lm-evaluation-harness/
 trainer_output/
+
+# F15: tokenizer artifacts, job-id trackers (nothing under these is tracked
+# as of this check: `git ls-files las_tokenizers eval_results logs wandb`
+# all return empty, so a broad ignore here hides no committed history).
+las_tokenizers/
+*.jids*
+.*_jid*

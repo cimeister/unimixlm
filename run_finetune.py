@@ -34,6 +34,7 @@ def main(cfg: DictConfig) -> None:
         "pathpiece": "ft-pathpiece",
         "langspec": "ft-las-langspec",
         "placebo": "ft-las-placebo",
+        "vocab_extend": "ft-vocabext",
     }[cfg.las_mode]
     epoch_suffix = f"_ep{cfg.epochs}" if cfg.epochs > 1 else ""
     lr_str = f"{cfg.learning_rate:.0e}".replace("+", "")  # e.g. "1e-04"
