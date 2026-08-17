@@ -18,6 +18,9 @@ output_dir: /path/to/scratch/USER/unimix_ckpts
 # las_mode: "original" = use the model's original tokenizer (no LAS)
 #           "base"     = use base_tokenizer.json for all languages
 #           "langspec" = use langspec_{lang}_Latn.json per language
+#           "vocab_extend" = F15 A4: model's own BPE + top-k monolingual pieces
+#             appended (vocabext_{lang}_Latn.json); resizes + FOCUS-inits the
+#             embedding matrix; applies to every language including eng
 las_mode: "langspec"
 # Path to directory containing base_tokenizer.json and langspec_{lang}_Latn.json files.
 # Required for las_mode "base" or "langspec", ignored for "original".

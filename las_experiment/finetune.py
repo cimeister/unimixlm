@@ -110,7 +110,8 @@ def build_descriptive_tags(cfg, langs, model_path, adapt_mode):
     """
     base = _base_alias(model_path)
     tok_map = {"original": "bpe", "base": "base-unigram",
-               "pathpiece": "pathpiece", "langspec": "langspec"}
+               "pathpiece": "pathpiece", "langspec": "langspec",
+               "vocab_extend": "vocab-extend"}
     tags = {
         f"base:{base}",
         f"lang:{'+'.join(langs)}",
@@ -138,7 +139,9 @@ def write_run_metadata(output_dir, *, cfg, model_path, adapt_mode, is_tied,
                        status="started", extra=None,
                        lang_repetition_info=None,
                        observation_steps=None, eval_token_budgets=None,
-                       allow_repetition=False):
+                       allow_repetition=False, vocab_extend_info=None,
+                       computed_max_steps=None, tokens_per_step=None,
+                       lang_dataset_revision=None):
     """Write `run_metadata.json` — canonical provenance + actual-tokens record.
 
     Lives alongside the checkpoint. Future eval scripts and the results
@@ -156,6 +159,25 @@ def write_run_metadata(output_dir, *, cfg, model_path, adapt_mode, is_tied,
         cfg_snapshot = None
     total_post = sum(lang_token_counts.values())
     total_pre = sum(lang_pretrunc_counts.values())
+    # Under the eval_token_budgets/max_steps path, the Trainer stops at
+    # max_steps regardless of epoch count, so `total_post * cfg.epochs` (the
+    # naive "every unique token times every epoch" count) can overstate what
+    # was actually trained -- max_steps can cut a run short mid-epoch, or
+    # (for allow_repetition corpora) short of `epochs` full passes.
+    # `max_steps_positions` is the padded-position ceiling implied by
+    # max_steps (tokens_per_step already counts padding in every position of
+    # every batch); the true trained-token count is capped at whichever of
+    # the two is smaller.
+    max_steps_positions = None
+    if (
+        computed_max_steps is not None
+        and computed_max_steps >= 0
+        and tokens_per_step is not None
+    ):
+        max_steps_positions = int(computed_max_steps) * int(tokens_per_step)
+    total_posttrunc_trained = int(total_post * cfg.epochs)
+    if max_steps_positions is not None:
+        total_posttrunc_trained = min(total_posttrunc_trained, max_steps_positions)
     meta = {
         "schema_version": 2,
         "status": status,
@@ -165,6 +187,10 @@ def write_run_metadata(output_dir, *, cfg, model_path, adapt_mode, is_tied,
             "las_mode": cfg.las_mode,
             "las_tokenizer_path": getattr(cfg, "las_tokenizer_path", None),
             "model_tokenizer_path": getattr(cfg, "model_tokenizer_path", None),
+            # A4 (las_mode="vocab_extend") only. `n_total_vocab` is what the
+            # eval side must resize the base model to before loading the
+            # adapter — see downstream_eval._build_eval_lm_kwargs.
+            "vocab_extend": dict(vocab_extend_info) if vocab_extend_info else None,
         },
         "model": {
             "name": model_path,
@@ -186,6 +212,7 @@ def write_run_metadata(output_dir, *, cfg, model_path, adapt_mode, is_tied,
                 "size_kind": size_kind,
                 "size_spec": dataset_size,
                 "target_tokens": lang_tokens_budget.get(lang),
+                "revision": (lang_dataset_revision or {}).get(lang),
             }
             for lang in langs
         ],
@@ -195,7 +222,8 @@ def write_run_metadata(output_dir, *, cfg, model_path, adapt_mode, is_tied,
             "total_posttrunc_unique": total_post,
             "total_pretrunc_unique": total_pre,
             "epochs": int(cfg.epochs),
-            "total_posttrunc_trained": int(total_post * cfg.epochs),
+            "total_posttrunc_trained": total_posttrunc_trained,
+            "max_steps_positions": max_steps_positions,
         },
         "eval_split": {
             "strategy": "heldout-manifest" if heldout_manifest_path else "val-fraction",
@@ -276,14 +304,38 @@ def resolve_fineweb2_dataset(size: str) -> str:
     )
 
 
+# Script suffix appended to `lang` when building a FineWeb2 hub repo name.
+# Defaults to "_Latn" (the original, pre-F15 hardcoded behavior) for every
+# language not listed here — F15 adds arb (Arabic script) and hin
+# (Devanagari script); tur/fin/hun/swh/afr are listed explicitly even though
+# they resolve to the default, so the map documents every language this
+# resolver has actually been used for (per existing usage across the
+# project's LANG_SUFFIX conventions, e.g. slurm/submit_p4d_phase1.sh), not
+# just the two that need a non-default suffix.
+FINEWEB2_LANG_SUFFIX = {
+    "tur": "_Latn",
+    "fin": "_Latn",
+    "hun": "_Latn",
+    "swh": "_Latn",
+    "afr": "_Latn",
+    "kor": "_Hang",
+    "arb": "_Arab",
+    "hin": "_Deva",
+}
+
+
 def resolve_fineweb2_lang(lang: str, size: str):
     """(repo, config) for a FineWeb2 language slice as actually published.
 
     Hub layout (verified 2026-08-13): every non-English language is its own
-    repo ``FineWeb2-<lang>_Latn-<size>`` with a single default ``train`` split
-    and no named config; English lives as the ``eng_Latn`` config of the
-    multi-language ``FineWeb2-100M-olmo3-7b-toks`` repo. Ported verbatim from
-    the suchir-code-tok branch so reruns load the exact repos its runs used.
+    repo ``FineWeb2-<lang><Script>-<size>`` with a single default ``train``
+    split and no named config; English lives as the ``eng_Latn`` config of
+    the multi-language ``FineWeb2-100M-olmo3-7b-toks`` repo. Ported verbatim
+    from the suchir-code-tok branch so reruns load the exact repos its runs
+    used, EXCEPT for the script suffix (see FINEWEB2_LANG_SUFFIX): the
+    original port hardcoded "_Latn" for every language, which is wrong for
+    arb (needs "_Arab") and hin (needs "_Deva") — F15 fix, 2026-08-17.
+    Confirmed to exist on the hub: FineWeb2-arb_Arab-100M, FineWeb2-hin_Deva-100M.
     """
     size = size.upper()
     if lang == "eng":
@@ -294,9 +346,36 @@ def resolve_fineweb2_lang(lang: str, size: str):
                 f"non-eng data with a 100M eng slice."
             )
         return "MultilingualUnigramLM/FineWeb2-100M-olmo3-7b-toks", "eng_Latn"
+    suffix = FINEWEB2_LANG_SUFFIX.get(lang, "_Latn")
     if size == "500M":
-        return f"MultilingualUnigramLM/FineWeb2-500M-{lang}_Latn", None
-    return f"MultilingualUnigramLM/FineWeb2-{lang}_Latn-{size}", None
+        return f"MultilingualUnigramLM/FineWeb2-500M-{lang}{suffix}", None
+    return f"MultilingualUnigramLM/FineWeb2-{lang}{suffix}-{size}", None
+
+
+def _resolve_dataset_revision(repo_id: str, ds) -> dict:
+    """Best-effort hub revision for a loaded HF-hub dataset, for
+    run_metadata.json `data_sources[].revision` provenance.
+
+    Tries the live hub commit SHA first (huggingface_hub.HfApi.dataset_info).
+    SLURM jobs in this project typically run with HF_HUB_OFFLINE=1 (see
+    the project notes), so the network call is expected to fail there; in
+    that case (or any other failure) fall back to the loaded dataset's own
+    content fingerprint plus an explicit "offline-cache" marker, so a reader
+    of run_metadata.json can tell a verified hub SHA apart from a local
+    artifact fingerprint rather than assuming the two are equivalent.
+    """
+    try:
+        from huggingface_hub import HfApi
+        sha = HfApi().dataset_info(repo_id).sha
+        return {"source": "hub", "sha": sha, "fingerprint": None, "error": None}
+    except Exception as e:
+        fingerprint = getattr(ds, "_fingerprint", None)
+        return {
+            "source": "offline-cache",
+            "sha": None,
+            "fingerprint": fingerprint,
+            "error": str(e)[:500],
+        }
 
 
 def _parse_size_spec(size) -> tuple[str, int | None]:
@@ -899,10 +978,21 @@ def run_finetune(cfg):
         torch_dtype=torch.bfloat16 if torch.cuda.is_available() else torch.float32,
     )
 
+    # ---- LAS tokenizer mode (resolved early: A4 needs it before PEFT wrap) ----
+    las_mode = str(cfg.las_mode)
+    las_dir = Path(cfg.las_tokenizer_path) if cfg.las_tokenizer_path else None
+    vocab_extend_info = None
+
     # ---- Optional embedding re-initialization (F14b ablation) ----
     # MUST run before get_peft_model: PEFT's modules_to_save deep-copies the
     # embedding module at wrap time, so a re-init after wrapping would leave
     # the trained copy (or the tie) inconsistent with the base weights.
+    if bool(getattr(cfg, "reinit_embeddings", False)) and las_mode == "vocab_extend":
+        raise ValueError(
+            "reinit_embeddings=true is incompatible with las_mode='vocab_extend': "
+            "A4 initializes the new rows FOCUS-style from the pretrained rows, "
+            "which a re-init would discard. Pick one."
+        )
     if bool(getattr(cfg, "reinit_embeddings", False)):
         if not getattr(cfg, "unfreeze_embeddings", False):
             raise ValueError(
@@ -936,9 +1026,39 @@ def run_finetune(cfg):
             f"follows (data_ptr shared={tied})."
         )
 
-    # ---- LAS tokenizer mode ----
-    las_mode = str(cfg.las_mode)
-    las_dir = Path(cfg.las_tokenizer_path) if cfg.las_tokenizer_path else None
+    # ---- A4 vocabulary extension (F15 las_mode="vocab_extend") ----
+    # Same placement constraint as reinit_embeddings above: the resize and the
+    # FOCUS-style init of the new rows MUST happen before get_peft_model, which
+    # deep-copies the embedding module for modules_to_save.
+    if las_mode == "vocab_extend":
+        from las_experiment.vocab_extend import (
+            ExtendedTokenizer,
+            extend_and_init_embeddings,
+        )
+
+        if not las_dir:
+            raise ValueError(
+                "las_tokenizer_path required for las_mode='vocab_extend' "
+                "(directory holding vocabext_<lang><lang_suffix>.json)"
+            )
+        if not bool(getattr(cfg, "unfreeze_embeddings", False)):
+            raise ValueError(
+                "las_mode='vocab_extend' requires unfreeze_embeddings=true — "
+                "the appended rows would otherwise stay at their FOCUS init "
+                "and never train, and the output head would never learn them."
+            )
+        _lang_suffix = getattr(cfg.dataset, "lang_suffix", "_Latn")
+        _target_langs = [l for l in langs if l != "eng"]
+        if len(_target_langs) != 1:
+            raise ValueError(
+                f"las_mode='vocab_extend' extends the vocabulary for exactly one "
+                f"target language; got non-eng langs {_target_langs}. The F15 "
+                f"joint-multilingual arm has no A4 analogue."
+            )
+        vocabext_path = las_dir / f"vocabext_{_target_langs[0]}{_lang_suffix}.json"
+        vocab_extend_info = extend_and_init_embeddings(
+            model, model_tokenizer, vocabext_path
+        )
 
     if las_mode == "original":
         tokenizer_for_lang = {lang: model_tokenizer.backend_tokenizer for lang in langs}
@@ -953,6 +1073,13 @@ def run_finetune(cfg):
             las_dir / "base_tokenizer.json", model_tokenizer
         )
         tokenizer_for_lang = {lang: base_tok for lang in langs}
+        # English routes through the model's own tokenizer, matching the
+        # langspec mode's eng handling (F15 review finding F2: without this,
+        # base-vs-langspec arms differ in eng tokenization, confounding the
+        # base-Unigram control). Changed 2026-08-17; earlier base-mode runs
+        # that included eng trained eng through the base Unigram.
+        if "eng" in langs:
+            tokenizer_for_lang["eng"] = model_tokenizer.backend_tokenizer
 
     elif las_mode == "pathpiece":
         if not las_dir:
@@ -996,9 +1123,41 @@ def run_finetune(cfg):
             pad_token_id = model_tokenizer.pad_token_id
             eos_token_id = model_tokenizer.eos_token_id
 
+    elif las_mode == "vocab_extend":
+        # `vocabext_path` and the embedding resize were done above (before the
+        # PEFT wrap). Re-use the shared eos/pad resolver: the extended file is
+        # the model's own tokenizer.json with new added_tokens appended, so all
+        # base specials keep their native ids and the string lookup resolves.
+        _ext_raw, pad_token_id, eos_token_id = load_las_tokenizer_with_eos_pad(
+            vocabext_path, model_tokenizer
+        )
+        # ExtendedTokenizer, not the bare Tokenizer: `Tokenizer.decode` sends
+        # added tokens through the ByteLevel decoder and corrupts any whose
+        # surface characters all sit in the GPT-2 byte<->char table (measured:
+        # "ları" -> "lar�"). TokenizedTextDataset decodes to count bytes
+        # for BpB, so a bare Tokenizer would silently corrupt A4's BpB.
+        ext_tok = ExtendedTokenizer(_ext_raw, vocabext_path)
+        # A4 DESIGN: the extended tokenizer is the model's tokenizer for ALL
+        # languages, English included. A4 adapts the vocabulary, and a resized
+        # embedding matrix belongs to one tokenizer — there is no per-language
+        # overlay to swap in, unlike langspec/placebo where eng keeps the
+        # original tokenizer. Vocabulary replacement-by-extension is global.
+        tokenizer_for_lang = {lang: ext_tok for lang in langs}
+        if vocab_extend_info is None:
+            raise RuntimeError(
+                "vocab_extend: embedding extension did not run before the "
+                "tokenizer dispatch — internal ordering bug."
+            )
+        if ext_tok.get_vocab_size() != vocab_extend_info["n_total_vocab"]:
+            raise RuntimeError(
+                f"vocab_extend: tokenizer size {ext_tok.get_vocab_size()} != "
+                f"resized embedding rows {vocab_extend_info['n_total_vocab']}."
+            )
+
     else:
         raise ValueError(
-            f"Unknown las_mode: {las_mode}. Use 'original', 'base', 'pathpiece', 'langspec', or 'placebo'."
+            f"Unknown las_mode: {las_mode}. Use 'original', 'base', 'pathpiece', "
+            f"'langspec', 'placebo', or 'vocab_extend'."
         )
 
     if pad_token_id is None:
@@ -1019,6 +1178,30 @@ def run_finetune(cfg):
     local_data_dir = getattr(cfg.dataset, "local_dir", None)
     text_column = getattr(cfg.dataset, "text_column", "text")
     lang_suffix = getattr(cfg.dataset, "lang_suffix", "_Latn")
+    # F15 guard: the HF-hub loader (resolve_fineweb2_lang, below) resolves its
+    # own script suffix from FINEWEB2_LANG_SUFFIX and never reads
+    # cfg.dataset.lang_suffix at all -- only the local_dir path (lang_dir =
+    # local_data_dir/f"{lang}{lang_suffix}") uses this cfg value directly. A
+    # submission with a lang_suffix that disagrees with FINEWEB2_LANG_SUFFIX's
+    # hub truth would silently load the WRONG script's local_dir data (or,
+    # for local_dir, fail loud on a missing directory) while the hub path
+    # would silently ignore the wrong suffix and load the (correct, but now
+    # unverified) hub repo anyway. Assert agreement up front for every
+    # non-eng lang so the two paths can never disagree.
+    for _lang_check in langs:
+        if _lang_check == "eng":
+            continue
+        _expected_suffix = FINEWEB2_LANG_SUFFIX.get(_lang_check, "_Latn")
+        if _expected_suffix != lang_suffix:
+            raise ValueError(
+                f"dataset.lang_suffix={lang_suffix!r} does not match "
+                f"FINEWEB2_LANG_SUFFIX[{_lang_check!r}]={_expected_suffix!r}. "
+                f"The HF-hub loader (resolve_fineweb2_lang) resolves its script "
+                f"suffix from FINEWEB2_LANG_SUFFIX, not from cfg.dataset.lang_suffix "
+                f"-- fix the submission's dataset.lang_suffix override (or update "
+                f"FINEWEB2_LANG_SUFFIX if '{_lang_check}' genuinely needs a new "
+                f"script suffix) rather than proceeding with a silent mismatch."
+            )
     size_kind, target_tokens = _parse_size_spec(dataset_size)
 
     # Guardrail: `local` / `target:N` require local_dir; HF sizes (`5M`...) forbid it.
@@ -1044,6 +1227,7 @@ def run_finetune(cfg):
     lang_doc_counts_kept = {}
     lang_tokens_budget = {}        # unique tokens available (post-cap)
     lang_repetition_info = {}      # {lang: {unique_tokens, target_tokens, corpus_below_target}}
+    lang_dataset_revision = {}     # {lang: {source, sha, fingerprint, error}} (hub path only)
     allow_repetition = bool(getattr(cfg, "allow_repetition", False))
     heldout_docs = int(getattr(cfg, "heldout_docs_per_lang", 1000))
     for lang in langs:
@@ -1098,6 +1282,7 @@ def run_finetune(cfg):
                 if hf_cfg
                 else load_dataset(hf_name, split="train", streaming=False)
             )
+            lang_dataset_revision[lang] = _resolve_dataset_revision(hf_name, ds)
             texts = [x[text_column] for x in ds]
 
         if not texts:
@@ -1346,6 +1531,14 @@ def run_finetune(cfg):
         if ensure_weight_tying:
             lora_kwargs["ensure_weight_tying"] = True
         lora_config = LoraConfig(**lora_kwargs)
+        # F15 wave 1 (review S3): get_peft_model's default LoRA A-matrix init
+        # (kaiming-uniform, B stays zero) reads from the global torch RNG,
+        # which was previously left wherever prior seeding calls happened to
+        # leave it -- init was unseeded. F14c was ALSO unseeded, so this is a
+        # deliberate wave-1-vs-F14c protocol difference, not a bug fix applied
+        # retroactively: seed immediately before the call so LoRA init is
+        # reproducible from cfg.seed for every wave-1-and-later run.
+        torch.manual_seed(cfg.seed)
         model = get_peft_model(model, lora_config)
         if ensure_weight_tying:
             # Hard verification, not trust: the trained embed copy and the
@@ -1407,6 +1600,7 @@ def run_finetune(cfg):
     eval_token_budgets_raw = getattr(cfg, "eval_token_budgets", None)
     observation_steps = None
     computed_max_steps = -1  # -1 means "fall back to num_train_epochs"
+    tokens_per_step = None
     if eval_token_budgets_raw:
         world_size = int(os.environ.get("WORLD_SIZE", "1"))
         tokens_per_step = (
@@ -1534,6 +1728,10 @@ def run_finetune(cfg):
         observation_steps=observation_steps,
         eval_token_budgets=list(eval_token_budgets_raw) if eval_token_budgets_raw else None,
         allow_repetition=allow_repetition,
+        vocab_extend_info=vocab_extend_info,
+        computed_max_steps=computed_max_steps,
+        tokens_per_step=tokens_per_step,
+        lang_dataset_revision=lang_dataset_revision,
     )
 
     # G'1: write pre-train provenance so a crash still leaves a record.
