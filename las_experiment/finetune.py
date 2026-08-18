@@ -141,7 +141,7 @@ def write_run_metadata(output_dir, *, cfg, model_path, adapt_mode, is_tied,
                        observation_steps=None, eval_token_budgets=None,
                        allow_repetition=False, vocab_extend_info=None,
                        computed_max_steps=None, tokens_per_step=None,
-                       lang_dataset_revision=None):
+                       lang_dataset_revision=None, lang_suffixes=None):
     """Write `run_metadata.json` — canonical provenance + actual-tokens record.
 
     Lives alongside the checkpoint. Future eval scripts and the results
@@ -187,6 +187,12 @@ def write_run_metadata(output_dir, *, cfg, model_path, adapt_mode, is_tied,
             "las_mode": cfg.las_mode,
             "las_tokenizer_path": getattr(cfg, "las_tokenizer_path", None),
             "model_tokenizer_path": getattr(cfg, "model_tokenizer_path", None),
+            # {lang: script suffix} actually used to build overlay filenames
+            # (langspec_<lang><suffix>.json) and local data dirs. Recorded
+            # because a joint-multilingual run mixes suffixes within one cell,
+            # so cfg.dataset.lang_suffix alone no longer identifies which
+            # overlay files a run trained against.
+            "lang_suffixes": dict(lang_suffixes) if lang_suffixes else None,
             # A4 (las_mode="vocab_extend") only. `n_total_vocab` is what the
             # eval side must resize the base model to before loading the
             # adapter — see downstream_eval._build_eval_lm_kwargs.
@@ -322,6 +328,66 @@ FINEWEB2_LANG_SUFFIX = {
     "arb": "_Arab",
     "hin": "_Deva",
 }
+
+
+def resolve_lang_suffixes(langs, cfg_lang_suffix):
+    """Per-language script suffix, as a {lang: suffix} dict.
+
+    Every place that needs a script suffix (overlay filename
+    ``langspec_<lang><suffix>.json``, placebo/vocabext filenames, local
+    parquet dir ``<local_dir>/<lang><suffix>/``) must ask this function
+    rather than reading ``cfg.dataset.lang_suffix`` directly: that config key
+    is a single global string, so a run whose languages span several scripts
+    (the F15 joint-multilingual arm trains tur/fin/hun + arb + hin in one
+    cell) cannot express _Latn, _Arab and _Deva at once. The hub loader
+    ``resolve_fineweb2_lang`` already resolves its own suffix per language
+    from FINEWEB2_LANG_SUFFIX; this makes every other path agree with it.
+
+    Languages absent from FINEWEB2_LANG_SUFFIX fall back to
+    ``cfg_lang_suffix`` (the pre-2026-08-18 behavior, which the code-domain
+    runs rely on with ``lang_suffix=""``), and the fallback is logged.
+
+    Fails loud when a run with exactly one non-eng language declares a
+    ``cfg.dataset.lang_suffix`` that contradicts the map for that language:
+    there the config key is fully determined, so a disagreement is a
+    submission bug (wave-1 guard, kept). For multi-language runs the global
+    key cannot match every language by construction, so agreement is not
+    required and is not checked; the per-language map is authoritative.
+    """
+    suffixes = {}
+    unmapped = []
+    for lang in langs:
+        if lang in FINEWEB2_LANG_SUFFIX:
+            suffixes[lang] = FINEWEB2_LANG_SUFFIX[lang]
+        else:
+            suffixes[lang] = cfg_lang_suffix
+            unmapped.append(lang)
+
+    non_eng = [lang for lang in langs if lang != "eng"]
+    if len(non_eng) == 1 and non_eng[0] in FINEWEB2_LANG_SUFFIX:
+        lang = non_eng[0]
+        if FINEWEB2_LANG_SUFFIX[lang] != cfg_lang_suffix:
+            raise ValueError(
+                f"dataset.lang_suffix={cfg_lang_suffix!r} does not match "
+                f"FINEWEB2_LANG_SUFFIX[{lang!r}]={FINEWEB2_LANG_SUFFIX[lang]!r}. "
+                f"The HF-hub loader (resolve_fineweb2_lang) resolves its script "
+                f"suffix from FINEWEB2_LANG_SUFFIX, not from cfg.dataset.lang_suffix "
+                f"-- fix the submission's dataset.lang_suffix override (or update "
+                f"FINEWEB2_LANG_SUFFIX if '{lang}' genuinely needs a new "
+                f"script suffix) rather than proceeding with a silent mismatch."
+            )
+    if unmapped:
+        logging.warning(
+            f"lang suffix: {unmapped} absent from FINEWEB2_LANG_SUFFIX; using "
+            f"cfg.dataset.lang_suffix={cfg_lang_suffix!r} for them. (eng is "
+            f"expected here: it has its own hub repo/config and, in "
+            f"langspec/placebo/base modes, keeps the model's own tokenizer.)"
+        )
+    logging.info(
+        "lang suffix resolution: "
+        + ", ".join(f"{lang}->{suffixes[lang]!r}" for lang in langs)
+    )
+    return suffixes
 
 
 def resolve_fineweb2_lang(lang: str, size: str):
@@ -917,6 +983,12 @@ def run_finetune(cfg):
     logging.info(
         f"Language config:\n{'  Language   Proportion'}\n{'  ' + '-' * 21}\n{lang_table}"
     )
+    # Resolved once, before anything is loaded, so a suffix/config disagreement
+    # aborts before the model download rather than after it. Every downstream
+    # suffix use (overlay filenames, local parquet dirs) reads this dict.
+    lang_suffix_for = resolve_lang_suffixes(
+        langs, getattr(cfg.dataset, "lang_suffix", "_Latn")
+    )
     dataset_size = cfg.dataset.size
     model_name = cfg.model.model_name
     output_dir = Path(cfg.output_dir)
@@ -1047,7 +1119,6 @@ def run_finetune(cfg):
                 "the appended rows would otherwise stay at their FOCUS init "
                 "and never train, and the output head would never learn them."
             )
-        _lang_suffix = getattr(cfg.dataset, "lang_suffix", "_Latn")
         _target_langs = [l for l in langs if l != "eng"]
         if len(_target_langs) != 1:
             raise ValueError(
@@ -1055,7 +1126,10 @@ def run_finetune(cfg):
                 f"target language; got non-eng langs {_target_langs}. The F15 "
                 f"joint-multilingual arm has no A4 analogue."
             )
-        vocabext_path = las_dir / f"vocabext_{_target_langs[0]}{_lang_suffix}.json"
+        vocabext_path = (
+            las_dir
+            / f"vocabext_{_target_langs[0]}{lang_suffix_for[_target_langs[0]]}.json"
+        )
         vocab_extend_info = extend_and_init_embeddings(
             model, model_tokenizer, vocabext_path
         )
@@ -1099,16 +1173,22 @@ def run_finetune(cfg):
             raise ValueError(f"las_tokenizer_path required for las_mode='{las_mode}'")
 
         file_prefix = "langspec" if las_mode == "langspec" else "placebo"
-        lang_suffix = getattr(cfg.dataset, "lang_suffix", "_Latn")
 
         # English is a special case: use the original model tokenizer
         non_eng_langs = [lang for lang in langs if lang != "eng"]
 
-        lang_toks = {
-            lang: load_las_tokenizer_with_eos_pad(
-                las_dir / f"{file_prefix}_{lang}{lang_suffix}.json", model_tokenizer
-            )
+        # Per-language suffix (NOT the single global cfg.dataset.lang_suffix):
+        # the joint-multilingual arm loads _Latn, _Arab and _Deva overlays in
+        # one run, which one global string cannot express.
+        overlay_paths = {
+            lang: las_dir / f"{file_prefix}_{lang}{lang_suffix_for[lang]}.json"
             for lang in non_eng_langs
+        }
+        for lang, path in overlay_paths.items():
+            logging.info(f"LAS overlay [{lang}]: {path}")
+        lang_toks = {
+            lang: load_las_tokenizer_with_eos_pad(path, model_tokenizer)
+            for lang, path in overlay_paths.items()
         }
 
         tokenizer_for_lang = {lang: t[0] for lang, t in lang_toks.items()}
@@ -1117,6 +1197,21 @@ def run_finetune(cfg):
             tokenizer_for_lang["eng"] = model_tokenizer.backend_tokenizer
 
         if lang_toks:
+            # One pad/eos id pair is used for the whole packed dataset, so
+            # every overlay in a multi-overlay run must agree on both. They do
+            # when all overlays descend from the same base vocab (F15 prep
+            # writes identical special-token ids), but a mixed-provenance pool
+            # would otherwise silently pad/terminate some languages' sequences
+            # with another language's ids.
+            _id_pairs = {
+                lang: (t[1], t[2]) for lang, t in lang_toks.items()
+            }
+            if len(set(_id_pairs.values())) != 1:
+                raise ValueError(
+                    f"las_mode='{las_mode}': overlays disagree on "
+                    f"(pad_token_id, eos_token_id): {_id_pairs}. Every overlay "
+                    f"in one run must come from the same base vocabulary."
+                )
             _, pad_token_id, eos_token_id = next(iter(lang_toks.values()))
         else:
             # eng-only: fall back to model tokenizer IDs
@@ -1177,31 +1272,16 @@ def run_finetune(cfg):
     # ---- Load splits (local parquet or HF hub) ----
     local_data_dir = getattr(cfg.dataset, "local_dir", None)
     text_column = getattr(cfg.dataset, "text_column", "text")
-    lang_suffix = getattr(cfg.dataset, "lang_suffix", "_Latn")
-    # F15 guard: the HF-hub loader (resolve_fineweb2_lang, below) resolves its
-    # own script suffix from FINEWEB2_LANG_SUFFIX and never reads
-    # cfg.dataset.lang_suffix at all -- only the local_dir path (lang_dir =
-    # local_data_dir/f"{lang}{lang_suffix}") uses this cfg value directly. A
-    # submission with a lang_suffix that disagrees with FINEWEB2_LANG_SUFFIX's
-    # hub truth would silently load the WRONG script's local_dir data (or,
-    # for local_dir, fail loud on a missing directory) while the hub path
-    # would silently ignore the wrong suffix and load the (correct, but now
-    # unverified) hub repo anyway. Assert agreement up front for every
-    # non-eng lang so the two paths can never disagree.
-    for _lang_check in langs:
-        if _lang_check == "eng":
-            continue
-        _expected_suffix = FINEWEB2_LANG_SUFFIX.get(_lang_check, "_Latn")
-        if _expected_suffix != lang_suffix:
-            raise ValueError(
-                f"dataset.lang_suffix={lang_suffix!r} does not match "
-                f"FINEWEB2_LANG_SUFFIX[{_lang_check!r}]={_expected_suffix!r}. "
-                f"The HF-hub loader (resolve_fineweb2_lang) resolves its script "
-                f"suffix from FINEWEB2_LANG_SUFFIX, not from cfg.dataset.lang_suffix "
-                f"-- fix the submission's dataset.lang_suffix override (or update "
-                f"FINEWEB2_LANG_SUFFIX if '{_lang_check}' genuinely needs a new "
-                f"script suffix) rather than proceeding with a silent mismatch."
-            )
+    # F15 guard, generalized 2026-08-18 for the joint-multilingual arm: the
+    # HF-hub loader (resolve_fineweb2_lang, below) resolves its own script
+    # suffix from FINEWEB2_LANG_SUFFIX and never reads cfg.dataset.lang_suffix
+    # at all, while the local_dir path builds lang_dir = local_data_dir /
+    # f"{lang}{suffix}". Both now take the suffix from `lang_suffix_for`
+    # (resolve_lang_suffixes, called at the top of this function), so the two
+    # paths cannot disagree and a run whose languages span several scripts
+    # gets the right directory for each. resolve_lang_suffixes still raises on
+    # a single-target-language run whose cfg.dataset.lang_suffix contradicts
+    # the map (the original wave-1 guard).
     size_kind, target_tokens = _parse_size_spec(dataset_size)
 
     # Guardrail: `local` / `target:N` require local_dir; HF sizes (`5M`...) forbid it.
@@ -1233,7 +1313,7 @@ def run_finetune(cfg):
     for lang in langs:
         if local_data_dir:
             from las_experiment.held_out import get_train_texts_and_heldout
-            lang_dir = Path(local_data_dir) / f"{lang}{lang_suffix}"
+            lang_dir = Path(local_data_dir) / f"{lang}{lang_suffix_for[lang]}"
             if not lang_dir.is_dir() or not any(lang_dir.glob("*.parquet")):
                 raise FileNotFoundError(
                     f"Expected parquet data for lang '{lang}' at {lang_dir}. "
@@ -1259,7 +1339,7 @@ def run_finetune(cfg):
                 text_column=text_column,
                 seed=int(cfg.seed),
                 heldout_docs=heldout_docs,
-                lang_suffix=lang_suffix,
+                lang_suffix=lang_suffix_for[lang],
                 max_train_bytes=stream_cap_bytes,
                 skip_corrupted_files=bool(
                     getattr(cfg.dataset, "skip_corrupted_files", False)
@@ -1715,6 +1795,7 @@ def run_finetune(cfg):
         is_tied=is_tied_weights,
         langs=langs,
         lang_proportions=lang_proportions,
+        lang_suffixes=lang_suffix_for,
         resolved_lang_paths=resolved_lang_paths,
         lang_doc_counts_raw=lang_doc_counts_raw,
         lang_doc_counts_kept=lang_doc_counts_kept,
