@@ -97,10 +97,37 @@ three are CLI-overridable; defaults are recorded in --out-json metadata.
 CLI
 ---
     --eval-dir       directory of per-cell JSONs (+ optional __items.jsonl)
+    --joint-dir      directory of per-(cell,lang) F15 wave-2 joint-multilingual
+                      JSONs (scripts/eval_f15_joint.py output); see the
+                      "JOINT-MULTILINGUAL INPUT FORMAT" section below. At
+                      least one of --eval-dir/--joint-dir is required; both
+                      may be given together (independent outputs, separate
+                      --out-json keys, separate Holm family).
     --reference-arm  arm every contrast is computed against (default: original)
     --metric         lm-eval metric name, without ",none" (default: acc)
-    --intrinsic-csv  optional CSV, header "lang,delta", for the directional test
+    --intrinsic-csv  optional CSV, header "lang,delta", for the directional
+                      test (requires --eval-dir; does not run over --joint-dir)
     --out-json       path to write the machine-readable summary
+
+JOINT-MULTILINGUAL INPUT FORMAT (--joint-dir)
+----------------------------------------------
+One JSON file per (arm, seed, lang), named "<tag>__<lang>.json", as produced
+by scripts/eval_f15_joint.py. Schema differs from the single-language cell
+JSONs above: metrics live under a `conditions` dict keyed by condition name
+rather than a flat `results` dict. "original"-arm files have one condition,
+`conditions.model_tokenizer.results` (plain HFLM, no routing) -- this feeds
+the contrast as-is. "langspec"-arm files have two: `conditions.routed`
+(LasTokenizerHFLM routing every item to its argmax-likelihood pooled
+overlay -- the deployed configuration; feeds the langspec-vs-original
+contrast) and `conditions.oracle` (the correct overlay handed to the model
+directly; feeds a separate descriptive routed-vs-oracle delta per language,
+not a contrast -- expected near zero since routing was designed to be
+exact for these cells). No per-item (__items.jsonl-equivalent) files exist
+for this schema as of this writing, so the contrast bootstrap falls back to
+seed-level; this is recorded both per-contrast (`ci_method`) and in
+--out-json's `metadata.joint_bootstrap_unit`, never silently. Holm-Bonferroni
+runs over the joint per-language contrasts as their own family, never pooled
+with --eval-dir's families (see compute_holm_by_family).
 """
 from __future__ import annotations
 
@@ -109,6 +136,7 @@ import csv
 import hashlib
 import json
 import math
+import re
 import subprocess
 import sys
 from collections import defaultdict
@@ -275,6 +303,293 @@ def load_cells(eval_dir: Path, metric: str) -> tuple[list[dict], list[dict]]:
 
 
 # ---------------------------------------------------------------------------
+# Joint-multilingual loading (F15 wave 2, scripts/eval_f15_joint.py output)
+# ---------------------------------------------------------------------------
+#
+# Schema differs from the single-language cell JSONs above: one file per
+# (cell=arm+seed, language), named "<tag>__<lang>.json", holding a
+# `conditions` dict keyed by condition name rather than a flat `results`
+# dict. "original"-arm cells have one condition, "model_tokenizer" (plain
+# HFLM, no routing). "langspec"-arm cells have two: "routed" (LasTokenizerHFLM
+# routing every item to its argmax-likelihood pooled overlay -- the deployed
+# configuration; feeds the langspec-vs-original contrast below) and "oracle"
+# (the correct overlay handed to the model directly; feeds the descriptive
+# routed-vs-oracle delta, not a contrast). See eval_f15_joint.py's docstring
+# and module-level record-writing code for the authoritative schema.
+#
+# Every joint record is transformed into a dict with exactly the same keys
+# used by the single-language `cells` list ("family", "lang", "arm", "seed",
+# "value", "items", ...) so the existing aggregate_cells/paired_contrast/
+# holm_bonferroni/render_* functions above are reused as-is -- no
+# joint-specific stats code is written. "value" is always the routed metric
+# (original arm's only condition, or langspec's "routed" condition); the
+# oracle value and routed-vs-oracle delta ride along in additional keys for
+# the separate descriptive summary (aggregate_routed_vs_oracle below).
+#
+# No per-item (__items.jsonl-equivalent) files exist for joint records as of
+# this writing -- eval_f15_joint.py never writes one. `load_joint_items`
+# still looks for the natural sibling name so a future driver that adds
+# item-level dumps is picked up automatically; today it always returns None,
+# so every joint contrast falls back to seed-only bootstrap, and that
+# fallback is recorded both per-contrast (`ci_method`, inherited from
+# paired_contrast) and in the run's metadata (`joint_bootstrap_unit`) rather
+# than silently under-powering the CI without saying so.
+
+JOINT_REQUIRED_KEYS = {"tag", "arm", "seed", "lang", "task", "conditions"}
+
+# Must match scripts/eval_f15_joint.py's CELL_RE (kept as a separate literal
+# here rather than imported, since that module pulls in torch/lm_eval/peft
+# purely to define one regex).
+JOINT_TAG_RE = re.compile(
+    r"^(?P<model>.+)_joint5_(?P<arm>original|langspec)_truetie_s(?P<seed>\d+)$"
+)
+
+# Which `conditions` sub-dict holds the metric that feeds the langspec-vs-
+# original contrast (the deployed configuration): "routed" for langspec
+# (per-item argmax routing), "model_tokenizer" for original (no routing to
+# speak of). "oracle" (langspec only) is handled separately, descriptively.
+JOINT_CONDITION_BY_ARM = {"original": "model_tokenizer", "langspec": "routed"}
+
+
+def derive_joint_family(tag: str, rec_arm: str, rec_seed: int) -> tuple[str, str]:
+    """Parse `tag` with JOINT_TAG_RE and cross-check against the record's own
+    arm/seed fields -- same "trust the record, verify the filename/tag
+    against it" discipline as derive_model_and_family above."""
+    m = JOINT_TAG_RE.match(tag)
+    if not m:
+        raise ValueError(
+            f"joint tag {tag!r} does not match expected pattern "
+            f"{JOINT_TAG_RE.pattern!r} (see eval_f15_joint.py CELL_RE)"
+        )
+    if m["arm"] != rec_arm:
+        raise ValueError(
+            f"joint tag {tag!r}: arm parsed from tag ({m['arm']!r}) != "
+            f"record's own arm field ({rec_arm!r})"
+        )
+    if int(m["seed"]) != rec_seed:
+        raise ValueError(
+            f"joint tag {tag!r}: seed parsed from tag ({m['seed']!r}) != "
+            f"record's own seed field ({rec_seed!r})"
+        )
+    model = m["model"]
+    # Wiring is fixed for every joint cell (true_tie + training wiring; see
+    # eval_f15_joint.py's load_model_training_wiring), unlike the
+    # single-language path where wiring varies per family -- so the joint
+    # "wiring bits" are a constant tag rather than derived per-record.
+    family = f"{model}[joint5+truetie]"
+    return model, family
+
+
+def load_joint_items(joint_dir: Path, tag: str, lang: str, metric: str) -> Optional[dict]:
+    """Optional sibling `<tag>__<lang>__items.jsonl`, same format as
+    load_items above. Returns None (no error) if absent -- as of this
+    writing, no joint driver writes this file, so this is forward-looking
+    only; see the section docstring above."""
+    path = joint_dir / f"{tag}__{lang}__items.jsonl"
+    if not path.exists():
+        return None
+    items: dict = {}
+    for lineno, line in enumerate(path.read_text().splitlines(), start=1):
+        line = line.strip()
+        if not line:
+            continue
+        rec = json.loads(line)
+        if "doc_id" not in rec:
+            raise KeyError(f"{path}:{lineno}: missing 'doc_id'")
+        if metric not in rec:
+            raise KeyError(
+                f"{path}:{lineno}: missing metric key {metric!r}; "
+                f"available keys: {list(rec)}"
+            )
+        doc_id = rec["doc_id"]
+        if doc_id in items:
+            raise ValueError(f"{path}:{lineno}: duplicate doc_id {doc_id!r}")
+        items[doc_id] = float(rec[metric])
+    return items
+
+
+def load_joint_cells(joint_dir: Path, metric: str) -> tuple[list[dict], list[dict]]:
+    """Scan --joint-dir for per-(cell, lang) joint JSONs. Returns
+    (cells, skipped), mirroring load_cells above. Files lacking
+    JOINT_REQUIRED_KEYS (e.g. this driver's own routing_accuracy_*.json
+    pool-level summaries) are skipped and reported, not silently dropped.
+    A file that has the required keys but is internally inconsistent (tag
+    disagreeing with its own arm/seed/lang/task fields, an unrecognized arm,
+    a missing condition) is a hard error."""
+    cells: list[dict] = []
+    skipped: list[dict] = []
+    seen_keys: dict[tuple, Path] = {}
+    for path in sorted(joint_dir.glob("*.json")):
+        try:
+            raw = json.loads(path.read_text())
+        except json.JSONDecodeError as e:
+            skipped.append({"path": str(path), "reason": f"invalid JSON: {e}"})
+            continue
+        if not isinstance(raw, dict) or not JOINT_REQUIRED_KEYS.issubset(raw):
+            missing = JOINT_REQUIRED_KEYS - (raw.keys() if isinstance(raw, dict) else set())
+            skipped.append({
+                "path": str(path),
+                "reason": f"not a joint per-cell-lang record (missing keys: {sorted(missing)})",
+            })
+            continue
+
+        tag, arm, seed, lang, task = (
+            raw["tag"], raw["arm"], raw["seed"], raw["lang"], raw["task"]
+        )
+        if arm not in JOINT_CONDITION_BY_ARM:
+            raise ValueError(
+                f"{path}: unrecognized arm {arm!r}; expected one of "
+                f"{sorted(JOINT_CONDITION_BY_ARM)}"
+            )
+        if task != f"multiblimp_{lang}":
+            raise ValueError(
+                f"{path}: task {task!r} inconsistent with lang {lang!r} "
+                f"(expected 'multiblimp_{lang}')"
+            )
+        expected_name = f"{tag}__{lang}.json"
+        if path.name != expected_name:
+            raise ValueError(
+                f"{path}: filename does not match its own tag/lang fields "
+                f"(expected {expected_name!r})"
+            )
+
+        model, family = derive_joint_family(tag, arm, seed)
+
+        conditions = raw["conditions"]
+        cond_name = JOINT_CONDITION_BY_ARM[arm]
+        if cond_name not in conditions:
+            raise KeyError(
+                f"{path}: conditions missing {cond_name!r} for arm {arm!r}; "
+                f"available: {sorted(conditions)}"
+            )
+        cond = conditions[cond_name]
+        if "results" not in cond:
+            raise KeyError(f"{path}: conditions.{cond_name} missing 'results'")
+        value, extracted_task = extract_metric(
+            {"tag": f"{tag}/{cond_name}", "results": cond["results"]}, metric
+        )
+        if extracted_task != task:
+            raise ValueError(
+                f"{path}: conditions.{cond_name}.results task key "
+                f"{extracted_task!r} != record's own task field {task!r}"
+            )
+
+        oracle_value = None
+        delta = None
+        if arm == "langspec":
+            if "oracle" not in conditions:
+                raise KeyError(f"{path}: langspec record missing conditions.oracle")
+            oracle_cond = conditions["oracle"]
+            if "results" not in oracle_cond:
+                raise KeyError(f"{path}: conditions.oracle missing 'results'")
+            oracle_value, oracle_task = extract_metric(
+                {"tag": f"{tag}/oracle", "results": oracle_cond["results"]}, metric
+            )
+            if oracle_task != task:
+                raise ValueError(
+                    f"{path}: conditions.oracle.results task key {oracle_task!r} "
+                    f"!= record's own task field {task!r}"
+                )
+            delta = value - oracle_value
+            if metric == "acc":
+                # Cross-check against the driver's own precomputed
+                # convenience fields (routed_acc/oracle_acc/
+                # routed_vs_oracle_delta_acc), which are hardcoded to
+                # "acc,none" regardless of --metric -- an internal
+                # consistency check, not a substitute source of truth.
+                for field, computed in (
+                    ("routed_acc", value),
+                    ("oracle_acc", oracle_value),
+                    ("routed_vs_oracle_delta_acc", delta),
+                ):
+                    if field not in raw:
+                        raise KeyError(f"{path}: metric=acc but top-level {field!r} missing")
+                    if not math.isclose(raw[field], computed, rel_tol=1e-9, abs_tol=1e-9):
+                        raise ValueError(
+                            f"{path}: top-level {field}={raw[field]!r} disagrees with "
+                            f"the value computed from conditions.{cond_name}/oracle "
+                            f"({computed!r})"
+                        )
+
+        n_eff = cond.get("n_samples", {}).get(task, {}).get("effective")
+        items = load_joint_items(joint_dir, tag, lang, metric)
+
+        key = (family, lang, arm, seed)
+        if key in seen_keys:
+            raise ValueError(
+                f"duplicate joint cell {key}: both {seen_keys[key]} and {path} "
+                f"map to it. Refusing to silently pick one or average them."
+            )
+        seen_keys[key] = path
+
+        cells.append({
+            "path": str(path),
+            "tag": tag,
+            "model": model,
+            "family": family,
+            "lang": lang,
+            "arm": arm,
+            "seed": seed,
+            "task": task,
+            "value": value,
+            "oracle_value": oracle_value,
+            "routed_vs_oracle_delta": delta,
+            "n_samples_effective": n_eff,
+            "items": items,
+        })
+    return cells, skipped
+
+
+def aggregate_routed_vs_oracle(cells: list[dict]) -> dict[tuple, dict]:
+    """Descriptive (no bootstrap/CI/significance test) per-(family, lang)
+    summary of the routed-vs-oracle delta for the langspec arm: how much
+    routing to the argmax-likelihood pooled overlay costs relative to being
+    handed the correct overlay outright. Expected near zero given routing
+    was designed to be exact for these cells (see eval_f15_joint.py); this
+    is a diagnostic, not a hypothesis test."""
+    groups: dict[tuple, list[dict]] = defaultdict(list)
+    for c in cells:
+        if c["arm"] != "langspec":
+            continue
+        if c["routed_vs_oracle_delta"] is None:
+            raise ValueError(
+                f"{c['path']}: langspec cell missing routed_vs_oracle_delta "
+                f"after loading -- loader bug, not a data issue."
+            )
+        groups[(c["family"], c["lang"])].append(c)
+
+    out: dict[tuple, dict] = {}
+    for key, recs in groups.items():
+        seeds = [r["seed"] for r in recs]
+        if len(seeds) != len(set(seeds)):
+            raise ValueError(f"duplicate seed within joint routing group {key}: seeds={seeds}")
+        deltas = np.array([r["routed_vs_oracle_delta"] for r in recs], dtype=float)
+        out[key] = {
+            "family": key[0], "lang": key[1],
+            "mean_delta": float(deltas.mean()),
+            "sd_delta": float(deltas.std(ddof=1)) if len(deltas) > 1 else float("nan"),
+            "n_seeds": len(recs),
+            "per_seed_delta": {r["seed"]: r["routed_vs_oracle_delta"] for r in recs},
+            "files": sorted(r["path"] for r in recs),
+        }
+    return out
+
+
+def render_routed_vs_oracle_table(summary: dict) -> str:
+    lines = ["\n## Joint: routed-vs-oracle delta (descriptive, langspec arm only)\n"]
+    lines.append("| family | lang | mean_delta | sd_delta | n_seeds | per_seed_delta |")
+    lines.append("|---|---|---|---|---|---|")
+    for key in sorted(summary):
+        c = summary[key]
+        per_seed = ", ".join(f"{s}:{v:+.4f}" for s, v in sorted(c["per_seed_delta"].items()))
+        lines.append(
+            f"| {c['family']} | {c['lang']} | {fmt(c['mean_delta'])} | {fmt(c['sd_delta'])} "
+            f"| {c['n_seeds']} | {per_seed} |"
+        )
+    return "\n".join(lines)
+
+
+# ---------------------------------------------------------------------------
 # Cell aggregation
 # ---------------------------------------------------------------------------
 
@@ -408,6 +723,78 @@ def paired_contrast(
     if note:
         result["note"] = note
     return result
+
+
+def compute_contrasts(
+    cells: list[dict], reference_arm: str, rng: np.random.Generator, iters: int,
+) -> dict[tuple, dict]:
+    """Group `cells` by (family, lang, arm) and run paired_contrast for every
+    non-reference arm present against its matching reference-arm cell.
+    Factored out of main() so the single-language and joint-multilingual
+    paths (which both produce cell lists in this same shape) share one
+    implementation rather than duplicating the loop."""
+    cells_by_group: dict[tuple, list[dict]] = defaultdict(list)
+    for c in cells:
+        cells_by_group[(c["family"], c["lang"], c["arm"])].append(c)
+
+    contrasts: dict[tuple, dict] = {}
+    for (family, lang, arm) in sorted(cells_by_group):
+        if arm == reference_arm:
+            continue
+        ref_key = (family, lang, reference_arm)
+        key = (family, lang, arm)
+        if ref_key not in cells_by_group:
+            contrasts[key] = {
+                "family": family, "lang": lang, "arm": arm,
+                "reference_arm": reference_arm,
+                "skipped_reason": (
+                    f"no {reference_arm!r} cell for family={family!r} lang={lang!r}"
+                ),
+            }
+            continue
+        contrasts[key] = paired_contrast(
+            family, lang, arm, reference_arm,
+            cells_by_group[ref_key], cells_by_group[key],
+            rng, iters,
+        )
+    return contrasts
+
+
+def compute_holm_by_family(contrasts: dict[tuple, dict], alpha: float) -> dict:
+    """Holm-Bonferroni within each family in `contrasts`, families never
+    pooled together. Applying this separately to the single-language
+    `contrasts` dict and a separate joint `contrasts` dict (rather than a
+    merged dict) is what keeps the joint per-language correction its own
+    family, per the F15 stats plan."""
+    holm_by_family: dict = {}
+    for family in sorted({k[0] for k in contrasts}):
+        pvals = {
+            k: contrasts[k]["bootstrap_p"]
+            for k in contrasts if k[0] == family and "skipped_reason" not in contrasts[k]
+        }
+        holm_by_family.update(holm_bonferroni(pvals, alpha))
+    return holm_by_family
+
+
+def contrasts_for_json(contrasts: dict, holm_by_family: dict, reference_arm: str, alpha: float) -> dict:
+    """Build the JSON-serializable {label: record} dict used for both the
+    "contrasts" and "joint_contrasts" --out-json keys."""
+    return {
+        "|".join(k) + f"_vs_{reference_arm}": {
+            **v,
+            **(
+                {"holm_p": holm_by_family[k]["holm_p"],
+                 "significant_raw": v["bootstrap_p"] <= alpha,
+                 "significant_holm": holm_by_family[k]["significant_holm"]}
+                if "skipped_reason" not in v
+                # Explicit nulls (not absent keys) for skipped contrasts, so
+                # a consumer can key into every contrast record the same way
+                # without a KeyError/.get() branch.
+                else {"holm_p": None, "significant_raw": None, "significant_holm": None}
+            ),
+        }
+        for k, v in sorted(contrasts.items())
+    }
 
 
 # ---------------------------------------------------------------------------
@@ -682,14 +1069,31 @@ def main() -> None:
                      "contrasts, Holm-Bonferroni, directional test.",
         formatter_class=argparse.RawDescriptionHelpFormatter,
     )
-    ap.add_argument("--eval-dir", type=Path, required=True,
-                    help="directory of per-cell eval JSONs (+ optional __items.jsonl)")
+    ap.add_argument("--eval-dir", type=Path, default=None,
+                    help="directory of per-cell eval JSONs (+ optional __items.jsonl) "
+                         "for the single-language MultiBLiMP path. At least one of "
+                         "--eval-dir/--joint-dir is required; both may be given in "
+                         "the same invocation (their outputs are independent and "
+                         "written under separate --out-json keys).")
+    ap.add_argument("--joint-dir", type=Path, default=None,
+                    help="directory of per-(cell,lang) joint-multilingual eval JSONs "
+                         "(scripts/eval_f15_joint.py output, e.g. eval_results/f15_joint). "
+                         "Computes langspec-vs-original contrasts on ROUTED accuracy "
+                         "(the deployed configuration) per language, Holm-corrected as "
+                         "its own family separate from --eval-dir's contrasts, plus a "
+                         "descriptive routed-vs-oracle delta per language. No per-item "
+                         "files exist for this schema as of this writing, so the "
+                         "bootstrap falls back to seed-level and says so explicitly "
+                         "(metadata.joint_bootstrap_unit and each contrast's ci_method).")
     ap.add_argument("--reference-arm", default="original",
-                    help="arm every contrast is computed against (default: original)")
+                    help="arm every contrast is computed against (default: original); "
+                         "applies to both --eval-dir and --joint-dir contrasts")
     ap.add_argument("--metric", default="acc",
                     help="lm-eval metric name without ',none' suffix (default: acc)")
     ap.add_argument("--intrinsic-csv", type=Path, default=None,
-                    help="optional CSV with header 'lang,delta' for the directional test")
+                    help="optional CSV with header 'lang,delta' for the directional "
+                         "test; requires --eval-dir (the test runs over its contrasts, "
+                         "not --joint-dir's)")
     ap.add_argument("--out-json", type=Path, required=True,
                     help="path to write the machine-readable summary JSON")
     ap.add_argument("--alpha", type=float, default=ALPHA,
@@ -700,112 +1104,158 @@ def main() -> None:
                     help=f"RNG seed for the bootstrap (default: {BOOTSTRAP_RNG_SEED})")
     args = ap.parse_args()
 
-    if not args.eval_dir.is_dir():
-        print(f"ERROR: --eval-dir {args.eval_dir} is not a directory", file=sys.stderr)
+    if args.eval_dir is None and args.joint_dir is None:
+        print("ERROR: at least one of --eval-dir/--joint-dir is required", file=sys.stderr)
         sys.exit(1)
-
-    cells, skipped = load_cells(args.eval_dir, args.metric)
-    if not cells:
-        print(f"ERROR: no per-cell JSONs found under {args.eval_dir}", file=sys.stderr)
-        sys.exit(1)
-
-    print(f"# F15 stats — {args.eval_dir}")
-    print(f"\nLoaded {len(cells)} cell files, skipped {len(skipped)} non-cell files.")
-    if skipped:
-        print("\nSkipped files:")
-        for s in skipped:
-            print(f"- {s['path']}: {s['reason']}")
-
-    cells_agg = aggregate_cells(cells)
-    print(render_cells_table(cells_agg, args.metric))
-
-    # Paired contrasts, per family, per lang, per non-reference arm present.
-    rng = np.random.default_rng(args.bootstrap_seed)
-    cells_by_group: dict[tuple, list[dict]] = defaultdict(list)
-    for c in cells:
-        cells_by_group[(c["family"], c["lang"], c["arm"])].append(c)
-
-    contrasts: dict[tuple, dict] = {}
-    for (family, lang, arm) in sorted(cells_by_group):
-        if arm == args.reference_arm:
-            continue
-        ref_key = (family, lang, args.reference_arm)
-        key = (family, lang, arm)
-        if ref_key not in cells_by_group:
-            contrasts[key] = {
-                "family": family, "lang": lang, "arm": arm,
-                "reference_arm": args.reference_arm,
-                "skipped_reason": (
-                    f"no {args.reference_arm!r} cell for family={family!r} lang={lang!r}"
-                ),
-            }
-            continue
-        contrasts[key] = paired_contrast(
-            family, lang, arm, args.reference_arm,
-            cells_by_group[ref_key], cells_by_group[key],
-            rng, args.bootstrap_iters,
+    if args.intrinsic_csv is not None and args.eval_dir is None:
+        print(
+            "ERROR: --intrinsic-csv requires --eval-dir (the directional test runs "
+            "over --eval-dir's single-language contrasts; --joint-dir does not "
+            "feed it).",
+            file=sys.stderr,
         )
+        sys.exit(1)
 
-    # Holm-Bonferroni within each family (metric fixed per run).
-    holm_by_family: dict = {}
-    for family in sorted({k[0] for k in contrasts}):
-        pvals = {
-            k: contrasts[k]["bootstrap_p"]
-            for k in contrasts if k[0] == family and "skipped_reason" not in contrasts[k]
-        }
-        holm_by_family.update(holm_bonferroni(pvals, args.alpha))
-
-    print(render_contrasts_table(contrasts, holm_by_family, args.reference_arm,
-                                  args.metric, args.alpha))
-
-    # Directional test.
-    if args.intrinsic_csv is not None:
-        intrinsic = load_intrinsic_csv(args.intrinsic_csv)
-        dt = directional_test(intrinsic, contrasts, args.reference_arm,
-                               DIRECTIONAL_TARGET_ARM)
+    if args.eval_dir is not None and args.joint_dir is None:
+        # Exact wording from before --joint-dir existed (backward-compatible
+        # stdout, not just --out-json, for the unchanged single-language path).
+        print(f"# F15 stats — {args.eval_dir}")
     else:
-        dt = {"enabled": False, "note": "no --intrinsic-csv supplied; directional test skipped."}
-    print(render_directional_test(dt))
+        headers = []
+        if args.eval_dir is not None:
+            headers.append(f"eval-dir {args.eval_dir}")
+        if args.joint_dir is not None:
+            headers.append(f"joint-dir {args.joint_dir}")
+        print(f"# F15 stats — {'; '.join(headers)}")
 
-    # Machine-readable summary.
     repo = Path(__file__).resolve().parent.parent
-    summary = {
-        "metadata": {
+    summary: dict = {"metadata": {
+        "reference_arm": args.reference_arm,
+        "metric": args.metric,
+        "alpha": args.alpha,
+        "bootstrap_iters": args.bootstrap_iters,
+        "bootstrap_seed": args.bootstrap_seed,
+        "script_git_commit": git_commit(repo),
+        "generated_at": datetime.now(timezone.utc).isoformat(),
+    }}
+
+    # -----------------------------------------------------------------
+    # Single-language path (unchanged behavior from before --joint-dir
+    # existed, modulo the compute_contrasts/compute_holm_by_family/
+    # contrasts_for_json factoring, which produces byte-identical output).
+    # -----------------------------------------------------------------
+    contrasts: dict = {}
+    if args.eval_dir is not None:
+        if not args.eval_dir.is_dir():
+            print(f"ERROR: --eval-dir {args.eval_dir} is not a directory", file=sys.stderr)
+            sys.exit(1)
+
+        cells, skipped = load_cells(args.eval_dir, args.metric)
+        if not cells:
+            print(f"ERROR: no per-cell JSONs found under {args.eval_dir}", file=sys.stderr)
+            sys.exit(1)
+
+        print(f"\nLoaded {len(cells)} cell files, skipped {len(skipped)} non-cell files.")
+        if skipped:
+            print("\nSkipped files:")
+            for s in skipped:
+                print(f"- {s['path']}: {s['reason']}")
+
+        cells_agg = aggregate_cells(cells)
+        print(render_cells_table(cells_agg, args.metric))
+
+        rng = np.random.default_rng(args.bootstrap_seed)
+        contrasts = compute_contrasts(cells, args.reference_arm, rng, args.bootstrap_iters)
+        holm_by_family = compute_holm_by_family(contrasts, args.alpha)
+        print(render_contrasts_table(contrasts, holm_by_family, args.reference_arm,
+                                      args.metric, args.alpha))
+
+        if args.intrinsic_csv is not None:
+            intrinsic = load_intrinsic_csv(args.intrinsic_csv)
+            dt = directional_test(intrinsic, contrasts, args.reference_arm,
+                                   DIRECTIONAL_TARGET_ARM)
+        else:
+            dt = {"enabled": False, "note": "no --intrinsic-csv supplied; directional test skipped."}
+        print(render_directional_test(dt))
+
+        summary["metadata"].update({
             "eval_dir": str(args.eval_dir),
-            "reference_arm": args.reference_arm,
-            "metric": args.metric,
-            "alpha": args.alpha,
-            "bootstrap_iters": args.bootstrap_iters,
-            "bootstrap_seed": args.bootstrap_seed,
             "intrinsic_csv": str(args.intrinsic_csv) if args.intrinsic_csv else None,
             "intrinsic_csv_sha256": sha256(args.intrinsic_csv) if args.intrinsic_csv else None,
             "n_input_files_loaded": len(cells),
             "n_input_files_skipped": len(skipped),
             "skipped_files": skipped,
-            "script_git_commit": git_commit(repo),
-            "generated_at": datetime.now(timezone.utc).isoformat(),
-        },
-        "cells": {
-            "|".join(k): v for k, v in sorted(cells_agg.items())
-        },
-        "contrasts": {
-            "|".join(k) + f"_vs_{args.reference_arm}": {
-                **v,
-                **(
-                    {"holm_p": holm_by_family[k]["holm_p"],
-                     "significant_raw": v["bootstrap_p"] <= args.alpha,
-                     "significant_holm": holm_by_family[k]["significant_holm"]}
-                    if "skipped_reason" not in v
-                    # Explicit nulls (not absent keys) for skipped contrasts,
-                    # so a consumer can key into every contrast record the
-                    # same way without a KeyError/.get() branch.
-                    else {"holm_p": None, "significant_raw": None, "significant_holm": None}
-                ),
-            }
-            for k, v in sorted(contrasts.items())
-        },
-        "directional_test": dt,
-    }
+        })
+        summary["cells"] = {"|".join(k): v for k, v in sorted(cells_agg.items())}
+        summary["contrasts"] = contrasts_for_json(contrasts, holm_by_family, args.reference_arm, args.alpha)
+        summary["directional_test"] = dt
+
+    # -----------------------------------------------------------------
+    # Joint-multilingual path (F15 wave 2). Fully separate cell list,
+    # contrasts dict, and Holm family from the single-language path above
+    # -- never merged, per the "separate family" requirement. Uses its own
+    # fresh RNG (same --bootstrap-seed value) so its bootstrap draws do not
+    # depend on whether --eval-dir was also passed in the same invocation.
+    # -----------------------------------------------------------------
+    if args.joint_dir is not None:
+        if not args.joint_dir.is_dir():
+            print(f"ERROR: --joint-dir {args.joint_dir} is not a directory", file=sys.stderr)
+            sys.exit(1)
+
+        joint_cells, joint_skipped = load_joint_cells(args.joint_dir, args.metric)
+        if not joint_cells:
+            print(f"ERROR: no per-cell-lang joint JSONs found under {args.joint_dir}", file=sys.stderr)
+            sys.exit(1)
+
+        print(f"\nLoaded {len(joint_cells)} joint cell-lang files, "
+              f"skipped {len(joint_skipped)} non-cell files.")
+        if joint_skipped:
+            print("\nSkipped joint files:")
+            for s in joint_skipped:
+                print(f"- {s['path']}: {s['reason']}")
+
+        joint_cells_agg = aggregate_cells(joint_cells)
+        print(render_cells_table(joint_cells_agg, args.metric))
+
+        rng_joint = np.random.default_rng(args.bootstrap_seed)
+        joint_contrasts = compute_contrasts(joint_cells, args.reference_arm, rng_joint, args.bootstrap_iters)
+        joint_holm_by_family = compute_holm_by_family(joint_contrasts, args.alpha)
+        print(render_contrasts_table(joint_contrasts, joint_holm_by_family, args.reference_arm,
+                                      args.metric, args.alpha))
+
+        joint_routed_vs_oracle = aggregate_routed_vs_oracle(joint_cells)
+        print(render_routed_vs_oracle_table(joint_routed_vs_oracle))
+
+        ci_methods_used = {
+            c["ci_method"] for c in joint_contrasts.values() if "skipped_reason" not in c
+        }
+        unit_by_method = {
+            "seed-only percentile bootstrap": "seed",
+            "item+seed percentile bootstrap": "item+seed",
+        }
+        units_used = sorted({unit_by_method[m] for m in ci_methods_used})
+        if not units_used:
+            joint_bootstrap_unit = "n/a (no non-skipped joint contrasts)"
+        elif len(units_used) == 1:
+            joint_bootstrap_unit = units_used[0]
+        else:
+            joint_bootstrap_unit = "mixed:" + ",".join(units_used)
+
+        summary["metadata"].update({
+            "joint_dir": str(args.joint_dir),
+            "joint_n_input_files_loaded": len(joint_cells),
+            "joint_n_input_files_skipped": len(joint_skipped),
+            "joint_skipped_files": joint_skipped,
+            "joint_bootstrap_unit": joint_bootstrap_unit,
+        })
+        summary["joint_cells"] = {"|".join(k): v for k, v in sorted(joint_cells_agg.items())}
+        summary["joint_contrasts"] = contrasts_for_json(
+            joint_contrasts, joint_holm_by_family, args.reference_arm, args.alpha
+        )
+        summary["joint_routed_vs_oracle"] = {
+            "|".join(k): v for k, v in sorted(joint_routed_vs_oracle.items())
+        }
+
     args.out_json.parent.mkdir(parents=True, exist_ok=True)
     args.out_json.write_text(json.dumps(summary, indent=2, default=str))
     print(f"\nWrote machine-readable summary to {args.out_json}")

@@ -161,7 +161,11 @@ FAMILIES = {
     },
     "llama3.2-1b": {
         "model_name": "meta-llama/Llama-3.2-1B",
-        "overlay_langs": ["tur", "arb", "hin"],
+        # Extended 2026-08-18 (wave-2 prep): fin/hun added so all 5 langs
+        # have a langspec overlay, unblocking the 6 Llama joint-multilingual
+        # cells (scripts/launch_f15_wave2.sh INCLUDE_LLAMA_JOINT). No
+        # placebos/mono32k for llama -- unchanged, not requested.
+        "overlay_langs": ["tur", "arb", "hin", "fin", "hun"],
         "placebo_langs": [],
         "mono_langs": [],
     },
@@ -712,11 +716,105 @@ def process_family(family_name: str, cfg: dict, corpora: dict, git_commit: str) 
     return manifest
 
 
+# ---------------------------------------------------------------------------
+# Routing pool (F15 joint-multilingual arm)
+# ---------------------------------------------------------------------------
+def build_pool(family_name: str, git_commit: str) -> dict:
+    """Build las_tokenizers/f15/<family>/pool/: base_tokenizer.json plus
+    every language's langspec overlay, as RELATIVE symlinks into the
+    per-language dirs (no file copies, so the pool can never drift from the
+    fitted overlays) -- what `las_experiment.downstream_eval.LasTokenizerHFLM`
+    globs for routed eval in the joint-multilingual arm. Requires an overlay
+    to already exist for every language in BASE_LANGS.
+
+    Mirrors the convention already established by
+    las_tokenizers/f15/qwen2_5-0_5b/pool/ (built manually for wave 2 prep,
+    inspected on disk before writing this function so the schema matches
+    field-for-field): pool_manifest.json with purpose/built_by/date/
+    git_commit/family/langs/entries/note, entries keyed by the pool
+    filename with symlink_target (relative), resolved (absolute), sha256.
+    """
+    family_dir = OUT_ROOT / family_name
+    pool_dir = family_dir / "pool"
+    pool_dir.mkdir(parents=True, exist_ok=True)
+
+    base_tokenizer_path = family_dir / "base_tokenizer.json"
+    if not base_tokenizer_path.exists():
+        raise RuntimeError(f"{family_name}: base_tokenizer.json missing, cannot build pool")
+
+    def _link(pool_name: str, target_rel: str, resolved: Path) -> dict:
+        if not resolved.exists():
+            raise RuntimeError(
+                f"{family_name}: pool source missing for {pool_name}: {resolved} "
+                f"(every language in BASE_LANGS must have a langspec overlay "
+                f"before building the pool)"
+            )
+        link_path = pool_dir / pool_name
+        if link_path.is_symlink() or link_path.exists():
+            link_path.unlink()
+        os.symlink(target_rel, link_path)
+        return {
+            "symlink_target": target_rel,
+            "resolved": str(resolved),
+            "sha256": sha256(resolved),
+        }
+
+    entries = {}
+    entries["base_tokenizer.json"] = _link(
+        "base_tokenizer.json", "../base_tokenizer.json", base_tokenizer_path
+    )
+    langs = {}
+    for l in BASE_LANGS:
+        lang_code = LANG_CODES[l]
+        script_suffix = "_" + lang_code.split("_", 1)[1]
+        langs[l] = script_suffix
+        pool_name = f"langspec_{lang_code}.json"
+        target_rel = f"../{l}/{pool_name}"
+        resolved = family_dir / l / pool_name
+        entries[pool_name] = _link(pool_name, target_rel, resolved)
+
+    pool_manifest = {
+        "purpose": (
+            "Routing pool for the F15 joint-multilingual arm: one directory "
+            "holding base_tokenizer.json plus every langspec overlay, which "
+            "is what las_experiment.downstream_eval.LasTokenizerHFLM globs "
+            "for routed eval and what las_mode=langspec reads when a run "
+            "trains several languages at once."
+        ),
+        "built_by": "scripts/prep_f15_tokenizers.py build_pool(), F15 wave 2 prep",
+        "date": datetime.now(timezone.utc).isoformat(),
+        "git_commit": git_commit,
+        "family": family_name,
+        "langs": langs,
+        "entries": entries,
+        "note": (
+            "Symlinks (relative) into the per-language dirs of this same "
+            "family; no file is copied, so the pool can never drift from "
+            "the fitted overlays."
+        ),
+    }
+    pool_manifest_path = pool_dir / "pool_manifest.json"
+    pool_manifest_path.write_text(json.dumps(pool_manifest, indent=2))
+    logger.info(f"[{family_name}] pool built: {pool_dir} ({len(entries)} entries)")
+    return pool_manifest
+
+
 def main() -> None:
     ap = argparse.ArgumentParser()
     ap.add_argument("--family", choices=list(FAMILIES.keys()), default=None,
                      help="Restrict to one family (default: both, sequentially)")
+    ap.add_argument("--build-pool", choices=list(FAMILIES.keys()), default=None,
+                     help="Build las_tokenizers/f15/<family>/pool/ from "
+                          "already-fitted overlays (no training) and exit.")
     args = ap.parse_args()
+
+    if args.build_pool:
+        git_commit = subprocess.run(
+            ["git", "-C", str(REPO_ROOT), "rev-parse", "HEAD"],
+            check=True, capture_output=True, text=True,
+        ).stdout.strip()
+        build_pool(args.build_pool, git_commit)
+        return
 
     git_commit = subprocess.run(
         ["git", "-C", str(REPO_ROOT), "rev-parse", "HEAD"],

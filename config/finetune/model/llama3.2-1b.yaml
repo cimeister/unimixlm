@@ -1,0 +1,10 @@
+name: llama3.2-1b
+model_name: meta-llama/Llama-3.2-1B
+model_tokenizer_path: meta-llama/Llama-3.2-1B
+
+# Llama-3.2-1B: 128k-vocab TIED embeddings (same bug-4 regime as Qwen3/Gemma3),
+# 2048 hidden → ~263M embed params (similar burden to Gemma3-1B's 302M). bs=2
+# to stay clear of OOM with unfrozen embeddings + Adam state. Eff batch 2×4×16=128.
+# pad_token is None upstream; the trainer falls back to eos (<|end_of_text|>).
+per_device_batch_size: 2
+gradient_accumulation_steps: 16
