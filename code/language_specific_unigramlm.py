@@ -53,6 +53,27 @@ def _extract_log_scores(tok: Tokenizer) -> Dict[str, float]:
     return {tok: score for tok, score in vocab}
 
 
+def _score_encoding(enc, scores: Dict[str, float], tokenizer: Tokenizer) -> float:
+    """Score an Encoding by summing log-probs looked up via id_to_token.
+
+    Walks `enc.ids` rather than `enc.tokens` because HF Unigram emits UNK
+    with `enc.tokens[i]` = the source character (not the canonical UNK
+    vocab entry), which would silently miss the score-dict lookup and push
+    the routing toward MIN_TOKEN_LOG_PROB. Routing that string through
+    `tokenizer.id_to_token(i)` canonicalizes every ID to its vocab entry —
+    so the UNK token's real score is found, whatever string the tokenizer
+    actually uses for UNK (Gemma: '<unk>', Qwen3: '<|endoftext|>', etc.).
+    """
+    total = 0.0
+    for token_id in enc.ids:
+        canonical = tokenizer.id_to_token(token_id)
+        if canonical is None:
+            total += MIN_TOKEN_LOG_PROB
+        else:
+            total += scores.get(canonical, MIN_TOKEN_LOG_PROB)
+    return total
+
+
 def _build_unigramlm_hf_tokenizer_with_new_lprobs(
     base_tokenizer, new_log_probs: Dict[str, float], unk_token: str
 ) -> Tokenizer:
@@ -229,10 +250,20 @@ class LanguageSpecificUnigramLMTokenizer(StandardUnigramLMTokenizer):
             ] + SP_DEFAULT_ARGS
 
             # 3. Execute the command
+            # check=False so we can surface stdout+stderr on failure (the default
+            # CalledProcessError.__str__ only includes the command string, which
+            # strips every actionable piece of information).
             logger.info(f"Running SentencePiece CLI command:\n{' '.join(command)}")
             output = subprocess.run(
-                command, check=True, capture_output=True, text=True, encoding="utf-8"
+                command, check=False, capture_output=True, text=True, encoding="utf-8"
             )
+            if output.returncode != 0:
+                raise RuntimeError(
+                    f"spm_train failed with exit code {output.returncode}.\n"
+                    f"Command: {' '.join(command)}\n"
+                    f"--- stderr ---\n{output.stderr}\n"
+                    f"--- stdout ---\n{output.stdout}"
+                )
             logger.info("SentencePiece training successful.")
             logger.info(f"SentencePiece STDOUT: {output.stdout}")
             logger.info(f"SentencePiece STDERR (logs + errors): : {output.stderr}")
@@ -273,6 +304,40 @@ class LanguageSpecificUnigramLMTokenizer(StandardUnigramLMTokenizer):
                     f"Tokens {missing_tokens} not in sentencepiece model; defaulting to base "
                     f"tokenizer log-prob {vocab_dict[t]:.5f}"
                 )
+
+            # -------- Interface-2 sanity guard (T2) --------
+            # If too many SP pieces don't map into the HF base vocab, the corpus
+            # written to disk was in a format SP didn't read as HF-byte-level,
+            # and `p_hf = p` (line 259) silently fails for most tokens. Every
+            # affected base token then falls back to `vocab_dict[t]` and the
+            # resulting langspec is numerically ≈ base.
+            sp_meta = set(SPECIAL_TOKENS.values()) | {self.unk_token}
+            truly_unknown = additional_tokens - sp_meta
+            n_truly_unknown = len(truly_unknown)
+            n_sp_pieces = sp.get_piece_size()
+            n_base_vocab = len(vocab_dict)
+            n_fallback = len(missing_tokens)
+            pct_unknown = n_truly_unknown / max(n_sp_pieces, 1)
+            pct_fallback = n_fallback / max(n_base_vocab, 1)
+            logger.info(
+                f"SP->HF handoff: sp_pieces={n_sp_pieces} base_vocab={n_base_vocab} "
+                f"matched={n_base_vocab - n_fallback} fallback={n_fallback} "
+                f"unknown_from_sp={n_truly_unknown} (pct_unknown={pct_unknown:.4f}, pct_fallback={pct_fallback:.4f})"
+            )
+            if pct_unknown > 0.01:
+                raise RuntimeError(
+                    f"SP produced {pct_unknown:.1%} pieces outside HF base vocab "
+                    f"({n_truly_unknown}/{n_sp_pieces}). Likely cause: corpus "
+                    f"format mismatch between write_hf_bytelevel_corpus and what "
+                    f"spm_train read. First 20 unknown: {list(truly_unknown)[:20]}"
+                )
+            if pct_fallback > 0.50:
+                raise RuntimeError(
+                    f"{pct_fallback:.1%} of base vocab fell back to base score "
+                    f"({n_fallback}/{n_base_vocab}). SP training didn't see enough "
+                    f"of the language, or the SP<->HF piece format diverged."
+                )
+
             # 3) Normalize in log-space
             token_logps = self._log_normalize(token_logps)
 
@@ -457,6 +522,49 @@ class LanguageSpecificUnigramLMTokenizer(StandardUnigramLMTokenizer):
             self.base_tokenizer, token_log_probs, self.unk_token
         )
         tok.save(str(tk_path))
+
+        # -------- T4c: in-memory ↔ reloaded equivalence --------
+        # Serialize/deserialize must preserve encoding behavior AND the
+        # _extract_log_scores output, because the non-standard inference path
+        # (best_language_encode) looks up scores by token string against
+        # `_extract_log_scores(tok)`. Any save/load drift silently breaks
+        # routing. Probe with a handful of lines from the training corpus.
+        _probe_lines = []
+        with open(train_file, "r", encoding="utf-8", errors="strict") as _f:
+            for _i, _l in enumerate(_f):
+                if _i >= 10:
+                    break
+                _l = _l.rstrip("\n")
+                if _l:
+                    _probe_lines.append(_l)
+        if not _probe_lines:
+            raise RuntimeError(
+                f"T4c: no probe lines read from {train_file} — cannot verify "
+                f"save/load equivalence for {tk_path}. The training corpus "
+                f"must not be empty."
+            )
+        _reloaded = Tokenizer.from_file(str(tk_path))
+        for _raw in _probe_lines:
+            _a = tok.encode(_raw).ids
+            _b = _reloaded.encode(_raw).ids
+            if _a != _b:
+                raise RuntimeError(
+                    f"T4c: save/load drift for {tk_path} on language "
+                    f"{lang_code!r}. In-memory IDs differ from reloaded IDs. "
+                    f"first 20 in-mem: {_a[:20]} / reloaded: {_b[:20]}"
+                )
+        _s_mem = _extract_log_scores(tok)
+        _s_rel = _extract_log_scores(_reloaded)
+        if _s_mem != _s_rel:
+            _keys_mem = set(_s_mem.keys())
+            _keys_rel = set(_s_rel.keys())
+            raise RuntimeError(
+                f"T4c: _extract_log_scores disagrees between in-memory and "
+                f"reloaded {tk_path}. "
+                f"in-mem-only keys: {list(_keys_mem - _keys_rel)[:5]} "
+                f"reloaded-only: {list(_keys_rel - _keys_mem)[:5]}"
+            )
+        logger.info(f"T4c OK: {tk_path} survives save/load on {len(_probe_lines)} probes")
         logger.info(f"Saved tokenizer with metadata for {lang_code} to {tk_path}")
         return tok, tk_path
 
@@ -483,12 +591,15 @@ class LanguageSpecificUnigramLMTokenizer(StandardUnigramLMTokenizer):
         best_lang, best_tokens, best_logp = None, [], float("-inf")
 
         for lang_code, info in self.per_lang_tok.items():
-            enc = info["tokenizer"].encode(text)
-            toks = enc.tokens
-            logp = sum(info["scores"].get(t, MIN_TOKEN_LOG_PROB) for t in toks)
+            # add_special_tokens=False to match training-time tokenization in
+            # `las_experiment.finetune.TokenizedTextDataset` (which encodes with
+            # add_special_tokens=False). Otherwise BOS/EOS from any post-processor
+            # would inflate token counts and skew BpB / routing scores.
+            enc = info["tokenizer"].encode(text, add_special_tokens=False)
+            logp = _score_encoding(enc, info["scores"], info["tokenizer"])
 
             if logp > best_logp:
-                best_lang, best_tokens, best_logp = lang_code, toks, logp
+                best_lang, best_tokens, best_logp = lang_code, enc.tokens, logp
 
         return best_lang, best_tokens
 
@@ -507,11 +618,11 @@ class LanguageSpecificUnigramLMTokenizer(StandardUnigramLMTokenizer):
         best_encs = [None] * len(texts)
 
         for lang_code, info in self.per_lang_tok.items():
-            encs = info["tokenizer"].encode_batch(texts)
+            # add_special_tokens=False to match training-time tokenization (see
+            # `best_language_encode` above for rationale).
+            encs = info["tokenizer"].encode_batch(texts, add_special_tokens=False)
             for i, enc in enumerate(encs):
-                score = sum(
-                    info["scores"].get(t, MIN_TOKEN_LOG_PROB) for t in enc.tokens
-                )
+                score = _score_encoding(enc, info["scores"], info["tokenizer"])
                 if score > best_scores[i]:
                     best_scores[i] = score
                     best_langs[i] = lang_code
