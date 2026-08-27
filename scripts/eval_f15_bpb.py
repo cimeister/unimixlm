@@ -165,6 +165,54 @@ def find_derived(cell_dir: Path) -> Path:
     return cands[0]
 
 
+def _verify_skip_provenance(out_path: Path, derived: Path) -> None:
+    """Before trusting an existing `<tag>__bpb[__ckptN].json` as satisfying a
+    cell (skip-if-exists), verify it actually belongs to THIS cell rather
+    than being a stale file left over from a different run under the same
+    tag -- the 2026-08-18 incident (`eval_results/f15_bpb/
+    qwen2_5-0_5b_tur_langspec_truetie_s42__bpb.json` was a stale F14c-era
+    file whose `checkpoint` pointed at `pr21_rerun/`, silently accepted as
+    satisfying the f15_wave1 cell of the same tag; see EXPERIMENTS_RESULTS.md
+    provenance caveat). Reads the file's `checkpoint` field and checks it is
+    `derived` itself or a path under it -- the cell's own derived run
+    directory (`<cell_dir>/ft*/`, or its `checkpoint-N/` subdir when
+    --checkpoint-step is used). The exact checkpoint-N is NOT separately
+    re-verified here: the output filename already encodes the step (the
+    `__ckptN` suffix), so a file for the wrong step lives at a different
+    path and would never reach this skip check -- the cell-dir prefix is the
+    only check that can actually fire.
+
+    Malformed/unreadable JSON or a missing `checkpoint` key is ALSO a hard
+    failure, not a silent re-evaluate: an existing file whose provenance
+    cannot be verified is exactly as untrustworthy as one proven wrong.
+    """
+    try:
+        data = json.loads(out_path.read_text())
+    except (OSError, json.JSONDecodeError) as e:
+        raise RuntimeError(
+            f"{out_path}: could not read/parse existing output while "
+            f"checking skip-if-exists provenance ({e!r}). Refusing to "
+            f"silently treat this file as satisfying the cell -- fix or "
+            f"remove it before re-running."
+        ) from e
+    recorded = data.get("checkpoint")
+    if not recorded:
+        raise RuntimeError(
+            f"{out_path}: existing output has no 'checkpoint' field -- "
+            f"cannot verify it belongs to this cell before skipping."
+        )
+    recorded_path = Path(recorded).resolve()
+    derived_resolved = derived.resolve()
+    if recorded_path != derived_resolved and derived_resolved not in recorded_path.parents:
+        raise RuntimeError(
+            f"{out_path}: recorded checkpoint {recorded!r} is not under this "
+            f"cell's own derived directory {derived_resolved} -- looks like "
+            f"a stale/mismatched output from a different run standing in "
+            f"for this cell. Refusing to skip; investigate before deleting "
+            f"or forcing re-evaluation."
+        )
+
+
 # ---------------------------------------------------------------------------
 # Model loading -- copied from scripts/eval_f14_multiblimp.py (same rationale:
 # bpb_core.load_eval_model does an unconditional lm_head re-share and has no
@@ -449,6 +497,15 @@ def discover_cells(args) -> list[dict]:
         f"discovered {len(matched)} cells (family={args.family} "
         f"model={args.model}) under {args.cells_root}"
     )
+    if not matched:
+        raise RuntimeError(
+            f"discovered 0 cells under --cells-root={args.cells_root} with "
+            f"--family={args.family} --model={args.model} -- no cell "
+            f"directory names matched TAG_RE and these filters. This has "
+            f"previously been caused by a wrong --family default; check "
+            f"--cells-root/--family/--model, or retry with --family all to "
+            f"see the full population before narrowing."
+        )
     if args.expect_cells is not None and len(matched) != args.expect_cells:
         raise RuntimeError(
             f"--expect-cells={args.expect_cells} but discovered {len(matched)} "
@@ -467,11 +524,12 @@ def discover_cells(args) -> list[dict]:
             continue
 
         out_path = args.out / f"{tag}__bpb{args.checkpoint_step_suffix}.json"
+        derived = find_derived(cell_dir)
         if out_path.exists() and not args.force:
+            _verify_skip_provenance(out_path, derived)
             print(f"[skip] {tag} (exists: {out_path.name})")
             continue
 
-        derived = find_derived(cell_dir)
         if args.checkpoint_step is not None:
             ckpt_load_dir = derived / f"checkpoint-{args.checkpoint_step}"
             if not ckpt_load_dir.exists():
@@ -598,6 +656,7 @@ def process_cell(cell: dict, args, gstate: dict) -> None:
     tag = cell["tag"]
     out_path = cell["out_path"]
     if out_path.exists() and not args.force:
+        _verify_skip_provenance(out_path, cell["derived"])
         print(f"[skip] {tag} (exists: {out_path.name})")
         return
 

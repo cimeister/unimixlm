@@ -318,6 +318,14 @@ def resolve_fineweb2_dataset(size: str) -> str:
 # resolver has actually been used for (per existing usage across the
 # project's LANG_SUFFIX conventions, e.g. slurm/submit_p4d_phase1.sh), not
 # just the two that need a non-default suffix.
+#
+# 'eng' is deliberately absent from this map — reviewed and signed off
+# 2026-08-27. eng falls back to cfg.dataset.lang_suffix (with a logged
+# warning) via resolve_lang_suffixes' unmapped-language path below, since it
+# has its own hub repo/config and, in langspec/placebo/base modes, keeps the
+# model's own tokenizer regardless of script suffix; multi-language runs are
+# exempt from resolve_lang_suffixes' single-language mismatch guard (see that
+# function's docstring).
 FINEWEB2_LANG_SUFFIX = {
     "tur": "_Latn",
     "fin": "_Latn",
@@ -353,6 +361,14 @@ def resolve_lang_suffixes(langs, cfg_lang_suffix):
     submission bug (wave-1 guard, kept). For multi-language runs the global
     key cannot match every language by construction, so agreement is not
     required and is not checked; the per-language map is authoritative.
+
+    Reviewed and signed off 2026-08-27: 'eng' is deliberately absent from
+    FINEWEB2_LANG_SUFFIX (it takes the unmapped-language fallback above —
+    ``cfg_lang_suffix``, with a logged warning — rather than a script-suffix
+    entry of its own), and multi-language runs are deliberately exempt from
+    the single-non-eng-language mismatch guard just above (the guard only
+    applies when there is exactly one non-eng language to check agreement
+    against).
     """
     suffixes = {}
     unmapped = []
