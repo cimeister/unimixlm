@@ -466,12 +466,21 @@ def discover_cells(args) -> list[dict]:
         if int(hashlib.sha1(tag.encode()).hexdigest(), 16) % n != k:
             continue
 
-        out_path = args.out / f"{tag}__bpb.json"
+        out_path = args.out / f"{tag}__bpb{args.checkpoint_step_suffix}.json"
         if out_path.exists() and not args.force:
             print(f"[skip] {tag} (exists: {out_path.name})")
             continue
 
         derived = find_derived(cell_dir)
+        if args.checkpoint_step is not None:
+            ckpt_load_dir = derived / f"checkpoint-{args.checkpoint_step}"
+            if not ckpt_load_dir.exists():
+                raise FileNotFoundError(
+                    f"{tag}: --checkpoint-step={args.checkpoint_step} requested "
+                    f"but {ckpt_load_dir} does not exist."
+                )
+        else:
+            ckpt_load_dir = derived
         meta = json.loads((derived / "run_metadata.json").read_text())
         if meta.get("status") != "completed":
             print(f"[SKIP-INCOMPLETE] {tag}: status={meta.get('status')!r} — not evaluating")
@@ -502,7 +511,8 @@ def discover_cells(args) -> list[dict]:
             tag=tag, lang=lang, arm=arm, model_tag=model_tag,
             base_model_id=base_model_id, reinit=bool(m["reinit"]),
             truetie=bool(m["truetie"]), seed=int(m["seed"]),
-            derived=derived, meta=meta, las_dir=las_dir, out_path=out_path,
+            derived=derived, ckpt_load_dir=ckpt_load_dir, meta=meta,
+            las_dir=las_dir, out_path=out_path,
             single_checkpoint=False,
         ))
     return cells
@@ -513,6 +523,16 @@ def resolve_single_checkpoint(args) -> dict:
     if not cell_dir.is_dir():
         raise FileNotFoundError(f"--single-checkpoint {cell_dir} is not a directory.")
     derived = find_derived(cell_dir)
+    if args.checkpoint_step is not None:
+        ckpt_load_dir = derived / f"checkpoint-{args.checkpoint_step}"
+        if not ckpt_load_dir.exists():
+            raise FileNotFoundError(
+                f"--single-checkpoint {cell_dir}: --checkpoint-step="
+                f"{args.checkpoint_step} requested but {ckpt_load_dir} does "
+                f"not exist."
+            )
+    else:
+        ckpt_load_dir = derived
     meta = json.loads((derived / "run_metadata.json").read_text())
     if meta.get("status") != "completed":
         raise ValueError(
@@ -560,13 +580,13 @@ def resolve_single_checkpoint(args) -> dict:
         default_tag += "_truetie"
     default_tag += f"_s{seed}"
     tag = args.single_tag or default_tag
-    out_path = args.out / f"{tag}__bpb.json"
+    out_path = args.out / f"{tag}__bpb{args.checkpoint_step_suffix}.json"
 
     return dict(
         tag=tag, lang=lang, arm=arm, model_tag=model_tag,
         base_model_id=base_model_id, reinit=reinit, truetie=truetie,
-        seed=int(seed), derived=derived, meta=meta, las_dir=las_dir,
-        out_path=out_path, single_checkpoint=True,
+        seed=int(seed), derived=derived, ckpt_load_dir=ckpt_load_dir, meta=meta,
+        las_dir=las_dir, out_path=out_path, single_checkpoint=True,
     )
 
 
@@ -585,23 +605,24 @@ def process_cell(cell: dict, args, gstate: dict) -> None:
     arm = cell["arm"]
     lang = cell["lang"]
     derived = cell["derived"]
+    ckpt_load_dir = cell["ckpt_load_dir"]
     meta = cell["meta"]
     las_dir = cell["las_dir"]
 
-    _assert_checkpoint_provenance(str(derived), base_model_id, arm, las_dir)
+    _assert_checkpoint_provenance(str(ckpt_load_dir), base_model_id, arm, las_dir)
 
     print(f"[eval] {tag} ({args.head_wiring})")
     if arm == "vocab_extend":
         model = load_model_vocab_extend(
-            base_model_id, str(derived), args.device, args.head_wiring, meta
+            base_model_id, str(ckpt_load_dir), args.device, args.head_wiring, meta
         )
     elif args.head_wiring == "reshared":
         kw = _build_eval_lm_kwargs(
-            base_pretrained=base_model_id, ckpt_path=str(derived), device=args.device,
+            base_pretrained=base_model_id, ckpt_path=str(ckpt_load_dir), device=args.device,
         )
         model = kw["pretrained"]
     else:
-        model = load_model_training_wiring(base_model_id, str(derived), args.device)
+        model = load_model_training_wiring(base_model_id, str(ckpt_load_dir), args.device)
 
     model_tokenizer = AutoTokenizer.from_pretrained(base_model_id)
     pad_id = model_tokenizer.pad_token_id or 0
@@ -661,7 +682,7 @@ def process_cell(cell: dict, args, gstate: dict) -> None:
         "nll": {"target": target_res["nll"], "eng": eng_res["nll"]},
         "tokenizer_target": _tok_provenance(target_kind, target_tok_file),
         "tokenizer_eng": _tok_provenance(eng_kind, eng_tok_file),
-        "checkpoint": str(derived),
+        "checkpoint": str(ckpt_load_dir),
         "train_git_commit": meta.get("git_commit"),
         "eval_git": gstate,
         "max_seq_len": args.max_seq_len,
@@ -670,6 +691,8 @@ def process_cell(cell: dict, args, gstate: dict) -> None:
         "single_checkpoint_mode": cell["single_checkpoint"],
         "timestamp": datetime.now().isoformat(),
     }
+    if args.checkpoint_step is not None:
+        record["checkpoint_step"] = args.checkpoint_step
     out_path.write_text(json.dumps(record, indent=2))
     print(
         f"[done] {tag}: flores_bpb_target={target_res['bpb']:.4f} "
@@ -730,7 +753,21 @@ def main() -> None:
     ap.add_argument("--single-lang", choices=list(LANG_SUFFIX.keys()), default=None)
     ap.add_argument("--single-tag", default=None,
                     help="override the auto-built output tag for --single-checkpoint")
+    ap.add_argument(
+        "--checkpoint-step", type=int, default=None,
+        help="Evaluate the intermediate checkpoint-N/ subdir inside the "
+             "derived run dir (e.g. 357/1781/3561 for F15 wave1/wave2 "
+             "cells) instead of the final trained state. Default: absent, "
+             "current final-checkpoint behavior unchanged (byte-identical "
+             "output). Hard-fails naming the missing path if checkpoint-N/ "
+             "does not exist under the cell's derived dir. Output filenames "
+             "get a __ckptN suffix so they never collide with the "
+             "final-checkpoint files.",
+    )
     args = ap.parse_args()
+    args.checkpoint_step_suffix = (
+        f"__ckpt{args.checkpoint_step}" if args.checkpoint_step is not None else ""
+    )
 
     if args.single_checkpoint is not None:
         if args.cells_root is not None:
