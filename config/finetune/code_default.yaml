@@ -1,0 +1,43 @@
+defaults:
+  - model: olmo3-1025-7b
+  - logger: wandb-unimix
+  - lora: r16-k32
+  - _self_
+
+# ---- Domain ----
+# "natural_language" = FineWeb2 multilingual pipeline (default for default.yaml)
+# "code"             = TheStack code pipeline (per-language HF repos)
+domain: code
+
+# langs:
+#   python: 0.8
+#   javascript: 0.2
+
+output_dir: ./finetuned_model
+
+# LAS tokenizer configuration
+# las_mode: "original" = use the model's original tokenizer (no LAS)
+#           "base"     = use base_tokenizer.json for all languages
+#           "langspec" = use langspec_{lang}.json per language (code tokenizers)
+las_mode: "langspec"
+# Path to directory containing base_tokenizer.json and langspec_{lang}.json files.
+# Download from: MultilingualUnigramLM/las-code-tokenizers-OLMo-2-1124-7B-ass_bat_c_plus27
+# NOTE: Code tokenizers were trained on OLMo-2 vocabulary but finetuning uses OLMo-3 (same arch).
+las_tokenizer_path: ./olmo3_las_tokenizers/las-code-tokenizers-OLMo-3-1025-7B
+model_tokenizer_path: ./olmo3_las_tokenizers/model_tokenizer
+
+# Embedding unfreezing: when true, embed_tokens and lm_head parameters are
+# made trainable alongside LoRA adapters. Recommended for code finetuning
+# based on experiments showing improved BpB with unfrozen embeddings.
+unfreeze_embeddings: false
+
+seed: 42
+epochs: 1
+per_device_batch_size: 2
+gradient_accumulation_steps: 24   # effective batch size: 2 * 24 = 48
+learning_rate: 2e-4
+val_fraction: 0.05
+
+dataset:
+  size: 100M    # Options: 5M 10M 100M (per-language repos)
+  max_seq_len: 1024

@@ -1,0 +1,6 @@
+name: mistral-7b-v0_3
+
+# Largest arm of the LangMAP FT sweep (7.2B params). v0.3 has the
+# extended 32768-token tokenizer. Open weights; HF login required for
+# download but not gated/approval-walled.
+model_name: mistralai/Mistral-7B-v0.3

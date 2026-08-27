@@ -1,0 +1,4 @@
+# Language-specific: 80% Python, 20% rehearsal (JavaScript)
+langs:
+  python: 0.8
+  javascript: 0.2
