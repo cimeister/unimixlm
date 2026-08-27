@@ -306,7 +306,7 @@ def build_eng_retention_lm(arm: str, kw: dict, tok_file, batch_size: int):
 
 
 def write_items_jsonl(out_dir: Path, tag: str, head_wiring: str, eval_task_name: str,
-                       res: dict, metric: str = "acc") -> None:
+                       res: dict, metric: str = "acc", ckpt_suffix: str = "") -> None:
     """Optional sibling `<tag>__head<wiring>__items.jsonl` for
     scripts/compile_f15_stats.py's item-level paired bootstrap. Filename
     matches the results JSON's own keying (`<tag>__head<wiring>[__task].json`)
@@ -318,6 +318,10 @@ def write_items_jsonl(out_dir: Path, tag: str, head_wiring: str, eval_task_name:
     res["samples"][eval_task_name] is populated for free; this only adds the
     file write. Only called for multiblimp (<=2570 items/lang, so the file
     stays small); belebele_eng does not get one.
+
+    `ckpt_suffix` (e.g. "__ckpt357") mirrors the results JSON's own naming so
+    an intermediate-checkpoint items file never collides with (or is
+    silently mixed into) the final-checkpoint items file for the same cell.
     """
     samples = (res.get("samples") or {}).get(eval_task_name)
     if not samples:
@@ -330,7 +334,9 @@ def write_items_jsonl(out_dir: Path, tag: str, head_wiring: str, eval_task_name:
                 f"metric {metric!r}; available: {sorted(ex.keys())}"
             )
         lines.append(json.dumps({"doc_id": ex["doc_id"], metric: float(ex[metric])}))
-    (out_dir / f"{tag}__head{head_wiring}__items.jsonl").write_text("\n".join(lines) + "\n")
+    (out_dir / f"{tag}__head{head_wiring}{ckpt_suffix}__items.jsonl").write_text(
+        "\n".join(lines) + "\n"
+    )
 
 
 def main() -> None:
@@ -389,6 +395,17 @@ def main() -> None:
     ap.add_argument("--batch-size", type=int, default=16)
     ap.add_argument("--device", default="cuda")
     ap.add_argument("--force", action="store_true")
+    ap.add_argument(
+        "--checkpoint-step", type=int, default=None,
+        help="Evaluate the intermediate checkpoint-N/ subdir inside the "
+             "derived run dir (e.g. 357/1781/3561 for F15 wave1/wave2 "
+             "cells) instead of the final trained state. Default: absent, "
+             "current final-checkpoint behavior unchanged (byte-identical "
+             "output). Hard-fails naming the missing path if checkpoint-N/ "
+             "does not exist under the cell's derived dir. Output filenames "
+             "and the sibling __items.jsonl get a __ckptN suffix so they "
+             "never collide with the final-checkpoint files.",
+    )
     args = ap.parse_args()
 
     requested_tasks = [t.strip() for t in args.tasks.split(",") if t.strip()]
@@ -405,6 +422,7 @@ def main() -> None:
     args.out.mkdir(parents=True, exist_ok=True)
     repo = Path(__file__).resolve().parent.parent
     gstate = git_state(repo)
+    ckpt_suffix = f"__ckpt{args.checkpoint_step}" if args.checkpoint_step is not None else ""
 
     # Pass 1: family/model filter only (no shard split, no metadata reads) --
     # this is the population --expect-cells checks against, since shard is a
@@ -449,7 +467,10 @@ def main() -> None:
             continue
 
         out_paths = {
-            t: args.out / f"{tag}__head{args.head_wiring}{TASK_FILENAME_SUFFIX[t]}.json"
+            t: args.out / (
+                f"{tag}__head{args.head_wiring}{TASK_FILENAME_SUFFIX[t]}"
+                f"{ckpt_suffix}.json"
+            )
             for t in requested_tasks
         }
         pending_tasks = [t for t in requested_tasks if args.force or not out_paths[t].exists()]
@@ -458,6 +479,15 @@ def main() -> None:
             continue
 
         derived = find_derived(cell)
+        if args.checkpoint_step is not None:
+            ckpt_load_dir = derived / f"checkpoint-{args.checkpoint_step}"
+            if not ckpt_load_dir.exists():
+                raise FileNotFoundError(
+                    f"{tag}: --checkpoint-step={args.checkpoint_step} requested "
+                    f"but {ckpt_load_dir} does not exist."
+                )
+        else:
+            ckpt_load_dir = derived
         meta = json.loads((derived / "run_metadata.json").read_text())
         if meta.get("status") != "completed":
             print(f"[SKIP-INCOMPLETE] {tag}: status={meta.get('status')!r} — not evaluating")
@@ -489,22 +519,26 @@ def main() -> None:
                 )
 
         # Provenance (las-dir half is self-referential by construction; the
-        # las_mode + eos-bug halves are the live checks).
-        _assert_checkpoint_provenance(str(derived), base_model_id, arm, las_dir)
+        # las_mode + eos-bug halves are the live checks). Checked against
+        # ckpt_load_dir (== derived unless --checkpoint-step) so a
+        # checkpoint-N/ dir missing/mismatched run_metadata is caught the
+        # same way as the final state (_find_run_metadata in
+        # downstream_eval.py walks up to the parent ft* dir either way).
+        _assert_checkpoint_provenance(str(ckpt_load_dir), base_model_id, arm, las_dir)
 
         if arm == "vocab_extend":
             model_obj = load_model_vocab_extend(
-                base_model_id, str(derived), args.device, args.head_wiring, meta
+                base_model_id, str(ckpt_load_dir), args.device, args.head_wiring, meta
             )
             kw = {"pretrained": model_obj, "tokenizer": base_model_id}
         elif args.head_wiring == "reshared":
             kw = _build_eval_lm_kwargs(
-                base_pretrained=base_model_id, ckpt_path=str(derived),
+                base_pretrained=base_model_id, ckpt_path=str(ckpt_load_dir),
                 device=args.device,
             )
         else:
             kw = {
-                "pretrained": load_model_training_wiring(base_model_id, str(derived), args.device),
+                "pretrained": load_model_training_wiring(base_model_id, str(ckpt_load_dir), args.device),
                 "tokenizer": base_model_id,
             }
 
@@ -571,7 +605,7 @@ def main() -> None:
                 "num_fewshot": num_fewshot,
                 "results": res["results"],
                 "n_samples": res.get("n-samples"),
-                "checkpoint": str(derived),
+                "checkpoint": str(ckpt_load_dir),
                 "train_git_commit": meta.get("git_commit"),
                 "eval_git": gstate,
                 "overlay_tokenizer": str(record_tok_file) if record_tok_file else None,
@@ -580,6 +614,8 @@ def main() -> None:
                 "batch_size": args.batch_size,
                 "timestamp": datetime.now().isoformat(),
             }
+            if args.checkpoint_step is not None:
+                record["checkpoint_step"] = args.checkpoint_step
             out_paths[cli_task].write_text(
                 json.dumps(record, indent=2, default=handle_non_serializable)
             )
@@ -587,7 +623,10 @@ def main() -> None:
             print(f"[done] {tag} ({args.head_wiring}) {cli_task}: {acc}")
 
             if cli_task == "multiblimp":
-                write_items_jsonl(args.out, tag, args.head_wiring, eval_task_name, res)
+                write_items_jsonl(
+                    args.out, tag, args.head_wiring, eval_task_name, res,
+                    ckpt_suffix=ckpt_suffix,
+                )
 
         # GPU cleanup (pre-launch review S11): a prior version of this loop
         # only deleted `lm` when it was a SEPARATE belebele_eng wrapper

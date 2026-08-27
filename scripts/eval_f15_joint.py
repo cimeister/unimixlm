@@ -14,7 +14,7 @@ question is: how well does per-item LAS routing
 under every pooled overlay and picks the highest-likelihood one) do against
 an oracle that is simply handed the correct overlay outright?
 
-For each cell matching `qwen2_5-0_5b_joint5_(original|langspec)_truetie_s\\d+`
+For each cell matching `<model>_joint5_(original|langspec)_truetie_s\\d+` (model in MODEL_MAP)
 under --cells-root:
   1. Provenance (loud failure, no skip-and-continue): run_metadata.json
      status == "completed", tokenizer.las_mode == arm, model.true_tie is
@@ -98,12 +98,17 @@ from las_experiment.downstream_eval import (
 )
 
 # ---------------------------------------------------------------------------
-# Cell-tag schema. Wave-2 joint cells are ONE model family (qwen2_5-0_5b) so,
-# unlike eval_f14_multiblimp.py's MODEL_MAP, the base model id is a constant.
+# Cell-tag schema. Joint cells exist for two model families (Qwen wave-2,
+# Llama 2026-08-24); the tag's model prefix selects the base model id,
+# mirroring eval_f14_multiblimp.py's MODEL_MAP.
 # ---------------------------------------------------------------------------
-BASE_MODEL_ID = "Qwen/Qwen2.5-0.5B"
+MODEL_MAP = {
+    "qwen2_5-0_5b": "Qwen/Qwen2.5-0.5B",
+    "llama3_2-1b": "meta-llama/Llama-3.2-1B",
+}
 CELL_RE = re.compile(
-    r"^qwen2_5-0_5b_joint5_(?P<arm>original|langspec)_truetie_s(?P<seed>\d+)$"
+    r"^(?P<model>qwen2_5-0_5b|llama3_2-1b)_joint5_"
+    r"(?P<arm>original|langspec)_truetie_s(?P<seed>\d+)$"
 )
 
 # Script-aware overlay-filename suffixes, matching pool_manifest.json's
@@ -403,13 +408,14 @@ def main() -> None:
     for cell, m in matched:
         tag = cell.name
         arm, seed = m["arm"], int(m["seed"])
+        base_model_id = MODEL_MAP[m["model"]]
 
         derived = find_derived(cell)
         meta = json.loads((derived / "run_metadata.json").read_text())
 
         check_joint_provenance(tag, arm, meta)
         las_dir = meta.get("tokenizer", {}).get("las_tokenizer_path")
-        _assert_checkpoint_provenance(str(derived), BASE_MODEL_ID, arm, las_dir)
+        _assert_checkpoint_provenance(str(derived), base_model_id, arm, las_dir)
 
         pool_dir = None
         manifest = None
@@ -425,8 +431,8 @@ def main() -> None:
             continue
 
         print(f"[load] {tag} ({arm})")
-        model_obj = load_model_training_wiring(BASE_MODEL_ID, str(derived), args.device)
-        kw = {"pretrained": model_obj, "tokenizer": BASE_MODEL_ID}
+        model_obj = load_model_training_wiring(base_model_id, str(derived), args.device)
+        kw = {"pretrained": model_obj, "tokenizer": base_model_id}
 
         for lang in pending:
             suffix = LANG_SUFFIX[lang]
@@ -437,7 +443,7 @@ def main() -> None:
                 "arm": arm,
                 "seed": seed,
                 "lang": lang,
-                "model": BASE_MODEL_ID,
+                "model": base_model_id,
                 "checkpoint": str(derived),
                 "train_git_commit": meta.get("git_commit"),
                 "training_langs": meta.get("cfg_snapshot", {}).get("langs"),

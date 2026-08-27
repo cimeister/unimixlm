@@ -105,7 +105,8 @@ CLI
                       --out-json keys, separate Holm family).
     --reference-arm  arm every contrast is computed against (default: original)
     --metric         lm-eval metric name, without ",none" (default: acc)
-    --intrinsic-csv  optional CSV, header "lang,delta", for the directional
+    --intrinsic-csv  optional CSV, header "lang,delta" (pooled) or
+                     "family,lang,delta" (per-family), for the directional
                       test (requires --eval-dir; does not run over --joint-dir)
     --out-json       path to write the machine-readable summary
 
@@ -161,6 +162,20 @@ DIRECTIONAL_TARGET_ARM = "langspec"  # the plan's pre-registered method arm
 
 REQUIRED_KEYS = {"tag", "lang", "arm", "seed", "reinit_embeddings", "truetie",
                   "head_wiring", "results"}
+
+# Intermediate-checkpoint eval files (scripts/eval_f14_multiblimp.py and
+# scripts/eval_f15_bpb.py --checkpoint-step N) carry the SAME (family, lang,
+# arm, seed) key as the final-checkpoint file for the same cell -- only the
+# `__ckptN` filename suffix and the `checkpoint_step` field distinguish them.
+# load_cells's REQUIRED_KEYS check alone would not catch this (they have all
+# the required keys) and `seen_keys` would then raise "duplicate cell" the
+# moment both a cell's final and intermediate-checkpoint files sit in the
+# same --eval-dir. Excluded by filename before the duplicate-key check even
+# runs, so a C2 efficiency-curve sweep can write __ckptN files into the same
+# --eval-dir as the final-checkpoint files without corrupting or crashing the
+# main (final-checkpoint) compile. Reported in `skipped`, not silently
+# dropped.
+CHECKPOINT_STEP_SUFFIX_RE = re.compile(r"__ckpt\d+\.json$")
 
 
 def derive_model_and_family(rec: dict) -> tuple[str, str]:
@@ -257,6 +272,13 @@ def load_cells(eval_dir: Path, metric: str) -> tuple[list[dict], list[dict]]:
     skipped: list[dict] = []
     seen_keys: dict[tuple, Path] = {}
     for path in sorted(eval_dir.glob("*.json")):
+        if CHECKPOINT_STEP_SUFFIX_RE.search(path.name):
+            skipped.append({
+                "path": str(path),
+                "reason": "intermediate-checkpoint file (__ckptN suffix) — "
+                          "excluded from final-checkpoint tables by default",
+            })
+            continue
         try:
             raw = json.loads(path.read_text())
         except json.JSONDecodeError as e:
@@ -862,18 +884,25 @@ def exact_sign_test(n_concordant: int, n_trials: int, p: float = 0.5) -> float:
 
 
 def load_intrinsic_csv(path: Path) -> dict:
+    """Header 'lang,delta' (one value per language, shared across families)
+    or 'family,lang,delta' (per-(family, lang) values; family is the tag
+    prefix, e.g. qwen2_5-0_5b / llama3_2-1b, matched against the contrast
+    family string's prefix before the '[' wiring suffix)."""
     out: dict = {}
     with path.open(newline="") as f:
         reader = csv.DictReader(f)
         if reader.fieldnames is None or {"lang", "delta"} - set(reader.fieldnames):
             raise ValueError(
-                f"{path}: expected header 'lang,delta', got {reader.fieldnames}"
+                f"{path}: expected header 'lang,delta' or 'family,lang,delta', "
+                f"got {reader.fieldnames}"
             )
+        per_family = "family" in reader.fieldnames
         for row in reader:
             lang = row["lang"].strip()
-            if lang in out:
-                raise ValueError(f"{path}: duplicate lang {lang!r}")
-            out[lang] = float(row["delta"])
+            key = (row["family"].strip(), lang) if per_family else lang
+            if key in out:
+                raise ValueError(f"{path}: duplicate key {key!r}")
+            out[key] = float(row["delta"])
     return out
 
 
@@ -885,10 +914,15 @@ def directional_test(
     for (family, lang, arm), c in sorted(contrasts.items()):
         if arm != target_arm:
             continue
-        if lang not in intrinsic:
+        # per-family CSVs key by (family-prefix, lang); pooled CSVs by lang.
+        ikey = (family.split("[")[0], lang)
+        if ikey not in intrinsic:
+            ikey = lang
+        if ikey not in intrinsic:
             skipped.append({
                 "family": family, "lang": lang,
-                "reason": f"lang {lang!r} not in --intrinsic-csv",
+                "reason": f"neither {(family.split('[')[0], lang)!r} nor "
+                          f"{lang!r} in --intrinsic-csv",
             })
             continue
         if "skipped_reason" in c:
@@ -898,7 +932,7 @@ def directional_test(
             continue
         pairs.append({
             "family": family, "lang": lang,
-            "intrinsic_delta": intrinsic[lang],
+            "intrinsic_delta": intrinsic[ikey],
             "downstream_delta": c["mean_delta"],
         })
 
