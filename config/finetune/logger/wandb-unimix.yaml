@@ -1,0 +1,8 @@
+name: wandb-unimix
+
+enabled: true
+project: "unimixlm"
+entity: "unimix"
+run_name: ${model.model_name}-${las_mode}-lr${learning_rate}
+tags: []
+notes: null

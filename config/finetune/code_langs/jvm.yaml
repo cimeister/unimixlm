@@ -1,0 +1,2 @@
+# JVM-family languages (syntax + shared libraries)
+langs: [java, scala]

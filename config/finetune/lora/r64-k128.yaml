@@ -1,0 +1,6 @@
+name: r64-k128
+
+r: 64
+alpha: 128
+dropout: 0.05
+target_modules: ""
