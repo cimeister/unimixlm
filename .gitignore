@@ -32,3 +32,14 @@ trainer_output/
 las_tokenizers/
 *.jids*
 .*_jid*
+
+# Local working notes: never commit these (unanchored, so they stay ignored at
+# any depth). No tracked file anywhere uses these names.
+SESSION_STATUS.md
+EXPERIMENTS_CHRONOLOGICAL.md
+EXPERIMENTS_RESULTS.md
+EXPERIMENTS_PLAN.md
+EXPERIMENTAL_SETUP.md
+F15_HANDOFF.md
+PAPER_CLAIMS_AUDIT.md
+LOCAL_NOTES.md
