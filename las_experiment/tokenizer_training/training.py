@@ -206,6 +206,13 @@ SCRIPT_RANGES = {
         (0x0900, 0x097F),  # Devanagari
         (0xA8E0, 0xA8FF),  # Devanagari Extended
     ],
+    # Added for the 7-language x 11-family MorphScore sweep (tam_Taml);
+    # see scripts/sweep_intrinsic_v2.py. Purely additive: no existing script
+    # key's ranges are touched, so every previously-fit corpus is unaffected.
+    "Taml": [
+        (0x0B80, 0x0BFF),  # Tamil
+        (0x11FC0, 0x11FFF),  # Tamil Supplement
+    ],
 }
 
 
