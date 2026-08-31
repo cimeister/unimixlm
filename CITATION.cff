@@ -1,0 +1,35 @@
+cff-version: 1.2.0
+message: "If you use this software, please cite the paper below."
+title: "LangMAP"
+authors:
+  - family-names: Meister
+    given-names: Clara
+  - family-names: Salhan
+    given-names: Suchir
+  - family-names: Szablewski
+    given-names: Andrzej
+  - family-names: Lesci
+    given-names: Pietro
+  - family-names: Buttery
+    given-names: Paula
+  - family-names: Pimentel
+    given-names: Tiago
+license: MIT
+preferred-citation:
+  type: conference-paper
+  title: "LangMAP: A Language-Adaptive Approach to Tokenization"
+  authors:
+    - family-names: Meister
+      given-names: Clara
+    - family-names: Salhan
+      given-names: Suchir
+    - family-names: Szablewski
+      given-names: Andrzej
+    - family-names: Lesci
+      given-names: Pietro
+    - family-names: Buttery
+      given-names: Paula
+    - family-names: Pimentel
+      given-names: Tiago
+  collection-title: "Proceedings of the 2026 Conference on Empirical Methods in Natural Language Processing"
+  year: 2026

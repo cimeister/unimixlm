@@ -22,24 +22,13 @@ finetuned_model/
 olmo3_las_tokenizers/
 eval_results/
 outputs/
+checkpoints/
 
 lm-evaluation-harness/
 trainer_output/
 
-# F15: tokenizer artifacts, job-id trackers (nothing under these is tracked
-# as of this check: `git ls-files las_tokenizers eval_results logs wandb`
-# all return empty, so a broad ignore here hides no committed history).
+# Fitted tokenizer artifacts and job-id trackers.
 las_tokenizers/
 *.jids*
 .*_jid*
-
-# Local working notes: never commit these (unanchored, so they stay ignored at
-# any depth). No tracked file anywhere uses these names.
-SESSION_STATUS.md
-EXPERIMENTS_CHRONOLOGICAL.md
-EXPERIMENTS_RESULTS.md
-EXPERIMENTS_PLAN.md
-EXPERIMENTAL_SETUP.md
-F15_HANDOFF.md
-PAPER_CLAIMS_AUDIT.md
-CLAUDE.md
+*.pid

@@ -1,3 +1,6 @@
 name: olmo3-1025-7b
 
 model_name: allenai/Olmo-3-1025-7B
+# 7B params, 100k vocab, UNtied embeddings. bs=1 conservative. Eff 1×4×32=128.
+per_device_batch_size: 1
+gradient_accumulation_steps: 32
