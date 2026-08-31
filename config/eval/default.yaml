@@ -1,15 +1,20 @@
 defaults:
   - _self_
 
-model_lang: yor
+model_lang: afr
 
 output_path: ./eval_results/${model_lang}
 
 model: hf
 model_args:
   pretrained: "allenai/Olmo-3-1025-7B"
-  peft_original_tok: "/home/as3623/unimixlm/finetuned_model/ft_${model_lang}_10M"
-  peft_las_tok: "/home/as3623/unimixlm/finetuned_model/ft-las_${model_lang}_10M"
+  # Checkpoint paths are per-run and machine-specific; there is no shared
+  # default. Set each of these on the command line (or in a per-run override
+  # file) before running an eval.
+  peft_original_tok: ???
+  peft_base_tok: ???
+  peft_pathpiece_tok: ???
+  peft_las_tok: ???
 
 eval_langs:
   - eng
@@ -19,6 +24,8 @@ tasks:
   # - mmlu
   - belebele
   - piqa
+  - multiblimp
+  - turblimp
 
 batch_size: auto
 log_samples: false
@@ -27,8 +34,14 @@ eval_base:
   enabled: true
 eval_ft:
   enabled: true
+eval_ft_base:
+  enabled: true
+  base_tokenizer_path: "./las_tokenizers/olmo3-7b_v100k_fineweb2sample_10klines_afr-ind-ron-swh_softem/base_tokenizer.json"
+eval_ft_pathpiece:
+  enabled: true
+  pathpiece_tokenizer_path: "./las_tokenizers/olmo3-7b_v100k_fineweb2sample_10klines_afr-ind-ron-swh_softem/pathpiece_tokenizer.json"
 
 custom_tokenizer:
   enabled: true
   las_lang: ${model_lang}
-  las_tokenizer_main_path: "/home/as3623/unimixlm/olmo3_las_tokenizers_correct_base/${model_lang}_Latn"
+  las_tokenizer_main_path: "./las_tokenizers/olmo3-7b_v100k_fineweb2sample_10klines_afr-ind-ron-swh_softem"

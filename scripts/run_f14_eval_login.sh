@@ -19,15 +19,16 @@
 #                 count isn't known up front.
 set -euo pipefail
 
-REPO_DIR="/users/cmeister747/unimixlm"
+REPO_DIR="$(cd "$(dirname "$0")/.." && pwd)"
+SCRATCH_DIR="${SCRATCH_DIR:?set SCRATCH_DIR to your cluster scratch root}"
 FAMILY="${1:-f14}"
 WIRING="${2:-training}"
-CELLS_ROOT="${3:-/capstor/scratch/cscs/cmeister747/pr21_rerun}"
+CELLS_ROOT="${3:-${SCRATCH_DIR}/pr21_rerun}"
 OUT_DIR="${4:-${REPO_DIR}/eval_results/f14_multiblimp}"
 TASKS="${5:-multiblimp}"
 MODEL="${6:-all}"
 EXPECT_CELLS="${7:-}"
-VENV=/capstor/scratch/cscs/cmeister747/unimixlm-eval-venv-aug26
+VENV="${VENV_DIR:?set VENV_DIR to the project virtualenv}"
 LOG_DIR="${REPO_DIR}/logs/pr21_rerun"
 mkdir -p "${OUT_DIR}" "${LOG_DIR}"
 
@@ -39,7 +40,7 @@ fi
 # Online HF (task datasets may not be cached); shared cache dir.
 for gpu in 0 1 2 3; do
   nohup uenv run pytorch/v2.8.0:v1 --view=default -- env \
-    HF_HOME=/capstor/scratch/cscs/cmeister747/hf_cache_pr21 \
+    HF_HOME="${SCRATCH_DIR}/hf_cache_pr21" \
     PYTHONPATH="${REPO_DIR}" \
     CUDA_VISIBLE_DEVICES="${gpu}" \
     "${VENV}/bin/python" "${REPO_DIR}/scripts/eval_f14_multiblimp.py" \

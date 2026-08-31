@@ -2,7 +2,7 @@
 # launch_f15_wave2.sh — F15 wave 2: Llama-3.2-1B single-language cells +
 # joint-multilingual cells (both families).
 #
-# See ~/.claude/plans/the-paper-has-not-stateful-bear.md, sections "Models"
+# Per the F15 experiment plan, sections "Models"
 # ("Llama-3.2-1B (tied): arms A0/A1/A2 x 3 langs (tur, arb, hin) x 3 seeds"),
 # "Joint-multilingual arm (C6)" and "Execution order" step 3 ("Wave 2: Llama
 # cells + joint-multilingual").
@@ -75,15 +75,16 @@
 # Usage: bash scripts/launch_f15_wave2.sh [--dry-run]
 set -euo pipefail
 
-REPO_DIR="/users/cmeister747/unimixlm"
-PYTHON="/capstor/scratch/cscs/cmeister747/unimixlm-venv-aug26/bin/python"
+REPO_DIR="$(cd "$(dirname "$0")/.." && pwd)"
+SCRATCH_DIR="${SCRATCH_DIR:?set SCRATCH_DIR to your cluster scratch root}"
+PYTHON="${VENV_DIR:?set VENV_DIR to the project virtualenv}/bin/python"
 TOK_ROOT="${REPO_DIR}/las_tokenizers/f15"
-OUT_ROOT="/capstor/scratch/cscs/cmeister747/f15_wave2"
+OUT_ROOT="${SCRATCH_DIR}/f15_wave2"
 # Same offline cache as wave 1. Llama-3.2-1B's weights were added to it on
 # 2026-08-18 (prep_f15_tokenizers.py had cached only the tokenizer files);
 # the preflight below re-checks that model.safetensors is present, because
 # HF_HUB_OFFLINE=1 turns a cache miss into a mid-job failure.
-HF_CACHE="/capstor/scratch/cscs/cmeister747/hf_cache_pr21"
+HF_CACHE="${SCRATCH_DIR}/hf_cache_pr21"
 LOG_DIR="${REPO_DIR}/logs/f15_wave2"
 JID_FILE="${REPO_DIR}/.f15_wave2_jids"
 mkdir -p "${OUT_ROOT}" "${LOG_DIR}"
@@ -368,7 +369,7 @@ exit \$rc
   fi
   jid=$(sbatch --parsable \
     --job-name="${name}" \
-    --account=infra01 --partition=normal \
+    --account="${SLURM_ACCOUNT:?set SLURM_ACCOUNT to your cluster account}" --partition=normal \
     --nodes=1 --ntasks=1 --cpus-per-task=288 --mem=450G \
     --time="${FAM_WALLTIME[$batch_fam]}" \
     --output="${LOG_DIR}/${name}_%j.out" --error="${LOG_DIR}/${name}_%j.err" \
