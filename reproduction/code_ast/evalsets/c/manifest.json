@@ -1,0 +1,921 @@
+{
+  "lang": "c",
+  "paper_label": "C",
+  "built": "2026-08-28T06:35:30.523325+00:00",
+  "n_snippets": 100,
+  "eval_snippets_per_lang_constant": 100,
+  "selection_rule": "first N non-blank snippets in eval-parquet row order after CodeDataLoader's own normalisation (_strip_starcoder_metadata, _normalize_source, rstrip) -- identical to CodeDataLoader(max_snippets_per_lang=N) on that parquet",
+  "deterministic": true,
+  "seed": null,
+  "seed_note": "selection is by parquet row order, not sampling, so no seed exists to record; the file list below IS the selection",
+  "eval_parquet": "<local>/tokenizer-intrinsic-evals/starcoder/c.parquet",
+  "eval_parquet_sha256": "03e598ba7a0f0d71484f4eb0deefd4096aab7eeab83bf78a1e9260f05a0de8fa",
+  "eval_parquet_rows": 3465,
+  "rows_scanned_to_fill": 100,
+  "extension": ".c",
+  "dir": "<repo>/eval_results/code_ast_v1/evalsets/c",
+  "total_chars": 529703,
+  "roundtrip_verified_through": "CodeDataLoader(dir).get_code_snippets",
+  "files": [
+    {
+      "file": "snippet_0000.c",
+      "sha256": "c389479b088b889a912589447519631a53b5b06dfbbf2c03b2c1fe22615aeaac",
+      "chars": 9639,
+      "source_row_id": "163343",
+      "source_repo_path": "Wearable_Device_System/HM-project/main/algorithm_IK_C.c",
+      "source_repo_name": "ITLeiria/UFDA-WMEPPG",
+      "parquet_row_index": 0
+    },
+    {
+      "file": "snippet_0001.c",
+      "sha256": "70ecc2ba73988630577180fac7d51862317378ee96710c995e860deeda14bb09",
+      "chars": 2638,
+      "source_row_id": "166455",
+      "source_repo_path": "rock/external/mpp/osal/test/mpp_platform_test.c",
+      "source_repo_name": "NovasomIndustries/Utils-2019.01",
+      "parquet_row_index": 1
+    },
+    {
+      "file": "snippet_0002.c",
+      "sha256": "1db68cb72343ca15adafb8ef25f1fc7e282fd22748f002930b4188b3513f22bd",
+      "chars": 473,
+      "source_row_id": "169469",
+      "source_repo_path": "Classes/VZPolicCollectionCell.h",
+      "source_repo_name": "alekoleg/VZPolicCollectionView",
+      "parquet_row_index": 2
+    },
+    {
+      "file": "snippet_0003.c",
+      "sha256": "0793fafc77a24dbff3a6810aec41bb33ad99d202800ea29e480c169eb3de36e4",
+      "chars": 2946,
+      "source_row_id": "171140",
+      "source_repo_path": "pool-cuda/reference.h",
+      "source_repo_name": "BeauJoh/HeCBench",
+      "parquet_row_index": 3
+    },
+    {
+      "file": "snippet_0004.c",
+      "sha256": "adaabcf10bb59111e97b77af2117861bf6c33cee14f92274b27dcb2a6586de53",
+      "chars": 273,
+      "source_row_id": "179348",
+      "source_repo_path": "BSProject/BSProject/Classes/Publish/View/LCTagTextField.h",
+      "source_repo_name": "KeenTeam1990/BSProject",
+      "parquet_row_index": 4
+    },
+    {
+      "file": "snippet_0005.c",
+      "sha256": "5074b92b8ffc6b64ae741e0180adf0ebd3bf6ae4ed00d646c3965e4c592f65ef",
+      "chars": 3547,
+      "source_row_id": "179958",
+      "source_repo_path": "MGWeChat/MGWeChat/Class/Other/ThirdLib/WMPlayer/WMPlayer.h",
+      "source_repo_name": "LYM-mg/MGWetChat",
+      "parquet_row_index": 5
+    },
+    {
+      "file": "snippet_0006.c",
+      "sha256": "833397c05a8eb276c5f24dc39a6fff18601715df4d7335561da361bf4d7e0df1",
+      "chars": 2235,
+      "source_row_id": "183621",
+      "source_repo_path": "src_c/plugins/plugin_store.h",
+      "source_repo_name": "Pastor/pinocchio",
+      "parquet_row_index": 6
+    },
+    {
+      "file": "snippet_0007.c",
+      "sha256": "4e9a57b893724416f19cea808d37dfeeb19b1d5e48a4cbc47623b31ad82e2bbf",
+      "chars": 974,
+      "source_row_id": "186273",
+      "source_repo_path": "samplecode/Webter/Source/WebterID.h",
+      "source_repo_name": "shivendra14/AI_CC_2017_SDK_Win",
+      "parquet_row_index": 7
+    },
+    {
+      "file": "snippet_0008.c",
+      "sha256": "a8d32e73ac244006564c9fd17d2f4801cf3bed8e26bada665052bda65fd0884f",
+      "chars": 88,
+      "source_row_id": "186873",
+      "source_repo_path": "Userland/LibC/stddef.h",
+      "source_repo_name": "asynts/picoos",
+      "parquet_row_index": 8
+    },
+    {
+      "file": "snippet_0009.c",
+      "sha256": "3862e79a0fcbc3d624d12d44243bdb396d4188dda19c022f2b31aff1129fa455",
+      "chars": 189,
+      "source_row_id": "188478",
+      "source_repo_path": "button.c",
+      "source_repo_name": "wiasliaw77210/simon-microcontroller",
+      "parquet_row_index": 9
+    },
+    {
+      "file": "snippet_0010.c",
+      "sha256": "6372f0a9f1cc7ee852720559ba8906f8ac714a5742eec3ad6b6728a8c1adce53",
+      "chars": 328,
+      "source_row_id": "190208",
+      "source_repo_path": "CoconutKit-test/Sources/CoreData/NSManagedObject+HLSValidationTestCase.h",
+      "source_repo_name": "Akylas/CoconutKit",
+      "parquet_row_index": 10
+    },
+    {
+      "file": "snippet_0011.c",
+      "sha256": "fe5ac594ff57c7ece1bcc6bbcec7c77027a857ad6e50403095274424257edcfa",
+      "chars": 2219,
+      "source_row_id": "197458",
+      "source_repo_path": "src/lib/system_tree_new.c",
+      "source_repo_name": "agagniere/3Dengine",
+      "parquet_row_index": 11
+    },
+    {
+      "file": "snippet_0012.c",
+      "sha256": "76386483403777d455d7919c4bda11073af09b9d2f9c2979bb5880dd147947b7",
+      "chars": 4213,
+      "source_row_id": "199408",
+      "source_repo_path": "Applications/Setup/SATVChooseSetupMethodViewController.h",
+      "source_repo_name": "lechium/tvOS142Headers",
+      "parquet_row_index": 12
+    },
+    {
+      "file": "snippet_0013.c",
+      "sha256": "a9dc6ac2a9a4016c554c20b600d6eef11e8e76cf6dd64da30bdab321429cd262",
+      "chars": 593,
+      "source_row_id": "1603665",
+      "source_repo_path": "Pods/FLKBaseClasses/FLKBaseClasses/Pod/Classes/BaseViews/FLKNavigationBar.h",
+      "source_repo_name": "iFindTA/PBAudioKit",
+      "parquet_row_index": 13
+    },
+    {
+      "file": "snippet_0014.c",
+      "sha256": "5ed251dd0d850546f8514ffcfb9e084aafed8602e59cda8771c1c7df45ad134b",
+      "chars": 871,
+      "source_row_id": "1604805",
+      "source_repo_path": "kernel/arch/arm/misc.c",
+      "source_repo_name": "lambdaxymox/barrelfish",
+      "parquet_row_index": 14
+    },
+    {
+      "file": "snippet_0015.c",
+      "sha256": "8d6f30f7f5fb75134d3fe8e73cc0e99ea5d64ce04c5cfe5ef6214427f03ca033",
+      "chars": 4455,
+      "source_row_id": "1606929",
+      "source_repo_path": "illustratorapi/illustrator/legacy/AI100Rasterize.h",
+      "source_repo_name": "btempleton/sg-aics3mac-plugins",
+      "parquet_row_index": 15
+    },
+    {
+      "file": "snippet_0016.c",
+      "sha256": "0f680d98cf17c9c6aacb35ee5dbdfa45df0cf9287f503f14588d1cba1aac676f",
+      "chars": 127,
+      "source_row_id": "1607811",
+      "source_repo_path": "src/config.cmake.h",
+      "source_repo_name": "wiredprairie/forestdb",
+      "parquet_row_index": 16
+    },
+    {
+      "file": "snippet_0017.c",
+      "sha256": "2fdd750e52f84e5bc743e049c31cf796b088c00c993685cf72c89bd82ea69508",
+      "chars": 983,
+      "source_row_id": "1608824",
+      "source_repo_path": "nitan/d/shouxihu/qishi.c",
+      "source_repo_name": "cantona/NT6",
+      "parquet_row_index": 17
+    },
+    {
+      "file": "snippet_0018.c",
+      "sha256": "785c8e84056b7596a38c6607f7a8eaff9df05b0ca5ac116e5da18f8c9c9e5846",
+      "chars": 22858,
+      "source_row_id": "1612291",
+      "source_repo_path": "src/uls_context.c",
+      "source_repo_name": "link2next/uls",
+      "parquet_row_index": 18
+    },
+    {
+      "file": "snippet_0019.c",
+      "sha256": "6669b82ea0cd71149cf344b201c0002cf0dd74a8e8a3a6193a4bf88d098d0583",
+      "chars": 294,
+      "source_row_id": "1615185",
+      "source_repo_path": "Src/PlayerSnake.h",
+      "source_repo_name": "joshua-barnett/SnakeGame",
+      "parquet_row_index": 19
+    },
+    {
+      "file": "snippet_0020.c",
+      "sha256": "52aa666abdff475658d774a9daedd9888aac3d12b7bf4bbaca0231039acfe239",
+      "chars": 4299,
+      "source_row_id": "1617840",
+      "source_repo_path": "System/Library/Frameworks/UIKit.framework/UIRecentsInputViewController.h",
+      "source_repo_name": "lechium/tvOS10Headers",
+      "parquet_row_index": 20
+    },
+    {
+      "file": "snippet_0021.c",
+      "sha256": "c5af6bbc1df113e7f57e231726ac9a6b1d374a79d9e29c9ec6956d96fef11402",
+      "chars": 819,
+      "source_row_id": "1619041",
+      "source_repo_path": "src/io/array_ios.h",
+      "source_repo_name": "blackle/Basilisk-Hunter",
+      "parquet_row_index": 21
+    },
+    {
+      "file": "snippet_0022.c",
+      "sha256": "cec23ad531a373f3a0fc790a9373dfcad73edffdc31f9e37194c35ba308bbf65",
+      "chars": 21720,
+      "source_row_id": "1623399",
+      "source_repo_path": "STM32_Project/Projects/Drivers/gfx_tft/gfx.c",
+      "source_repo_name": "Bismuth208/STMGPU",
+      "parquet_row_index": 22
+    },
+    {
+      "file": "snippet_0023.c",
+      "sha256": "3ee43c81234f2613dcf704e136e5349f4ccaffcdedbb8d48d28b8206bd19cea3",
+      "chars": 3850,
+      "source_row_id": "1627922",
+      "source_repo_path": "servers/generic/generic_main.h",
+      "source_repo_name": "colding/MercuryFIX",
+      "parquet_row_index": 23
+    },
+    {
+      "file": "snippet_0024.c",
+      "sha256": "ae2c6b5caafb54255652c3af59fe958f92030c775fc303ce32d20ca153721bc7",
+      "chars": 16195,
+      "source_row_id": "1632175",
+      "source_repo_path": "Headers/java/util/IdentityHashMap.h",
+      "source_repo_name": "tcak76/j2objc",
+      "parquet_row_index": 24
+    },
+    {
+      "file": "snippet_0025.c",
+      "sha256": "dd8daf98acc268cd0c2322716a487efac07261d3935bf60af3d0cd94bfe66a12",
+      "chars": 21182,
+      "source_row_id": "1635713",
+      "source_repo_path": "src/std/ts_hpool.c",
+      "source_repo_name": "tencherry10/tsc",
+      "parquet_row_index": 25
+    },
+    {
+      "file": "snippet_0026.c",
+      "sha256": "a230202164fb79926bc0bcf5b21690e6416bda798551546652b14120c09e70e7",
+      "chars": 22849,
+      "source_row_id": "1637681",
+      "source_repo_path": "private/windows/shell/snapins/devmgr/snapin/machine.h",
+      "source_repo_name": "King0987654/windows2000",
+      "parquet_row_index": 26
+    },
+    {
+      "file": "snippet_0027.c",
+      "sha256": "0ec8d1657064a62ba1d310283625dc9923e2a70fd8af99fb197a2b63b85b73a2",
+      "chars": 997,
+      "source_row_id": "1642796",
+      "source_repo_path": "System/Library/PrivateFrameworks/NewsUI.framework/NUNowPlayingBackgroundView.h",
+      "source_repo_name": "zhangkn/iOS14Header",
+      "parquet_row_index": 27
+    },
+    {
+      "file": "snippet_0028.c",
+      "sha256": "83e9a150eb055c1c882091a1e63e158ff91048373ab2d4182a6bfddc4530357d",
+      "chars": 34352,
+      "source_row_id": "1643458",
+      "source_repo_path": "src/HTMLayout/include/htmlayout.h",
+      "source_repo_name": "don-reba/peoples-note",
+      "parquet_row_index": 28
+    },
+    {
+      "file": "snippet_0029.c",
+      "sha256": "24e813c02e243e6038717941b6524318712a5c9e9a2b29e800442dd8be3586b1",
+      "chars": 3137,
+      "source_row_id": "1644383",
+      "source_repo_path": "sys/sys/timetc.h",
+      "source_repo_name": "ArrogantWombatics/openbsd-src",
+      "parquet_row_index": 29
+    },
+    {
+      "file": "snippet_0030.c",
+      "sha256": "9365e198c7c90e2cc784cec7b722496d2c08d2c01df98383a4dcfaf917a73a1c",
+      "chars": 2401,
+      "source_row_id": "1649787",
+      "source_repo_path": "src/xzero/http/HttpMethod.h",
+      "source_repo_name": "christianparpart/x0",
+      "parquet_row_index": 30
+    },
+    {
+      "file": "snippet_0031.c",
+      "sha256": "475e303fe10675ff2f09f082f32b53167da16503fa25f98149196a66435f18f3",
+      "chars": 655,
+      "source_row_id": "1654970",
+      "source_repo_path": "BMR/prf.h",
+      "source_repo_name": "fqliao/MP-SPDZ",
+      "parquet_row_index": 31
+    },
+    {
+      "file": "snippet_0032.c",
+      "sha256": "828a5474aabe6af692efe2a703cc795882f248858e323215ed5123fba7dd8a1d",
+      "chars": 1264,
+      "source_row_id": "1658400",
+      "source_repo_path": "snapgear_linux/user/microwin/src/drivers/kbd_null.c",
+      "source_repo_name": "impedimentToProgress/UCI-BlueChip",
+      "parquet_row_index": 32
+    },
+    {
+      "file": "snippet_0033.c",
+      "sha256": "da23ee00646172c897e8ee4414aa2ee823d7b55e5be0b2e934a3d0a5ef501010",
+      "chars": 555,
+      "source_row_id": "1662297",
+      "source_repo_path": "rubio_another_face/miscellaneous.h",
+      "source_repo_name": "christiansacchi/code-forest",
+      "parquet_row_index": 33
+    },
+    {
+      "file": "snippet_0034.c",
+      "sha256": "8da4fb8dd5a3e99daed7747edd690142b5ccfe74b4bb4661c4a8b4be3401800e",
+      "chars": 178,
+      "source_row_id": "1662697",
+      "source_repo_path": "DAJIA_SIMPLE/DAJIA_SIMPLE/CLasses/Common/SyView.h",
+      "source_repo_name": "389889154/dajia_simple",
+      "parquet_row_index": 34
+    },
+    {
+      "file": "snippet_0035.c",
+      "sha256": "570389ba648d98897ce7936d18c0402e70979d0b5581282abec1dcdec7b0da8e",
+      "chars": 1208,
+      "source_row_id": "1663961",
+      "source_repo_path": "src/AggressiveOutputManager.h",
+      "source_repo_name": "wilseypa/warped",
+      "parquet_row_index": 35
+    },
+    {
+      "file": "snippet_0036.c",
+      "sha256": "38bb8829b52a3cc8c2bc5727bf1c3c349c2f024fc0d5dc746116f995ee5b1f07",
+      "chars": 1669,
+      "source_row_id": "1664787",
+      "source_repo_path": "gerlinde.h",
+      "source_repo_name": "martinohmann/gerlinde",
+      "parquet_row_index": 36
+    },
+    {
+      "file": "snippet_0037.c",
+      "sha256": "6441a25ebc204055d88f0288bbff62f64b0707d662641a134fa01af999cac016",
+      "chars": 547,
+      "source_row_id": "1667899",
+      "source_repo_path": "nitan/d/hanzhong/xiaocun.c",
+      "source_repo_name": "cantona/NT6",
+      "parquet_row_index": 37
+    },
+    {
+      "file": "snippet_0038.c",
+      "sha256": "15eacca004c1bd5e55db6a70b895e1e7c4ca6c15650afc9028beb159e7d877b0",
+      "chars": 278,
+      "source_row_id": "1668733",
+      "source_repo_path": "src/Outlander/MMScrollView.h",
+      "source_repo_name": "tspike/outlander-osx",
+      "parquet_row_index": 38
+    },
+    {
+      "file": "snippet_0039.c",
+      "sha256": "f21aed3d31d0860201465cde264bf90f27c0c931bab8affa5c945d2cfb7683c0",
+      "chars": 1100,
+      "source_row_id": "1675362",
+      "source_repo_path": "linux-4.14.90-dev/linux-4.14.90/arch/sparc/include/asm/asm.h",
+      "source_repo_name": "bingchunjin/1806_SDK",
+      "parquet_row_index": 39
+    },
+    {
+      "file": "snippet_0040.c",
+      "sha256": "697c708bf5a3d9fcf53c8d4b7097e7a08ac30fc48f368fb7810275924339edf9",
+      "chars": 388,
+      "source_row_id": "1677675",
+      "source_repo_path": "d/dagger/Elvanta/forest/items/wpns/lucern_hammer.c",
+      "source_repo_name": "Dbevan/SunderingShadows",
+      "parquet_row_index": 40
+    },
+    {
+      "file": "snippet_0041.c",
+      "sha256": "45f6c5be88bc7a3888640d372a196bb3da17bed7827577f1f1c4244ff8d7c786",
+      "chars": 14905,
+      "source_row_id": "1681576",
+      "source_repo_path": "sdk_core/include/livox_def.h",
+      "source_repo_name": "GuoXi/Livox-SDK",
+      "parquet_row_index": 41
+    },
+    {
+      "file": "snippet_0042.c",
+      "sha256": "00e341cd7b963b1261b1e5e0b446ad62e3559e3635617d77978fc1ba1cbe3b27",
+      "chars": 418,
+      "source_row_id": "1683209",
+      "source_repo_path": "pagai2/opt/optbr.h",
+      "source_repo_name": "trailofbits/screen",
+      "parquet_row_index": 42
+    },
+    {
+      "file": "snippet_0043.c",
+      "sha256": "09b2cffd40a92a9caefe7cc80acc202eb953d0af35b50d4a31acf53c86169577",
+      "chars": 5166,
+      "source_row_id": "1684869",
+      "source_repo_path": "ds/security/services/smartcrd/controls/scalert/statdlg.h",
+      "source_repo_name": "npocmaka/Windows-Server-2003",
+      "parquet_row_index": 43
+    },
+    {
+      "file": "snippet_0044.c",
+      "sha256": "4dd35389408740dd3ab210df9f10e6481174486358dc75ff5280c4a9b94e8556",
+      "chars": 422,
+      "source_row_id": "1687018",
+      "source_repo_path": "kn_king/chapter_6/6-7.c",
+      "source_repo_name": "jcalendo/K_and_R",
+      "parquet_row_index": 44
+    },
+    {
+      "file": "snippet_0045.c",
+      "sha256": "90bf0b3b2bc6cf7c5c2fe781729ae31a0239e7e9f205abe39bc0db1b99745f5d",
+      "chars": 7305,
+      "source_row_id": "1689054",
+      "source_repo_path": "libcxx/test/std/ranges/range.factories/range.iota.view/types.h",
+      "source_repo_name": "mkinsner/llvm",
+      "parquet_row_index": 45
+    },
+    {
+      "file": "snippet_0046.c",
+      "sha256": "0f61152296779332cd86e0ca307cc809ecfdc5c29a1acf28822991c6254fe9f3",
+      "chars": 246,
+      "source_row_id": "1689816",
+      "source_repo_path": "include/jvcr_ecm_01_python/jvcr.h",
+      "source_repo_name": "cat-in-the-dark/ludum_43_game",
+      "parquet_row_index": 46
+    },
+    {
+      "file": "snippet_0047.c",
+      "sha256": "baa9b16571f2648155f7e8761d29147961c8236e11c17646706d0754f6e73ccf",
+      "chars": 2109,
+      "source_row_id": "1691347",
+      "source_repo_path": "runtime/cpp/src/external/dynamic/mapi.h",
+      "source_repo_name": "DaMSL/K3",
+      "parquet_row_index": 47
+    },
+    {
+      "file": "snippet_0048.c",
+      "sha256": "e6004b1966a552a3e4a87af7dbaa76915a55e7141157a570d252c34dc2c11f59",
+      "chars": 1908,
+      "source_row_id": "1695612",
+      "source_repo_path": "components/drivers/pm/fuel_gauge.c",
+      "source_repo_name": "h-hys/rk2108_202012_SDK",
+      "parquet_row_index": 48
+    },
+    {
+      "file": "snippet_0049.c",
+      "sha256": "59b2c64170d069eb7404b626280558022122ad4f856577a15218d763b8f83cbb",
+      "chars": 584,
+      "source_row_id": "1695638",
+      "source_repo_path": "native/poly/converters/stl/parse_stl.h",
+      "source_repo_name": "49View/event_horizon",
+      "parquet_row_index": 49
+    },
+    {
+      "file": "snippet_0050.c",
+      "sha256": "bf883a2968d66ed04722f5ae02782cf1e139a929d0754953a7c9ae094ceda5e1",
+      "chars": 321,
+      "source_row_id": "1701072",
+      "source_repo_path": "ios/Runner/OC/SNGetApiTool.h",
+      "source_repo_name": "flywo/DayByDay-Flutter",
+      "parquet_row_index": 50
+    },
+    {
+      "file": "snippet_0051.c",
+      "sha256": "d0ef57cb9b9a8bda6adc1d2f5dcf3917e2d435b9d4668e5096a36587aa614298",
+      "chars": 526,
+      "source_row_id": "1704901",
+      "source_repo_path": "108tian/108tian/Classes/Home/Model/BannerModel.h",
+      "source_repo_name": "yours007/1102",
+      "parquet_row_index": 51
+    },
+    {
+      "file": "snippet_0052.c",
+      "sha256": "7b4a6c0bdc376867d7aea04b45dcd0a0d3017740cf84ad4736fe3cb6fe32a15c",
+      "chars": 1094,
+      "source_row_id": "1706860",
+      "source_repo_path": "src/plugins/lackman/updatesnotificationmanager.h",
+      "source_repo_name": "Maledictus/leechcraft",
+      "parquet_row_index": 52
+    },
+    {
+      "file": "snippet_0053.c",
+      "sha256": "f7d6a1e779019c6dd4886b1249f39483ea23168cc54944922c4979491c817adb",
+      "chars": 3959,
+      "source_row_id": "1706956",
+      "source_repo_path": "Qtc/include/gui/qtc_hs_QGraphicsPathItem.h",
+      "source_repo_name": "keera-studios/hsQt",
+      "parquet_row_index": 53
+    },
+    {
+      "file": "snippet_0054.c",
+      "sha256": "8859a46384263ba139a877d915defb92e09fda423e380cfea896104451f3039b",
+      "chars": 171,
+      "source_row_id": "1707282",
+      "source_repo_path": "coldfire/Project_Headers/subroutine.h",
+      "source_repo_name": "initdb/mnp",
+      "parquet_row_index": 54
+    },
+    {
+      "file": "snippet_0055.c",
+      "sha256": "ecc014dd00708632c3e9390e491721bc3beedd44e54520fb71a2736537713dff",
+      "chars": 32900,
+      "source_row_id": "1707374",
+      "source_repo_path": "main/source/mod/AvHPlayer.h",
+      "source_repo_name": "fmoraw/NS",
+      "parquet_row_index": 55
+    },
+    {
+      "file": "snippet_0056.c",
+      "sha256": "f792df602a7881bb8df90ce8fa7b619e5755dd4abf10a85220d7fc135f3bbcac",
+      "chars": 12325,
+      "source_row_id": "1709120",
+      "source_repo_path": "android/android_9/frameworks/av/services/camera/libcameraservice/device3/Camera3StreamInterface.h",
+      "source_repo_name": "yakuizhao/intel-vaapi-driver",
+      "parquet_row_index": 56
+    },
+    {
+      "file": "snippet_0057.c",
+      "sha256": "aed55af9d2c1b4fc3caf47713350c61f2c52405a2d87a672319a4c67ecf202fd",
+      "chars": 7151,
+      "source_row_id": "1710130",
+      "source_repo_path": "runtime/musl-lkl/lkl/drivers/pci/pcie/aer/aerdrv_errprint.c",
+      "source_repo_name": "dme26/intravisor",
+      "parquet_row_index": 57
+    },
+    {
+      "file": "snippet_0058.c",
+      "sha256": "016694c860f9393b69938bd1e7023b1432259100569948be99ec4410dac442ce",
+      "chars": 2087,
+      "source_row_id": "1712670",
+      "source_repo_path": "libs/lib/stack.c",
+      "source_repo_name": "kmyokoyama/sdsc",
+      "parquet_row_index": 58
+    },
+    {
+      "file": "snippet_0059.c",
+      "sha256": "54fd03073427c83e6c2c252b19092d79bb0c98a15f016c9c24e1288d34a16870",
+      "chars": 717,
+      "source_row_id": "1713975",
+      "source_repo_path": "product/sgi575/module/sgi575_rom/include/mod_sgi575_rom.h",
+      "source_repo_name": "souvikkc/SCP-firmware",
+      "parquet_row_index": 59
+    },
+    {
+      "file": "snippet_0060.c",
+      "sha256": "e2870fcc24d742cba7d0112ef6c398a66b09ff0abddd1eba75921b3bc51aa3df",
+      "chars": 652,
+      "source_row_id": "3284860",
+      "source_repo_path": "apps/cat/cat.c",
+      "source_repo_name": "Moldytzu/operatingsystem",
+      "parquet_row_index": 60
+    },
+    {
+      "file": "snippet_0061.c",
+      "sha256": "1fb7549e248a0e1af8e700959e4403333382231a2a999f6f23374ee61541ea5b",
+      "chars": 1068,
+      "source_row_id": "3290570",
+      "source_repo_path": "lib/linux-5.18-rc3-smdk/arch/x86/include/asm/cpumask.h",
+      "source_repo_name": "OpenMPDK/SMDK",
+      "parquet_row_index": 61
+    },
+    {
+      "file": "snippet_0062.c",
+      "sha256": "676c114e91256a7c30c03f86c9df99a783e059287d30314d0ac911fba2b830a8",
+      "chars": 5409,
+      "source_row_id": "3304767",
+      "source_repo_path": "src/type3_AndroidCloud/anbox-master/src/anbox/logger.h",
+      "source_repo_name": "akraino-edge-stack/iec",
+      "parquet_row_index": 62
+    },
+    {
+      "file": "snippet_0063.c",
+      "sha256": "cdf1bdb970f93505f6f6c62b3bdafd5f62c33e07d9af03d6f64bc923e96bff1d",
+      "chars": 4437,
+      "source_row_id": "3305450",
+      "source_repo_path": "attitude_adjustment/target/linux/lantiq/files/arch/mips/lantiq/xway/gptu.c",
+      "source_repo_name": "GeneralZero/CS-577-Final-Project",
+      "parquet_row_index": 63
+    },
+    {
+      "file": "snippet_0064.c",
+      "sha256": "edf7754c1a8a910d8116f8b9fb54797719d4b6770415951ba83829152ff21610",
+      "chars": 115,
+      "source_row_id": "3305962",
+      "source_repo_path": "auto/utf16/src/put_bom_unicob_as_utf16.h",
+      "source_repo_name": "Tikubonn/unico",
+      "parquet_row_index": 64
+    },
+    {
+      "file": "snippet_0065.c",
+      "sha256": "350667f9a1cf6019410927ccdb83f030f00402b91586642e7a2dac7500e9a947",
+      "chars": 1141,
+      "source_row_id": "3306186",
+      "source_repo_path": "Processor/EqualizationProcessor.h",
+      "source_repo_name": "devonchenc/NovaImage",
+      "parquet_row_index": 65
+    },
+    {
+      "file": "snippet_0066.c",
+      "sha256": "50d25beedbd6e608b983d2660f90e388055a7892774267ace6bdaebe49866882",
+      "chars": 351,
+      "source_row_id": "3309884",
+      "source_repo_path": "crypto/dilithium/dilithium-rounding.h",
+      "source_repo_name": "FutureTPM/openssl",
+      "parquet_row_index": 66
+    },
+    {
+      "file": "snippet_0067.c",
+      "sha256": "90c3b96b0387e08aef0f0076550bae2e85781c920aabb1b80471c8bf4c0bd1bb",
+      "chars": 761,
+      "source_row_id": "3312729",
+      "source_repo_path": "TreasureChestDemo/TreasureChestDemo/TreasureDemo/ServerMock/ServerMockCtl.h",
+      "source_repo_name": "1079278593/TreasureChest",
+      "parquet_row_index": 67
+    },
+    {
+      "file": "snippet_0068.c",
+      "sha256": "80795414d36f01aebe8ee2960f4cfa1e371056f0cd13e293df7da0e609455ad7",
+      "chars": 27581,
+      "source_row_id": "3314392",
+      "source_repo_path": "include/Dump.c",
+      "source_repo_name": "IamCrazyAlien/dephpX",
+      "parquet_row_index": 68
+    },
+    {
+      "file": "snippet_0069.c",
+      "sha256": "3cbffcf9f59af3756bd6061f8c1a152b56fcb3b9dd4184d6c9e1e0d0357bd877",
+      "chars": 190,
+      "source_row_id": "3315305",
+      "source_repo_path": "TencentOpenAPI/sample/sdkdemo/sdkDemo/UI/quickDemo/TQDLoginController.h",
+      "source_repo_name": "Suninus/TencentOpenAPI",
+      "parquet_row_index": 69
+    },
+    {
+      "file": "snippet_0070.c",
+      "sha256": "2b0270a0720c0d0aba6c4f6c5f55faf23d01351a4522191fb177e26ac8a77d2b",
+      "chars": 981,
+      "source_row_id": "3318507",
+      "source_repo_path": "paradigma_funcional/roteiro8/vector_operations.c",
+      "source_repo_name": "joaovicentesouto/INE5416",
+      "parquet_row_index": 70
+    },
+    {
+      "file": "snippet_0071.c",
+      "sha256": "6be148ee3df2cdc6dca11b74d062f0456912f24eed1462e6aa1504d05609e422",
+      "chars": 77,
+      "source_row_id": "3318705",
+      "source_repo_path": "src/geometry.h",
+      "source_repo_name": "mochileiroDaGalaxia/FormulePebble",
+      "parquet_row_index": 71
+    },
+    {
+      "file": "snippet_0072.c",
+      "sha256": "369abccd4b0638cf46cddd15562456c98d663574f6503dc5afc4e08760080b94",
+      "chars": 1666,
+      "source_row_id": "3319386",
+      "source_repo_path": "something-learned/Algorithms and Data-Structures/practice-c/bit_manipulation/main.c",
+      "source_repo_name": "gopala-kr/CR-101",
+      "parquet_row_index": 72
+    },
+    {
+      "file": "snippet_0073.c",
+      "sha256": "8c8f171bb9cbd7930f74cb289db09ed7861e49c56d320c4d1e034f0cc2dcf3d0",
+      "chars": 2566,
+      "source_row_id": "3319530",
+      "source_repo_path": "types.h",
+      "source_repo_name": "cptBaines/bnc",
+      "parquet_row_index": 73
+    },
+    {
+      "file": "snippet_0074.c",
+      "sha256": "d08a1352d2498d049b1c73a6afcae50df1f80eab6fc020863c39735d1d55ff5c",
+      "chars": 351,
+      "source_row_id": "3323721",
+      "source_repo_path": "master/ZF_docs/docs/Tutorial/doc_Tutorial_Advanced.h",
+      "source_repo_name": "ZFFrameworkDist/ZFFramework",
+      "parquet_row_index": 74
+    },
+    {
+      "file": "snippet_0075.c",
+      "sha256": "2c711745d2e4fb325b80b6236c5b7517840a18b11cf986759b3fe06a8613b841",
+      "chars": 36637,
+      "source_row_id": "3323948",
+      "source_repo_path": "pom/run/pom.h",
+      "source_repo_name": "shunohishi/sbPOM-LETKF",
+      "parquet_row_index": 75
+    },
+    {
+      "file": "snippet_0076.c",
+      "sha256": "e2b1a700d4131f18e0bd6e4b43a70c7390251ec51c3e7301cb3eae35d1266e36",
+      "chars": 376,
+      "source_row_id": "3325208",
+      "source_repo_path": "PrivateFrameworks/TuriCore/VegaCGTextMetrics.h",
+      "source_repo_name": "phatblat/macOSPrivateFrameworks",
+      "parquet_row_index": 76
+    },
+    {
+      "file": "snippet_0077.c",
+      "sha256": "fb6a4550ad7733f76975d977723ccbbe9581ab478062dd08152fb3fed1ee2342",
+      "chars": 33613,
+      "source_row_id": "3339520",
+      "source_repo_path": "ThirdParty/theora/vtktheora/include/theora/theora.h",
+      "source_repo_name": "forestGzh/VTK",
+      "parquet_row_index": 77
+    },
+    {
+      "file": "snippet_0078.c",
+      "sha256": "336510b6de8b27dc6bf211411505642a816470e206ebf06ee5bf0d851b1e3edd",
+      "chars": 9666,
+      "source_row_id": "3341487",
+      "source_repo_path": "src/function.c",
+      "source_repo_name": "xupingmao/subpy",
+      "parquet_row_index": 78
+    },
+    {
+      "file": "snippet_0079.c",
+      "sha256": "9ee0bc1ab3052db53a24440cb16dda3412d2a9cc173a9fb4ad2fd1b140208533",
+      "chars": 21,
+      "source_row_id": "3342822",
+      "source_repo_path": "build/busybox-1.25.1/include/config/mdev.h",
+      "source_repo_name": "rennman/copfvtci",
+      "parquet_row_index": 79
+    },
+    {
+      "file": "snippet_0080.c",
+      "sha256": "976be26cc365c9f3ec21f816f381ce81b401dfc11b908693d961d416b11ac672",
+      "chars": 8807,
+      "source_row_id": "3345661",
+      "source_repo_path": "compiler/bootstrap/Hashset.c",
+      "source_repo_name": "andrey-golubev/ficus",
+      "parquet_row_index": 80
+    },
+    {
+      "file": "snippet_0081.c",
+      "sha256": "2c7e6225079a123e4150bd689dbf35e1d2813794de1378c51fc803b0e98764ad",
+      "chars": 6116,
+      "source_row_id": "3345676",
+      "source_repo_path": "src/core/templateeditor.h",
+      "source_repo_name": "itsanurag94/Sample_Template",
+      "parquet_row_index": 81
+    },
+    {
+      "file": "snippet_0082.c",
+      "sha256": "26e0fda7100ccf0aeef30b9631a9bdafeb51a060397d9e6e25d1d27526833156",
+      "chars": 2651,
+      "source_row_id": "3346866",
+      "source_repo_path": "src/kernel/formatter.h",
+      "source_repo_name": "codyroux/lean0.1",
+      "parquet_row_index": 82
+    },
+    {
+      "file": "snippet_0083.c",
+      "sha256": "8c11614103ff1e15cfe034b971fa4a0e6818969afedc33ef36705b4929d2c88e",
+      "chars": 117,
+      "source_row_id": "3356936",
+      "source_repo_path": "src/c/colors.h",
+      "source_repo_name": "Vasil-Pahomov/workaday",
+      "parquet_row_index": 83
+    },
+    {
+      "file": "snippet_0084.c",
+      "sha256": "29fc017850cbadccd1da508feebbba2c9250b200f336e775bfc19615f65072d4",
+      "chars": 4789,
+      "source_row_id": "3358258",
+      "source_repo_path": "src/Kernel/Math/SolvSys/Solv_AMGX.h",
+      "source_repo_name": "pledac/trust-code",
+      "parquet_row_index": 84
+    },
+    {
+      "file": "snippet_0085.c",
+      "sha256": "f1085440262d4c8895e1c0496e0833941045fe5d5194ce37ce38e498cf765859",
+      "chars": 973,
+      "source_row_id": "3365621",
+      "source_repo_path": "drivers/fpga_dot/fpga_test_dot.c",
+      "source_repo_name": "hummingbird-12/embedded-system",
+      "parquet_row_index": 85
+    },
+    {
+      "file": "snippet_0086.c",
+      "sha256": "14279b6032bce307ad50034b393c8dfb833b1047f95eb04848f5590bf9b6f1a1",
+      "chars": 44545,
+      "source_row_id": "3365757",
+      "source_repo_path": "demo/http/card.c",
+      "source_repo_name": "vzvca/libfiber",
+      "parquet_row_index": 86
+    },
+    {
+      "file": "snippet_0087.c",
+      "sha256": "a5b45d527793cf90a512969a1241c90b7b89e5b35e8f823c01880f0bf7b6276f",
+      "chars": 594,
+      "source_row_id": "3369503",
+      "source_repo_path": "board/hadoken/board.h",
+      "source_repo_name": "diodep/chromium-ec",
+      "parquet_row_index": 87
+    },
+    {
+      "file": "snippet_0088.c",
+      "sha256": "f64756c0d3a996e8ee4a267006e07d47cdf9ebfc4822aae3533b035df77926f1",
+      "chars": 8751,
+      "source_row_id": "3369587",
+      "source_repo_path": "serveur/sevensquare-master/src/adbfb.h",
+      "source_repo_name": "hamidpro/rdwan",
+      "parquet_row_index": 88
+    },
+    {
+      "file": "snippet_0089.c",
+      "sha256": "517ab146b90dcbbf97ba92e741598e06c516ec4fd367a965ac90a211f2f9c03b",
+      "chars": 1127,
+      "source_row_id": "3370662",
+      "source_repo_path": "Game/Level/GameUtils.h",
+      "source_repo_name": "RMDarth/Chewman-Vulkan",
+      "parquet_row_index": 89
+    },
+    {
+      "file": "snippet_0090.c",
+      "sha256": "69dcd7b4e3b6a8d8e92ff395ade83e1e056d33284eadd9d1c9223169d4644649",
+      "chars": 174,
+      "source_row_id": "3371482",
+      "source_repo_path": "firmware/src/MightyBoard/Motherboard/lib_sd/sd_crc.h",
+      "source_repo_name": "jake-b/Sailfish-MightyBoardFirmware",
+      "parquet_row_index": 90
+    },
+    {
+      "file": "snippet_0091.c",
+      "sha256": "39ad3201d2ff0e3b9a77c0cf1565501c48aa999264b9d32d7d9ae82a24acc3cb",
+      "chars": 2222,
+      "source_row_id": "3379127",
+      "source_repo_path": "models/Flight/source/mavlink_mission_request_partial_list_msg.c",
+      "source_repo_name": "drwhomphd/formal-methods-workbench",
+      "parquet_row_index": 91
+    },
+    {
+      "file": "snippet_0092.c",
+      "sha256": "ed7b80ec838b9b82487e8867bfdaa59961dd054068be589ce09214c18492181e",
+      "chars": 1433,
+      "source_row_id": "3379717",
+      "source_repo_path": "src/Thread/WorkThreadPool.h",
+      "source_repo_name": "kaspesla/ZLToolKit",
+      "parquet_row_index": 92
+    },
+    {
+      "file": "snippet_0093.c",
+      "sha256": "f2b58b6c7be50ba987e1c58c562f19315871267313076206b9765cfc4927cc02",
+      "chars": 1000,
+      "source_row_id": "3381160",
+      "source_repo_path": "INSParseUI/Classes/MVVM/User/INSUserProfileViewModel.h",
+      "source_repo_name": "Inspirelife96/INSParseUI",
+      "parquet_row_index": 93
+    },
+    {
+      "file": "snippet_0094.c",
+      "sha256": "1f3b537b76c838669267289cfc1cd789f05b50853073d17c162d01f9c0a599ed",
+      "chars": 6322,
+      "source_row_id": "3383370",
+      "source_repo_path": "program/graph500/options.c",
+      "source_repo_name": "HyungRae-dev/reproduce-cgo2017-paper",
+      "parquet_row_index": 94
+    },
+    {
+      "file": "snippet_0095.c",
+      "sha256": "0c3267d78599f0056051209a5c4b009372a9ae5800c4cbbb9648a1e965fef2fc",
+      "chars": 3265,
+      "source_row_id": "3385820",
+      "source_repo_path": "include/vendors/OceanOptics/features/acquisition_delay/AcquisitionDelayFeature_FPGA.h",
+      "source_repo_name": "udyni/seabreeze",
+      "parquet_row_index": 95
+    },
+    {
+      "file": "snippet_0096.c",
+      "sha256": "7e21c1cf2cef1502bfd2e3cf525b694a0a1d0e392c04380b3dfa418ee63be140",
+      "chars": 13340,
+      "source_row_id": "3385969",
+      "source_repo_path": "include/com/google/common/util/concurrent/Futures.h",
+      "source_repo_name": "iFindTA/PBJ2Objc",
+      "parquet_row_index": 96
+    },
+    {
+      "file": "snippet_0097.c",
+      "sha256": "ed1882ade4376ebd14db59bcdcb34253aafa7ca977b13870d3df55754d9cf6e1",
+      "chars": 993,
+      "source_row_id": "3386937",
+      "source_repo_path": "SpecialLevelGenerator.h",
+      "source_repo_name": "bsimser/wofm",
+      "parquet_row_index": 97
+    },
+    {
+      "file": "snippet_0098.c",
+      "sha256": "0e853b465d5eb61d2141041ef9efb4e9e18962f3c3e6175866712f387e9e8db0",
+      "chars": 221,
+      "source_row_id": "3392815",
+      "source_repo_path": "Demo/ComponentSection/ComponentViewController.h",
+      "source_repo_name": "chengzongxin/Demo",
+      "parquet_row_index": 98
+    },
+    {
+      "file": "snippet_0099.c",
+      "sha256": "63bd5c8c7900e0706437e2be78d5f4d3954a35de79a25e08db1f14ba9c9a7a0c",
+      "chars": 704,
+      "source_row_id": "3393811",
+      "source_repo_path": "kernel/linux-5.4/drivers/media/platform/exynos4-is/fimc-is-sensor.c",
+      "source_repo_name": "josehu07/SplitFS",
+      "parquet_row_index": 99
+    }
+  ]
+}

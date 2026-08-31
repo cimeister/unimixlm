@@ -1,0 +1,1 @@
+module.exports = require("npm:jade@1.9.2/lib");

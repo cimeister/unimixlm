@@ -1,0 +1,538 @@
+{
+  "metric": {
+    "definition": "fertility = output pieces / characters (appendix.tex tab:convergence caption)",
+    "aggregation": "mean of per-document ratios",
+    "held_out_set": "FLORES-200 devtest, 1 sentence/line",
+    "held_out_disjoint_note": "FLORES-200 (professionally translated Wikinews/Wikijunior/etc.) is disjoint from every FineWeb2 web-crawl estimation corpus by construction -- different source corpora, no overlap mechanism.",
+    "encoding": "add_special_tokens=False"
+  },
+  "grid_docs": [
+    125,
+    500,
+    1000,
+    4000,
+    16000,
+    32000
+  ],
+  "prod_token_target": 25000000,
+  "full_reference_label": "N32000",
+  "fertility": {
+    "deu": {
+      "N125": {
+        "mean": 0.2793207399513048,
+        "n_heldout_documents": 1012,
+        "n_heldout_words": 21760,
+        "zero_token_documents": 0,
+        "n_lines_total": 1012,
+        "overlay_path": "<repo>/eval_results/f15_intrinsic/convergence_v2/overlays/deu/langspec_deu_Latn_N125.json",
+        "overlay_sha256": "7e87398d07b39c59497c76d09aafedeb6a87f53391ee27e3747172028adb1033",
+        "corpus": {
+          "n_docs": 125,
+          "n_tokens": 121781,
+          "n_chars": 386535,
+          "tokens_per_char": 0.31505814479930666,
+          "path": "<scratch>/unimixlm_las_tokenizers_corpora/convergence_v2_corpora/deu_Latn_N125.txt",
+          "sha256": "7584feb240f5423fb60be73339fc5574818e3650e7cf825079f8223670e1b294"
+        }
+      },
+      "N500": {
+        "mean": 0.2803653512148197,
+        "n_heldout_documents": 1012,
+        "n_heldout_words": 21760,
+        "zero_token_documents": 0,
+        "n_lines_total": 1012,
+        "overlay_path": "<repo>/eval_results/f15_intrinsic/convergence_v2/overlays/deu/langspec_deu_Latn_N500.json",
+        "overlay_sha256": "7bdbfe607a57422bce9d7ce50ee15606465ae9c1bb67b399c97852dff9a890c2",
+        "corpus": {
+          "n_docs": 500,
+          "n_tokens": 414197,
+          "n_chars": 1315081,
+          "tokens_per_char": 0.31495930668909367,
+          "path": "<scratch>/unimixlm_las_tokenizers_corpora/convergence_v2_corpora/deu_Latn_N500.txt",
+          "sha256": "14e423060117eb170a3d72cd727cb258949982b3397166d731ca842ffe031f34"
+        }
+      },
+      "N1000": {
+        "mean": 0.2801836398625349,
+        "n_heldout_documents": 1012,
+        "n_heldout_words": 21760,
+        "zero_token_documents": 0,
+        "n_lines_total": 1012,
+        "overlay_path": "<repo>/eval_results/f15_intrinsic/convergence_v2/overlays/deu/langspec_deu_Latn_N1000.json",
+        "overlay_sha256": "92885fbdf413169f4e84a36da955f74701e55a02b0914ed0e91b770d9b4e2201",
+        "corpus": {
+          "n_docs": 1000,
+          "n_tokens": 901380,
+          "n_chars": 2874612,
+          "tokens_per_char": 0.3135657960100354,
+          "path": "<scratch>/unimixlm_las_tokenizers_corpora/convergence_v2_corpora/deu_Latn_N1000.txt",
+          "sha256": "99eb4774df890a57cb13ce80cfd6deb843abc2de1ed53137eaae75f97c22bbaf"
+        }
+      },
+      "N4000": {
+        "mean": 0.2802522682757188,
+        "n_heldout_documents": 1012,
+        "n_heldout_words": 21760,
+        "zero_token_documents": 0,
+        "n_lines_total": 1012,
+        "overlay_path": "<repo>/eval_results/f15_intrinsic/convergence_v2/overlays/deu/langspec_deu_Latn_N4000.json",
+        "overlay_sha256": "65bf10610f99d0b503b8c5c47c147eee1125f0bb71891e70ed722c7a7ecd36bf",
+        "corpus": {
+          "n_docs": 4000,
+          "n_tokens": 3609418,
+          "n_chars": 11493256,
+          "tokens_per_char": 0.3140466026337532,
+          "path": "<scratch>/unimixlm_las_tokenizers_corpora/convergence_v2_corpora/deu_Latn_N4000.txt",
+          "sha256": "d0300df75daae975f39510df3eb1c236dcc2f5d866b792315b75704324f9c5d6"
+        }
+      },
+      "N16000": {
+        "mean": 0.28019281532530493,
+        "n_heldout_documents": 1012,
+        "n_heldout_words": 21760,
+        "zero_token_documents": 0,
+        "n_lines_total": 1012,
+        "overlay_path": "<repo>/eval_results/f15_intrinsic/convergence_v2/overlays/deu/langspec_deu_Latn_N16000.json",
+        "overlay_sha256": "4dc05b2ac71a79969c51de5ac7b145d09a6b4423ace7d0428953c14fc0650363",
+        "corpus": {
+          "n_docs": 16000,
+          "n_tokens": 15222469,
+          "n_chars": 48357419,
+          "tokens_per_char": 0.31479076664534145,
+          "path": "<scratch>/unimixlm_las_tokenizers_corpora/convergence_v2_corpora/deu_Latn_N16000.txt",
+          "sha256": "47f5dc5f61d5aecc7ee50855582077330535bfac74c6d61b57fc7cb0b997906f"
+        }
+      },
+      "N32000": {
+        "mean": 0.2801783098236061,
+        "n_heldout_documents": 1012,
+        "n_heldout_words": 21760,
+        "zero_token_documents": 0,
+        "n_lines_total": 1012,
+        "overlay_path": "<repo>/eval_results/f15_intrinsic/convergence_v2/overlays/deu/langspec_deu_Latn_N32000.json",
+        "overlay_sha256": "b94d3806aa138a7ccef5d1bdc5d128c5ba4c5e59ea9ff745612601bb767d43a9",
+        "corpus": {
+          "n_docs": 32000,
+          "n_tokens": 31475043,
+          "n_chars": 99912544,
+          "tokens_per_char": 0.3150259390852864,
+          "path": "<scratch>/unimixlm_las_tokenizers_corpora/convergence_v2_corpora/deu_Latn_N32000.txt",
+          "sha256": "f22d60b861f3a38943fd4562554b9b53643efec4b096ed8138dd2371e1fdd3b8"
+        }
+      },
+      "prod25M": {
+        "mean": 0.2802047711600147,
+        "n_heldout_documents": 1012,
+        "n_heldout_words": 21760,
+        "zero_token_documents": 0,
+        "n_lines_total": 1012,
+        "overlay_path": "<repo>/eval_results/f15_intrinsic/convergence_v2/overlays/deu/langspec_deu_Latn_prod25M.json",
+        "overlay_sha256": "f5908ce030d4a6d041b158ed55971da69e72ed77a6399fd13edc77fe7e74b6c1",
+        "corpus": {
+          "n_docs": 25520,
+          "n_tokens": 25001780,
+          "n_chars": 79380744,
+          "tokens_per_char": 0.3149602629070849,
+          "path": "<scratch>/unimixlm_las_tokenizers_corpora/convergence_v2_corpora/deu_Latn_prod25M.txt",
+          "sha256": "4507a1d9910a7b634274ba3582e7c3d17f673c0a4a0ab314eb63d45cb7d02d0c"
+        }
+      }
+    },
+    "fin": {
+      "N125": {
+        "mean": 0.38311142846910845,
+        "n_heldout_documents": 1012,
+        "n_heldout_words": 15985,
+        "zero_token_documents": 0,
+        "n_lines_total": 1012,
+        "overlay_path": "<repo>/eval_results/f15_intrinsic/convergence_v2/overlays/fin/langspec_fin_Latn_N125.json",
+        "overlay_sha256": "a2f276163cc8b8861c65e601b77ac2b78b6d86499f591f8cf3f33897fb9b2098",
+        "corpus": {
+          "n_docs": 125,
+          "n_tokens": 122889,
+          "n_chars": 324195,
+          "tokens_per_char": 0.3790588997362698,
+          "path": "<scratch>/unimixlm_las_tokenizers_corpora/convergence_v2_corpora/fin_Latn_N125.txt",
+          "sha256": "308a5ccec6bc885f4c7f8aa2fdc30f9e97db05e74cf283f273b9af9f6661a220"
+        }
+      },
+      "N500": {
+        "mean": 0.3845266646900884,
+        "n_heldout_documents": 1012,
+        "n_heldout_words": 15985,
+        "zero_token_documents": 0,
+        "n_lines_total": 1012,
+        "overlay_path": "<repo>/eval_results/f15_intrinsic/convergence_v2/overlays/fin/langspec_fin_Latn_N500.json",
+        "overlay_sha256": "6eb74d5c76f122049fa2cd8e8a6f738fb0ec99552a8a1aa472226d6bb6c9e9c7",
+        "corpus": {
+          "n_docs": 500,
+          "n_tokens": 545489,
+          "n_chars": 1427915,
+          "tokens_per_char": 0.38201783719619165,
+          "path": "<scratch>/unimixlm_las_tokenizers_corpora/convergence_v2_corpora/fin_Latn_N500.txt",
+          "sha256": "db80c85ad51decaf052ea003a3ed11be6599fcbdf6e94ada60213456b14a22c1"
+        }
+      },
+      "N1000": {
+        "mean": 0.3842171126531328,
+        "n_heldout_documents": 1012,
+        "n_heldout_words": 15985,
+        "zero_token_documents": 0,
+        "n_lines_total": 1012,
+        "overlay_path": "<repo>/eval_results/f15_intrinsic/convergence_v2/overlays/fin/langspec_fin_Latn_N1000.json",
+        "overlay_sha256": "10985a2f0ff37e7530a702255c91d4860415d626414b813933a9abc0cd1c9e4d",
+        "corpus": {
+          "n_docs": 1000,
+          "n_tokens": 1079516,
+          "n_chars": 2833503,
+          "tokens_per_char": 0.38098283291035867,
+          "path": "<scratch>/unimixlm_las_tokenizers_corpora/convergence_v2_corpora/fin_Latn_N1000.txt",
+          "sha256": "a1beeaf0c2ba892a5f4f417d06c2e8b1374c618b6cd4368f6b71d949afb4c2de"
+        }
+      },
+      "N4000": {
+        "mean": 0.3840569569685362,
+        "n_heldout_documents": 1012,
+        "n_heldout_words": 15985,
+        "zero_token_documents": 0,
+        "n_lines_total": 1012,
+        "overlay_path": "<repo>/eval_results/f15_intrinsic/convergence_v2/overlays/fin/langspec_fin_Latn_N4000.json",
+        "overlay_sha256": "b38a4863a128fd74536373b31c28c6327e92b4331d351dc4dc2b18b6f4bbbd76",
+        "corpus": {
+          "n_docs": 4000,
+          "n_tokens": 4697244,
+          "n_chars": 12342130,
+          "tokens_per_char": 0.38058617110660803,
+          "path": "<scratch>/unimixlm_las_tokenizers_corpora/convergence_v2_corpora/fin_Latn_N4000.txt",
+          "sha256": "2d17aa8dca50b32bd9ec8871e3b74f42b41f8020538cd1475a68d1e4b2e81f6c"
+        }
+      },
+      "N16000": {
+        "mean": 0.38364888243144285,
+        "n_heldout_documents": 1012,
+        "n_heldout_words": 15985,
+        "zero_token_documents": 0,
+        "n_lines_total": 1012,
+        "overlay_path": "<repo>/eval_results/f15_intrinsic/convergence_v2/overlays/fin/langspec_fin_Latn_N16000.json",
+        "overlay_sha256": "686d857fd2b8e9b1941ad39bffe98e321e5eb2cf099f538c4e3cce7dc03e752a",
+        "corpus": {
+          "n_docs": 16000,
+          "n_tokens": 18381609,
+          "n_chars": 48038536,
+          "tokens_per_char": 0.3826429889537017,
+          "path": "<scratch>/unimixlm_las_tokenizers_corpora/convergence_v2_corpora/fin_Latn_N16000.txt",
+          "sha256": "ec1f9f215abe235f89c1980ef48018027bf6326d252e03650f391da4a510cc6d"
+        }
+      },
+      "N32000": {
+        "mean": 0.38383047765616246,
+        "n_heldout_documents": 1012,
+        "n_heldout_words": 15985,
+        "zero_token_documents": 0,
+        "n_lines_total": 1012,
+        "overlay_path": "<repo>/eval_results/f15_intrinsic/convergence_v2/overlays/fin/langspec_fin_Latn_N32000.json",
+        "overlay_sha256": "9f70fb2a2d34c2a14ab3596837e590227748459ce8e5cfa84cd0fe2f1cff497e",
+        "corpus": {
+          "n_docs": 32000,
+          "n_tokens": 36537960,
+          "n_chars": 95473469,
+          "tokens_per_char": 0.3827027590251277,
+          "path": "<scratch>/unimixlm_las_tokenizers_corpora/convergence_v2_corpora/fin_Latn_N32000.txt",
+          "sha256": "2f1095ef012682914a8aee5294c1990ad3b6c8e65b8ec88f341cf860fc59c09f"
+        }
+      },
+      "prod25M": {
+        "mean": 0.3837963542528357,
+        "n_heldout_documents": 1012,
+        "n_heldout_words": 15985,
+        "zero_token_documents": 0,
+        "n_lines_total": 1012,
+        "overlay_path": "<repo>/eval_results/f15_intrinsic/convergence_v2/overlays/fin/langspec_fin_Latn_prod25M.json",
+        "overlay_sha256": "61c5674e0ca7d6284e2a402de6a16b9e74a7edbc0bf34d898a4b74c9a7d41141",
+        "corpus": {
+          "n_docs": 21518,
+          "n_tokens": 25003767,
+          "n_chars": 65301253,
+          "tokens_per_char": 0.3828987324332046,
+          "path": "<scratch>/unimixlm_las_tokenizers_corpora/convergence_v2_corpora/fin_Latn_prod25M.txt",
+          "sha256": "0e38123322a3e74ea6cd36db37324998fae7e7549be4d865dd61b5463652588c"
+        }
+      }
+    },
+    "tur": {
+      "N125": {
+        "mean": 0.3217087796976316,
+        "n_heldout_documents": 1012,
+        "n_heldout_words": 17609,
+        "zero_token_documents": 0,
+        "n_lines_total": 1012,
+        "overlay_path": "<repo>/eval_results/f15_intrinsic/convergence_v2/overlays/tur/langspec_tur_Latn_N125.json",
+        "overlay_sha256": "8f383fa896eb26479f89e03341f98367f66768f84bb91ee1f7857f9f43ab8a94",
+        "corpus": {
+          "n_docs": 125,
+          "n_tokens": 105818,
+          "n_chars": 325821,
+          "tokens_per_char": 0.32477341853348923,
+          "path": "<scratch>/unimixlm_las_tokenizers_corpora/convergence_v2_corpora/tur_Latn_N125.txt",
+          "sha256": "924ac2e28153db64dee3c624d5b9bd897e745b98da83d290c4e851e7bc79211e"
+        }
+      },
+      "N500": {
+        "mean": 0.32109958792456267,
+        "n_heldout_documents": 1012,
+        "n_heldout_words": 17609,
+        "zero_token_documents": 0,
+        "n_lines_total": 1012,
+        "overlay_path": "<repo>/eval_results/f15_intrinsic/convergence_v2/overlays/tur/langspec_tur_Latn_N500.json",
+        "overlay_sha256": "89de91e3111cdcf0fa176a61181b0ea01ecec7ca737c1e4589f3dc2ab33856f1",
+        "corpus": {
+          "n_docs": 500,
+          "n_tokens": 690929,
+          "n_chars": 2081898,
+          "tokens_per_char": 0.3318745683025777,
+          "path": "<scratch>/unimixlm_las_tokenizers_corpora/convergence_v2_corpora/tur_Latn_N500.txt",
+          "sha256": "4a228669d8a6c58d385de8e6ca4ef490b85591ceaf350ca435e59c4f5491e3ad"
+        }
+      },
+      "N1000": {
+        "mean": 0.3207834328382352,
+        "n_heldout_documents": 1012,
+        "n_heldout_words": 17609,
+        "zero_token_documents": 0,
+        "n_lines_total": 1012,
+        "overlay_path": "<repo>/eval_results/f15_intrinsic/convergence_v2/overlays/tur/langspec_tur_Latn_N1000.json",
+        "overlay_sha256": "0fdf034164566290c291d910e7bd4df3c34d023c7f015a40d626f6e8230995f0",
+        "corpus": {
+          "n_docs": 1000,
+          "n_tokens": 1374693,
+          "n_chars": 4107426,
+          "tokens_per_char": 0.33468478799131135,
+          "path": "<scratch>/unimixlm_las_tokenizers_corpora/convergence_v2_corpora/tur_Latn_N1000.txt",
+          "sha256": "c3518c027329b80031a154ae3c3cce9969c9c4e588df30be01ed0484e3eaa5fa"
+        }
+      },
+      "N4000": {
+        "mean": 0.32121564572787037,
+        "n_heldout_documents": 1012,
+        "n_heldout_words": 17609,
+        "zero_token_documents": 0,
+        "n_lines_total": 1012,
+        "overlay_path": "<repo>/eval_results/f15_intrinsic/convergence_v2/overlays/tur/langspec_tur_Latn_N4000.json",
+        "overlay_sha256": "a8be539ffb75741ada719d0588a73d98442ada165ee95abfdc4bd20af47bc79c",
+        "corpus": {
+          "n_docs": 4000,
+          "n_tokens": 5425540,
+          "n_chars": 16233155,
+          "tokens_per_char": 0.33422584827163915,
+          "path": "<scratch>/unimixlm_las_tokenizers_corpora/convergence_v2_corpora/tur_Latn_N4000.txt",
+          "sha256": "306760a399a16142990e3af1a86b7fba17b020e8989bfe8dad1542b792b02592"
+        }
+      },
+      "N16000": {
+        "mean": 0.3210237100615949,
+        "n_heldout_documents": 1012,
+        "n_heldout_words": 17609,
+        "zero_token_documents": 0,
+        "n_lines_total": 1012,
+        "overlay_path": "<repo>/eval_results/f15_intrinsic/convergence_v2/overlays/tur/langspec_tur_Latn_N16000.json",
+        "overlay_sha256": "28558ee5b5808fcf787f223b8f40dbf15896c9f7ad6b94d01000a1c89de853fc",
+        "corpus": {
+          "n_docs": 16000,
+          "n_tokens": 21793698,
+          "n_chars": 64946980,
+          "tokens_per_char": 0.3355613763719268,
+          "path": "<scratch>/unimixlm_las_tokenizers_corpora/convergence_v2_corpora/tur_Latn_N16000.txt",
+          "sha256": "5a1b8829e022520e6b7dab7dcda7d74e10464679e9932baef8bdd6e7e9a7d42c"
+        }
+      },
+      "N32000": {
+        "mean": 0.3209716776472382,
+        "n_heldout_documents": 1012,
+        "n_heldout_words": 17609,
+        "zero_token_documents": 0,
+        "n_lines_total": 1012,
+        "overlay_path": "<repo>/eval_results/f15_intrinsic/convergence_v2/overlays/tur/langspec_tur_Latn_N32000.json",
+        "overlay_sha256": "64b160de7d2613faa08433fd6a29dfbb2e0ff2cdf406063567c848e80592c558",
+        "corpus": {
+          "n_docs": 32000,
+          "n_tokens": 38161692,
+          "n_chars": 114164316,
+          "tokens_per_char": 0.3342698781640316,
+          "path": "<scratch>/unimixlm_las_tokenizers_corpora/convergence_v2_corpora/tur_Latn_N32000.txt",
+          "sha256": "14017e19b00c7cb086b45d6592c53a947705802e66a488cdc547e790d045cb0c"
+        }
+      },
+      "prod25M": {
+        "mean": 0.3210076491069585,
+        "n_heldout_documents": 1012,
+        "n_heldout_words": 17609,
+        "zero_token_documents": 0,
+        "n_lines_total": 1012,
+        "overlay_path": "<repo>/eval_results/f15_intrinsic/convergence_v2/overlays/tur/langspec_tur_Latn_prod25M.json",
+        "overlay_sha256": "05ab2a689407a2a843caa069d29f18ebbce2cd9bb5943c38acc3f9ea130a9fa7",
+        "corpus": {
+          "n_docs": 18239,
+          "n_tokens": 25000713,
+          "n_chars": 74528425,
+          "tokens_per_char": 0.3354520506773087,
+          "path": "<scratch>/unimixlm_las_tokenizers_corpora/convergence_v2_corpora/tur_Latn_prod25M.txt",
+          "sha256": "aba6068bd0bc8074e77964dc8f488903a5aea3ce9b2b4833be57e2528fcf2822"
+        }
+      }
+    }
+  },
+  "deltas_vs_full": {
+    "deu": {
+      "N125": {
+        "fertility": 0.2793207399513048,
+        "abs_delta_vs_full": 0.0008575698723012892,
+        "ratio_vs_full": 0.9969391996373981,
+        "pct_delta_vs_full": 0.3060800362601929
+      },
+      "N500": {
+        "fertility": 0.2803653512148197,
+        "abs_delta_vs_full": 0.00018704139121361596,
+        "ratio_vs_full": 1.0006675798398932,
+        "pct_delta_vs_full": 0.06675798398932914
+      },
+      "N1000": {
+        "fertility": 0.2801836398625349,
+        "abs_delta_vs_full": 5.330038928830216e-06,
+        "ratio_vs_full": 1.0000190237386049,
+        "pct_delta_vs_full": 0.001902373860484021
+      },
+      "N4000": {
+        "fertility": 0.2802522682757188,
+        "abs_delta_vs_full": 7.395845211272123e-05,
+        "ratio_vs_full": 1.0002639692278794,
+        "pct_delta_vs_full": 0.026396922787950215
+      },
+      "N16000": {
+        "fertility": 0.28019281532530493,
+        "abs_delta_vs_full": 1.4505501698847123e-05,
+        "ratio_vs_full": 1.0000517723934732,
+        "pct_delta_vs_full": 0.005177239347321161
+      },
+      "N32000": {
+        "fertility": 0.2801783098236061,
+        "abs_delta_vs_full": 0.0,
+        "ratio_vs_full": 1.0,
+        "pct_delta_vs_full": 0.0
+      },
+      "prod25M": {
+        "fertility": 0.2802047711600147,
+        "abs_delta_vs_full": 2.6461336408600822e-05,
+        "ratio_vs_full": 1.000094444628584,
+        "pct_delta_vs_full": 0.009444462858406234
+      }
+    },
+    "fin": {
+      "N125": {
+        "fertility": 0.38311142846910845,
+        "abs_delta_vs_full": 0.0007190491870540106,
+        "ratio_vs_full": 0.9981266490575609,
+        "pct_delta_vs_full": 0.18733509424390704
+      },
+      "N500": {
+        "fertility": 0.3845266646900884,
+        "abs_delta_vs_full": 0.0006961870339259324,
+        "ratio_vs_full": 1.0018137877903213,
+        "pct_delta_vs_full": 0.181378779032128
+      },
+      "N1000": {
+        "fertility": 0.3842171126531328,
+        "abs_delta_vs_full": 0.00038663499697033643,
+        "ratio_vs_full": 1.0010073066613452,
+        "pct_delta_vs_full": 0.10073066613451323
+      },
+      "N4000": {
+        "fertility": 0.3840569569685362,
+        "abs_delta_vs_full": 0.00022647931237373964,
+        "ratio_vs_full": 1.0005900503622243,
+        "pct_delta_vs_full": 0.05900503622242867
+      },
+      "N16000": {
+        "fertility": 0.38364888243144285,
+        "abs_delta_vs_full": 0.00018159522471961065,
+        "ratio_vs_full": 0.9995268869063538,
+        "pct_delta_vs_full": 0.0473113093646213
+      },
+      "N32000": {
+        "fertility": 0.38383047765616246,
+        "abs_delta_vs_full": 0.0,
+        "ratio_vs_full": 1.0,
+        "pct_delta_vs_full": 0.0
+      },
+      "prod25M": {
+        "fertility": 0.3837963542528357,
+        "abs_delta_vs_full": 3.4123403326757895e-05,
+        "ratio_vs_full": 0.9999110977233097,
+        "pct_delta_vs_full": 0.00889022766902993
+      }
+    },
+    "tur": {
+      "N125": {
+        "fertility": 0.3217087796976316,
+        "abs_delta_vs_full": 0.0007371020503934012,
+        "ratio_vs_full": 1.0022964706911104,
+        "pct_delta_vs_full": 0.22964706911103486
+      },
+      "N500": {
+        "fertility": 0.32109958792456267,
+        "abs_delta_vs_full": 0.00012791027732445004,
+        "ratio_vs_full": 1.0003985095453345,
+        "pct_delta_vs_full": 0.0398509545334492
+      },
+      "N1000": {
+        "fertility": 0.3207834328382352,
+        "abs_delta_vs_full": 0.0001882448090030353,
+        "ratio_vs_full": 0.9994135158267455,
+        "pct_delta_vs_full": 0.058648417325445304
+      },
+      "N4000": {
+        "fertility": 0.32121564572787037,
+        "abs_delta_vs_full": 0.00024396808063215092,
+        "ratio_vs_full": 1.0007600922374849,
+        "pct_delta_vs_full": 0.07600922374848364
+      },
+      "N16000": {
+        "fertility": 0.3210237100615949,
+        "abs_delta_vs_full": 5.2032414356695256e-05,
+        "ratio_vs_full": 1.0001621090519204,
+        "pct_delta_vs_full": 0.01621090519204038
+      },
+      "N32000": {
+        "fertility": 0.3209716776472382,
+        "abs_delta_vs_full": 0.0,
+        "ratio_vs_full": 1.0,
+        "pct_delta_vs_full": 0.0
+      },
+      "prod25M": {
+        "fertility": 0.3210076491069585,
+        "abs_delta_vs_full": 3.597145972028537e-05,
+        "ratio_vs_full": 1.0001120705103452,
+        "pct_delta_vs_full": 0.011207051034521359
+      }
+    }
+  },
+  "self_check_a_existing_f15_overlay": {
+    "fin": {
+      "existing_f15_overlay_path": "<repo>/las_tokenizers/f15/qwen2_5-0_5b/fin/langspec_fin_Latn.json",
+      "existing_f15_overlay_fertility": 0.38394313251490597,
+      "existing_f15_overlay_n_docs": "50000 (see las_tokenizers/f15/qwen2_5-0_5b/manifest.json)",
+      "this_study_N32000_fertility": 0.38383047765616246,
+      "this_study_N32000_n_docs": 32000,
+      "abs_delta": 0.00011265485874351056,
+      "pct_delta": 0.02934154805832786
+    },
+    "tur": {
+      "existing_f15_overlay_path": "<repo>/las_tokenizers/f15/qwen2_5-0_5b/tur/langspec_tur_Latn.json",
+      "existing_f15_overlay_fertility": 0.3210152014276264,
+      "existing_f15_overlay_n_docs": "50000 (see las_tokenizers/f15/qwen2_5-0_5b/manifest.json)",
+      "this_study_N32000_fertility": 0.3209716776472382,
+      "this_study_N32000_n_docs": 32000,
+      "abs_delta": 4.352378038818827e-05,
+      "pct_delta": 0.013558168022769103
+    }
+  }
+}

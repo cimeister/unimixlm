@@ -1,0 +1,921 @@
+{
+  "lang": "go",
+  "paper_label": "Go",
+  "built": "2026-08-28T06:17:11.739408+00:00",
+  "n_snippets": 100,
+  "eval_snippets_per_lang_constant": 100,
+  "selection_rule": "first N non-blank snippets in eval-parquet row order after CodeDataLoader's own normalisation (_strip_starcoder_metadata, _normalize_source, rstrip) -- identical to CodeDataLoader(max_snippets_per_lang=N) on that parquet",
+  "deterministic": true,
+  "seed": null,
+  "seed_note": "selection is by parquet row order, not sampling, so no seed exists to record; the file list below IS the selection",
+  "eval_parquet": "<local>/tokenizer-intrinsic-evals/starcoder/go.parquet",
+  "eval_parquet_sha256": "cc2f9b11a0c125b79559ad13201f429c929b200e2db506dc9252069871d7a6d7",
+  "eval_parquet_rows": 3265,
+  "rows_scanned_to_fill": 100,
+  "extension": ".go",
+  "dir": "<repo>/eval_results/code_ast_v1/evalsets/go",
+  "total_chars": 553126,
+  "roundtrip_verified_through": "CodeDataLoader(dir).get_code_snippets",
+  "files": [
+    {
+      "file": "snippet_0000.go",
+      "sha256": "99182c433e4a85db7e484b6f3433c022a652a193ca447532ea43c39a147a4506",
+      "chars": 2480,
+      "source_row_id": "1439",
+      "source_repo_path": "swim/ping_handler.go",
+      "source_repo_name": "mastermanu/ringpop-go",
+      "parquet_row_index": 0
+    },
+    {
+      "file": "snippet_0001.go",
+      "sha256": "59163b75539916b26ac690b470602906ad69038b4f7a458b4a9ba09e2fb962a4",
+      "chars": 7397,
+      "source_row_id": "2076",
+      "source_repo_path": "server/datasource/kv_dao_test.go",
+      "source_repo_name": "nisainan/servicecomb-kie",
+      "parquet_row_index": 1
+    },
+    {
+      "file": "snippet_0002.go",
+      "sha256": "5db28e56412cf59f384291e544992c1760c49a60cde9a182e3e9f45df69abe9a",
+      "chars": 5226,
+      "source_row_id": "4221",
+      "source_repo_path": "ceres/ceres_test.go",
+      "source_repo_name": "go-graphite/go-ceres",
+      "parquet_row_index": 2
+    },
+    {
+      "file": "snippet_0003.go",
+      "sha256": "e05264691f5125211636f83245b36d05092a4b356228c0bd5217ab88c2e93d0e",
+      "chars": 5878,
+      "source_row_id": "6561",
+      "source_repo_path": "version.go",
+      "source_repo_name": "larryli/atlas.v1",
+      "parquet_row_index": 3
+    },
+    {
+      "file": "snippet_0004.go",
+      "sha256": "2688fb74ece056d2c10d64aec758e0885caa90e29b857c2ad69fe40e7057461a",
+      "chars": 4885,
+      "source_row_id": "6675",
+      "source_repo_path": "state/pkg/compiled_package_repo_test.go",
+      "source_repo_name": "mboldt/bosh-cli",
+      "parquet_row_index": 4
+    },
+    {
+      "file": "snippet_0005.go",
+      "sha256": "72e45be347777de27d47db053f893d138357e2abdceb6319158b5d4ee564e109",
+      "chars": 450,
+      "source_row_id": "9438",
+      "source_repo_path": "codeforces/groups/V/C.go",
+      "source_repo_name": "rafaelcn/challenges",
+      "parquet_row_index": 5
+    },
+    {
+      "file": "snippet_0006.go",
+      "sha256": "02de3bc015e26fd0abc6ae016230c63ec6b1ec444467ff9aeab52c44c0ddd5dc",
+      "chars": 2076,
+      "source_row_id": "11818",
+      "source_repo_path": "pkg/database/setup.go",
+      "source_repo_name": "aeekayy/go-api-base",
+      "parquet_row_index": 6
+    },
+    {
+      "file": "snippet_0007.go",
+      "sha256": "ebcebeff09d1abf2344715722ac265443b80249a38f0c2adb96b1359b5c2b393",
+      "chars": 221,
+      "source_row_id": "12021",
+      "source_repo_path": "backend/router/router.go",
+      "source_repo_name": "iliketss/ginDemo",
+      "parquet_row_index": 7
+    },
+    {
+      "file": "snippet_0008.go",
+      "sha256": "e5ba03e96ecefd15654c1786840b4ff64ddc2c3c9478000232e93a1e1015da5e",
+      "chars": 4364,
+      "source_row_id": "12806",
+      "source_repo_path": "easypost/tracker.go",
+      "source_repo_name": "cmrajan/easypost-go",
+      "parquet_row_index": 8
+    },
+    {
+      "file": "snippet_0009.go",
+      "sha256": "d40b80f191fa77df3116d5ba887bf9b41b4ca4114c9df351a47af1f1192ad3ab",
+      "chars": 1514,
+      "source_row_id": "13959",
+      "source_repo_path": "chaincode/cbfm/go/fentec-project/gofe/data/vector_bn256.go",
+      "source_repo_name": "liqi16/Cloud-Blockchain-Fusion-Framework",
+      "parquet_row_index": 9
+    },
+    {
+      "file": "snippet_0010.go",
+      "sha256": "af0407bd8c0d5c3c878ee0085b5f5e01a8880e7e431c0753b352d4ddc6dc5766",
+      "chars": 442,
+      "source_row_id": "15421",
+      "source_repo_path": "custom_tables.go",
+      "source_repo_name": "FracKenA/snowalert",
+      "parquet_row_index": 10
+    },
+    {
+      "file": "snippet_0011.go",
+      "sha256": "6ffa56d86f3adb2298a9082f696778f1bdc58736a29a24705fc61067147a6ce7",
+      "chars": 145,
+      "source_row_id": "23498",
+      "source_repo_path": "artifacts/storage_account.go",
+      "source_repo_name": "CanarysPlayground/Sample22",
+      "parquet_row_index": 11
+    },
+    {
+      "file": "snippet_0012.go",
+      "sha256": "1ffbeb6dfbac92547dd0f4678abcb485e5e55dcc51dba026496a2be9f12ae72a",
+      "chars": 443,
+      "source_row_id": "24513",
+      "source_repo_path": "pre_update/section10_map/03_adding-entry/main.go",
+      "source_repo_name": "kodywilson/udemy_go_training",
+      "parquet_row_index": 12
+    },
+    {
+      "file": "snippet_0013.go",
+      "sha256": "5c117a638c9048aaccbe63afce79dfd7f5e3d67a9076594dceaf0fd86cf1a3f5",
+      "chars": 14207,
+      "source_row_id": "26201",
+      "source_repo_path": "internal/api/resolver_mutation_performer.go",
+      "source_repo_name": "StashApp/Stash",
+      "parquet_row_index": 13
+    },
+    {
+      "file": "snippet_0014.go",
+      "sha256": "5e51ffcaae540323c3ede1f582328891704c592390f95bd9b35f42e2b516e329",
+      "chars": 2554,
+      "source_row_id": "26750",
+      "source_repo_path": "view/view.go",
+      "source_repo_name": "Quikr/utron",
+      "parquet_row_index": 14
+    },
+    {
+      "file": "snippet_0015.go",
+      "sha256": "55223e7d5b796fa9b3ef7cfde5bff9f3d6e841dc1a7b23136fbc86537295486d",
+      "chars": 1426,
+      "source_row_id": "27734",
+      "source_repo_path": "mocks/FuseServerIface.go",
+      "source_repo_name": "nudgegoonies/sysbox-fs",
+      "parquet_row_index": 15
+    },
+    {
+      "file": "snippet_0016.go",
+      "sha256": "574d4f45c21c2d96eea860b4091b7389ab7d394311ada7e7a43d1f1c6dc84e5f",
+      "chars": 249,
+      "source_row_id": "30458",
+      "source_repo_path": "src/repository/types/reject.go",
+      "source_repo_name": "icowan/kplcloud",
+      "parquet_row_index": 16
+    },
+    {
+      "file": "snippet_0017.go",
+      "sha256": "f851a48f2b9af581fee3ce58a3c9a2efa477b113011b2835337afb9a37de0ebd",
+      "chars": 614,
+      "source_row_id": "32647",
+      "source_repo_path": "_vendor/src/github.com/rogpeppe/rog-go/exp/abc/audio/output.go",
+      "source_repo_name": "lijianying10/myitcvx",
+      "parquet_row_index": 17
+    },
+    {
+      "file": "snippet_0018.go",
+      "sha256": "9e1be59779c388213016d8bbfd43de726bbe32b01e4c8e35e42b7ac7a6a53c22",
+      "chars": 259,
+      "source_row_id": "32992",
+      "source_repo_path": "volume1/section2/personalgreetings/personalgreetings.go",
+      "source_repo_name": "NitishBangera/gofullstack",
+      "parquet_row_index": 18
+    },
+    {
+      "file": "snippet_0019.go",
+      "sha256": "3fd0bafb6a59d9aa4ec61644098e56c77733ee79ea9e71a8a08c39b15c522939",
+      "chars": 9311,
+      "source_row_id": "33144",
+      "source_repo_path": "db/conn.go",
+      "source_repo_name": "ParthDesai/sc-notifications",
+      "parquet_row_index": 19
+    },
+    {
+      "file": "snippet_0020.go",
+      "sha256": "2db32ab65e16241933ed838d7702c80ac54165f6645ebb78e332ef68f364d66e",
+      "chars": 2378,
+      "source_row_id": "34036",
+      "source_repo_path": "examples/03-basic-collisions/block/block.go",
+      "source_repo_name": "hurricanerix/transylvania",
+      "parquet_row_index": 20
+    },
+    {
+      "file": "snippet_0021.go",
+      "sha256": "8bb96c83832f5a5d8e5baa7b1c61618dc7c2457fbf1f0318931b7fd1f1b80326",
+      "chars": 2219,
+      "source_row_id": "34298",
+      "source_repo_path": "cmd/countserv/main.go",
+      "source_repo_name": "tkawachi/countserv",
+      "parquet_row_index": 21
+    },
+    {
+      "file": "snippet_0022.go",
+      "sha256": "3a0b57703458341d8d7b45ad34a748f08dc43fc7618c326156d119ba026bff00",
+      "chars": 144556,
+      "source_row_id": "39272",
+      "source_repo_path": "eth/v1alpha1/beacon_chain.pb.go",
+      "source_repo_name": "terencechain/ethereumapis-phase1",
+      "parquet_row_index": 22
+    },
+    {
+      "file": "snippet_0023.go",
+      "sha256": "fa2ac2e290fcfe36bb01a7dec29ba8dccd45a2ef4342643a8eb95b60ac5b0a28",
+      "chars": 822,
+      "source_row_id": "39415",
+      "source_repo_path": "rs-server/models/testmodel.go",
+      "source_repo_name": "Tailang-Li/rs-engine",
+      "parquet_row_index": 23
+    },
+    {
+      "file": "snippet_0024.go",
+      "sha256": "4107901eb28cc2dfb40f1b2f73c2a78fd397d7502c6b966c918d53a14e1e5f8b",
+      "chars": 5611,
+      "source_row_id": "40455",
+      "source_repo_path": "service/ram/api_op_AcceptResourceShareInvitation.go",
+      "source_repo_name": "alrs/aws-sdk-go-v2",
+      "parquet_row_index": 24
+    },
+    {
+      "file": "snippet_0025.go",
+      "sha256": "b724b2d204fd810251d56aa2435f6bc9d75118b81e4edc59079d6cd78a7bf43d",
+      "chars": 62,
+      "source_row_id": "42531",
+      "source_repo_path": "doc.go",
+      "source_repo_name": "StiegOlSauer/arsenal",
+      "parquet_row_index": 25
+    },
+    {
+      "file": "snippet_0026.go",
+      "sha256": "9608f74fda84ce1d8b1822cdb5b1082bc25bc9f26c7129a979cb01908172ec38",
+      "chars": 4987,
+      "source_row_id": "48154",
+      "source_repo_path": "csi/plugins/block/controller.go",
+      "source_repo_name": "wisererik/nbp",
+      "parquet_row_index": 26
+    },
+    {
+      "file": "snippet_0027.go",
+      "sha256": "b9694f54be17156a0452b52fb913479e54a1bd71029cbab28349a552841e280c",
+      "chars": 2056,
+      "source_row_id": "51131",
+      "source_repo_path": "cmd/almandite-user-server/main.go",
+      "source_repo_name": "RisingStack/almandite-user-service",
+      "parquet_row_index": 27
+    },
+    {
+      "file": "snippet_0028.go",
+      "sha256": "73fdcd649cc2a012404eb46b5845cc4d9b813938b2f1d3405655f1d46324f54d",
+      "chars": 5588,
+      "source_row_id": "51857",
+      "source_repo_path": "ctcp_test.go",
+      "source_repo_name": "qaisjp/girc",
+      "parquet_row_index": 28
+    },
+    {
+      "file": "snippet_0029.go",
+      "sha256": "22e83519fc449117074db069dc2eba522154147db5763773999c6c630a753ee5",
+      "chars": 1641,
+      "source_row_id": "57126",
+      "source_repo_path": "HighPerformanceWithGo/15-code-quality-across-versions/SLISLO/SLISLO.go",
+      "source_repo_name": "nwiizo/workspace_2020",
+      "parquet_row_index": 29
+    },
+    {
+      "file": "snippet_0030.go",
+      "sha256": "e882bfbca9156e0b30bdfc0c93f6a465dc1888a3169739219e03fbb7de06d33f",
+      "chars": 7127,
+      "source_row_id": "57745",
+      "source_repo_path": "blockchain/authentication.go",
+      "source_repo_name": "Deeptiman/Employeeledger",
+      "parquet_row_index": 30
+    },
+    {
+      "file": "snippet_0031.go",
+      "sha256": "d1ebea1593fe21aa610605709ec5136966338e1ffd44bdea78827554fb163f4b",
+      "chars": 831,
+      "source_row_id": "58654",
+      "source_repo_path": "ch4/nonempty/main.go",
+      "source_repo_name": "jeremybytes/go-programming-language",
+      "parquet_row_index": 31
+    },
+    {
+      "file": "snippet_0032.go",
+      "sha256": "b8bdd9636c44f40f27d8e188e47e7432d5883c9d90287a1047a359eec2949c8e",
+      "chars": 126,
+      "source_row_id": "61490",
+      "source_repo_path": "providers/anonymous/configure.go",
+      "source_repo_name": "kubex/rubix-identity",
+      "parquet_row_index": 32
+    },
+    {
+      "file": "snippet_0033.go",
+      "sha256": "b5b5427356a352386d55e05e026311df8eec9f30ae71d5bb9ccbd22a7a6b9758",
+      "chars": 1479,
+      "source_row_id": "61760",
+      "source_repo_path": "utils.go",
+      "source_repo_name": "augier/nlp",
+      "parquet_row_index": 33
+    },
+    {
+      "file": "snippet_0034.go",
+      "sha256": "33a511f512fc529d04d963c5a9fcdcf202b888bdfc032bf7b0665675f063022e",
+      "chars": 8066,
+      "source_row_id": "63893",
+      "source_repo_path": "library/net/http/blademaster/middleware/auth/auth_test.go",
+      "source_repo_name": "78182648/blibli-go",
+      "parquet_row_index": 34
+    },
+    {
+      "file": "snippet_0035.go",
+      "sha256": "7fa37e17eba333de68a5cef96d5b2f3570debd8e98f9a35967a9e86cc7adcf56",
+      "chars": 1497,
+      "source_row_id": "65623",
+      "source_repo_path": "internal/authentication/authentication.go",
+      "source_repo_name": "fatihdumanli/onenote-cli",
+      "parquet_row_index": 35
+    },
+    {
+      "file": "snippet_0036.go",
+      "sha256": "ebdbb10088ece5b7ff2570b9a86e0c31ff517325cf5b4b8fa2937c4c76a500d4",
+      "chars": 107,
+      "source_row_id": "67604",
+      "source_repo_path": "internal/services/sync/sync.go",
+      "source_repo_name": "cynt4k/wygops",
+      "parquet_row_index": 36
+    },
+    {
+      "file": "snippet_0037.go",
+      "sha256": "86f7e4e1c613d469618d134b5a114a89d525e125e7d29b23370c9b49954668fb",
+      "chars": 2202,
+      "source_row_id": "68124",
+      "source_repo_path": "core/switchablerequest_test.go",
+      "source_repo_name": "caevv/aws-lambda-go-api-proxy",
+      "parquet_row_index": 37
+    },
+    {
+      "file": "snippet_0038.go",
+      "sha256": "a1fdec3291d80acdb426b50c04a2a0ec33cf9e13ba970deff8c7c17aba8d846c",
+      "chars": 145,
+      "source_row_id": "68694",
+      "source_repo_path": "default_response_writer_test.go",
+      "source_repo_name": "galentuo/goframe",
+      "parquet_row_index": 38
+    },
+    {
+      "file": "snippet_0039.go",
+      "sha256": "3fbe346369c9fa94622ab427ae081e3cd45fd16141271b90e961aad7d956a0bd",
+      "chars": 32877,
+      "source_row_id": "71279",
+      "source_repo_path": "go/stellar/wallet_state.go",
+      "source_repo_name": "Nessa-G22/client",
+      "parquet_row_index": 39
+    },
+    {
+      "file": "snippet_0040.go",
+      "sha256": "36b0a3424b8184bf6ab18fb2e7f814af671e34712e5f946b76f59757b26984ec",
+      "chars": 5985,
+      "source_row_id": "75774",
+      "source_repo_path": "pkg/ransim/metrics.go",
+      "source_repo_name": "shadansari/onos-cli",
+      "parquet_row_index": 40
+    },
+    {
+      "file": "snippet_0041.go",
+      "sha256": "0e36ccd9aa7b90560ec3000b9c0f42edfef4843e15964b0219b3851c970d6881",
+      "chars": 4958,
+      "source_row_id": "78705",
+      "source_repo_path": "azuredevops/connection.go",
+      "source_repo_name": "artbegolli/go-ado",
+      "parquet_row_index": 41
+    },
+    {
+      "file": "snippet_0042.go",
+      "sha256": "d8335ffaf12b0a516e822d178d47ac6dd1dd581744eb7d1ba6dba59a709c510e",
+      "chars": 3957,
+      "source_row_id": "79610",
+      "source_repo_path": "receiver/udp_test.go",
+      "source_repo_name": "ehlerst/go-carbon",
+      "parquet_row_index": 42
+    },
+    {
+      "file": "snippet_0043.go",
+      "sha256": "d1b17380b440d4f3c02ebab24176f7b3aaabb447126daee2b7e6875704e013eb",
+      "chars": 373,
+      "source_row_id": "79774",
+      "source_repo_path": "types/isochrone.go",
+      "source_repo_name": "aabizri/gonavitia",
+      "parquet_row_index": 43
+    },
+    {
+      "file": "snippet_0044.go",
+      "sha256": "c48e6c4c3581ee1938bb6ae07dcad85389be7cae0040357a4477c42d8de07e37",
+      "chars": 4523,
+      "source_row_id": "81703",
+      "source_repo_path": "hoster.go",
+      "source_repo_name": "eleniums/gohost",
+      "parquet_row_index": 44
+    },
+    {
+      "file": "snippet_0045.go",
+      "sha256": "160e4f4cdcced717b0b563d95089924f1377a71d75eb3e7a093869796707b757",
+      "chars": 1355,
+      "source_row_id": "81978",
+      "source_repo_path": "test/nomad_e2e/grpc_test.go",
+      "source_repo_name": "sufuf3/gloo",
+      "parquet_row_index": 45
+    },
+    {
+      "file": "snippet_0046.go",
+      "sha256": "12a8742e16674c6b0f9f38683d942bf486a4f6690a2da469ca0710bfb9f43dba",
+      "chars": 1100,
+      "source_row_id": "82082",
+      "source_repo_path": "relationship.go",
+      "source_repo_name": "amit-lulla/anaconda",
+      "parquet_row_index": 46
+    },
+    {
+      "file": "snippet_0047.go",
+      "sha256": "a6db8851b535cd4169e85fe74e47e466a74123493c836326639cf0c847eb384e",
+      "chars": 1821,
+      "source_row_id": "85573",
+      "source_repo_path": "days/d9.go",
+      "source_repo_name": "egregors/aoc2021",
+      "parquet_row_index": 47
+    },
+    {
+      "file": "snippet_0048.go",
+      "sha256": "272566baa17c17af4052f6cc605c57be985e7581b5a3ddac45a9b21cea41bc18",
+      "chars": 792,
+      "source_row_id": "85958",
+      "source_repo_path": "server/validators.go",
+      "source_repo_name": "exler/pdfsquire",
+      "parquet_row_index": 48
+    },
+    {
+      "file": "snippet_0049.go",
+      "sha256": "acb6e9d255b54c5c2cb5a9264f1fd7dde6a0a11394ca94276be7020f364d0430",
+      "chars": 3427,
+      "source_row_id": "87270",
+      "source_repo_path": "cmd/webhook.go",
+      "source_repo_name": "lvzhihao/webdeploy",
+      "parquet_row_index": 49
+    },
+    {
+      "file": "snippet_0050.go",
+      "sha256": "cb563ec2b10d34d766ff60a23f497d84c71fa480b37cde65028639b05e364f65",
+      "chars": 1408,
+      "source_row_id": "88054",
+      "source_repo_path": "modules/passivebuzzer/passivebuzzer.go",
+      "source_repo_name": "neildavis/pi_pico_tinygo_examples",
+      "parquet_row_index": 50
+    },
+    {
+      "file": "snippet_0051.go",
+      "sha256": "aca99b61689e058daa35329e45fc9b34b22f98dec81469632fda41125bd3561a",
+      "chars": 3645,
+      "source_row_id": "88952",
+      "source_repo_path": "event.go",
+      "source_repo_name": "draringi/ottaconf",
+      "parquet_row_index": 51
+    },
+    {
+      "file": "snippet_0052.go",
+      "sha256": "b2bee2700e576e962cc898ebf0baf8c6bd6420f40663a4cfea5dc08f07d990a2",
+      "chars": 910,
+      "source_row_id": "90035",
+      "source_repo_path": "ring/granular/granular.go",
+      "source_repo_name": "pierods/chain",
+      "parquet_row_index": 52
+    },
+    {
+      "file": "snippet_0053.go",
+      "sha256": "5741d19af1ab06cf74f3c9063d0900c67e6aee4f7867702d39e133d721f9e148",
+      "chars": 4880,
+      "source_row_id": "92021",
+      "source_repo_path": "widget/widget.go",
+      "source_repo_name": "tsavola/giobuffers",
+      "parquet_row_index": 53
+    },
+    {
+      "file": "snippet_0054.go",
+      "sha256": "ed5e0dcb36f6636f992abce3e34660dd315a25c77fee9c382b403620801178ec",
+      "chars": 3859,
+      "source_row_id": "97059",
+      "source_repo_path": "x/simulation/doc.go",
+      "source_repo_name": "KiraCore/cosmos-sdk",
+      "parquet_row_index": 54
+    },
+    {
+      "file": "snippet_0055.go",
+      "sha256": "488f3d2186f0a0c8e5bf9ae0d8aaf9c70a78b96abd874027a11ba11db1dfac0a",
+      "chars": 1333,
+      "source_row_id": "99343",
+      "source_repo_path": "cmd/simple/old/main.go",
+      "source_repo_name": "xyproto/ioe",
+      "parquet_row_index": 55
+    },
+    {
+      "file": "snippet_0056.go",
+      "sha256": "29d10b75b7e75643989d52529583874d9774531c2d5c34b94ab8b257c85b56e9",
+      "chars": 2129,
+      "source_row_id": "801688",
+      "source_repo_path": "crawler_distributed/worker/types.go",
+      "source_repo_name": "cureking/Google_practise",
+      "parquet_row_index": 56
+    },
+    {
+      "file": "snippet_0057.go",
+      "sha256": "01ff71022a2d5ee17df505b9ecf173a5592b839495a6e980ec3d31fcbb017a33",
+      "chars": 692,
+      "source_row_id": "803675",
+      "source_repo_path": "game/cross/event/listener/player_cross_heartbeat.go",
+      "source_repo_name": "linminglu/Fgame",
+      "parquet_row_index": 57
+    },
+    {
+      "file": "snippet_0058.go",
+      "sha256": "a6d485d7d69a85088423d91f5428bc25509d252bc40d04be5175d50667bd2b37",
+      "chars": 3118,
+      "source_row_id": "804488",
+      "source_repo_path": "runner/executor.go",
+      "source_repo_name": "kiesel/xp-runners-go",
+      "parquet_row_index": 58
+    },
+    {
+      "file": "snippet_0059.go",
+      "sha256": "7e88ade775044d947a64532d0a332b382fc26d0b3822e5dbfbfa6bd61c907725",
+      "chars": 15103,
+      "source_row_id": "804543",
+      "source_repo_path": "plugins/outputs/dcos_metrics/translator.go",
+      "source_repo_name": "mesosphere/telegraf",
+      "parquet_row_index": 59
+    },
+    {
+      "file": "snippet_0060.go",
+      "sha256": "2256c10db98b594824a2d60be5b4d82e8022df51abbd573ed2323acfccc8b119",
+      "chars": 13079,
+      "source_row_id": "807544",
+      "source_repo_path": "pkg/node/node.go",
+      "source_repo_name": "aaaaalbert/sundew-one",
+      "parquet_row_index": 60
+    },
+    {
+      "file": "snippet_0061.go",
+      "sha256": "f8ac5d68a6529c8e365a3d60f3313db921816513e484fbe44b059c24e5dab1ac",
+      "chars": 47,
+      "source_row_id": "807703",
+      "source_repo_path": "linters/interfacer/testdata/src/grab-import/def/nested/def.go",
+      "source_repo_name": "brikkho-net/goreporter",
+      "parquet_row_index": 61
+    },
+    {
+      "file": "snippet_0062.go",
+      "sha256": "98aa78d80b1ad39b0f0efdd2391af576ed9ef71aa6495f62568914e582c8721f",
+      "chars": 5757,
+      "source_row_id": "807943",
+      "source_repo_path": "rest/client.go",
+      "source_repo_name": "breadysimon/goless",
+      "parquet_row_index": 62
+    },
+    {
+      "file": "snippet_0063.go",
+      "sha256": "6a67e661343a0fcffcd858f3b2708a89501ede517096fcea13acd411b7ae8b6c",
+      "chars": 1763,
+      "source_row_id": "808129",
+      "source_repo_path": "pkg/powerdns/powerdns.go",
+      "source_repo_name": "bishy999/go-powerdns",
+      "parquet_row_index": 63
+    },
+    {
+      "file": "snippet_0064.go",
+      "sha256": "95be0d627f5f3ad2003e3ff1d034e5fe66ac288eeb4e127191ec217696e8934c",
+      "chars": 2917,
+      "source_row_id": "809406",
+      "source_repo_path": "sandbox/judge_test.go",
+      "source_repo_name": "ggaaooppeenngg/libsandbox",
+      "parquet_row_index": 64
+    },
+    {
+      "file": "snippet_0065.go",
+      "sha256": "6c2eeb8e653956befe2ef861f28a119c177a2ca0076ad6af278661a64e096ee2",
+      "chars": 525,
+      "source_row_id": "809671",
+      "source_repo_path": "internal/bolt/dbs.go",
+      "source_repo_name": "DeedleFake/sips",
+      "parquet_row_index": 65
+    },
+    {
+      "file": "snippet_0066.go",
+      "sha256": "b38df8685e70e6ab91a2467eb39a27cf6b0063516cb36f5511b2270d6c7d6c09",
+      "chars": 9048,
+      "source_row_id": "810243",
+      "source_repo_path": "pkg/k8s/resource.go",
+      "source_repo_name": "yoshiakiley/yamecloud",
+      "parquet_row_index": 66
+    },
+    {
+      "file": "snippet_0067.go",
+      "sha256": "3053fd43a4b20687e41bcffe62121993afd538ab40c9d0f8523e699eac1d2130",
+      "chars": 4015,
+      "source_row_id": "810558",
+      "source_repo_path": "dcos/resource_dcos_security_secret.go",
+      "source_repo_name": "jrx/terraform-provider-dcos",
+      "parquet_row_index": 67
+    },
+    {
+      "file": "snippet_0068.go",
+      "sha256": "6929ddad5d692492b777c6b3af730c6dc991d5ee75485faa78b4e9d5eff2a46a",
+      "chars": 1518,
+      "source_row_id": "812192",
+      "source_repo_path": "pl/sempass/paras.go",
+      "source_repo_name": "yumuzi234/e8vm",
+      "parquet_row_index": 68
+    },
+    {
+      "file": "snippet_0069.go",
+      "sha256": "c1f42c5a3adc4bb78dbf6b7a99aaeaeb4c7c23d34f5eb3ab8ccaf8df2b418dc5",
+      "chars": 232,
+      "source_row_id": "812811",
+      "source_repo_path": "idgen.go",
+      "source_repo_name": "evzpav/crex",
+      "parquet_row_index": 69
+    },
+    {
+      "file": "snippet_0070.go",
+      "sha256": "9cc57e4001806bd63b37287385158cf10d450b23561f8751eedb252831efb9a5",
+      "chars": 625,
+      "source_row_id": "815047",
+      "source_repo_path": "filemanager/filemanager_test.go",
+      "source_repo_name": "hoffx/EduRM",
+      "parquet_row_index": 70
+    },
+    {
+      "file": "snippet_0071.go",
+      "sha256": "28cc25ad42e6b2008400e82a19eac3440624a8f850b62b586b832cec6a08f856",
+      "chars": 812,
+      "source_row_id": "817651",
+      "source_repo_path": "sourcefragment_test.go",
+      "source_repo_name": "colinc86/wrappederror",
+      "parquet_row_index": 71
+    },
+    {
+      "file": "snippet_0072.go",
+      "sha256": "bb938c53138f0133919b3c9977c6dcc5c48841061dd58aa01f02dc46b3f6ec26",
+      "chars": 5163,
+      "source_row_id": "818509",
+      "source_repo_path": "contnet/index.go",
+      "source_repo_name": "AdnanHidic/contnet",
+      "parquet_row_index": 72
+    },
+    {
+      "file": "snippet_0073.go",
+      "sha256": "ab7208954f8fe846395418ca0fe5319ecd33d6ce502bc2861dcc8542b7a4f2aa",
+      "chars": 8098,
+      "source_row_id": "820626",
+      "source_repo_path": "backend/api/project/v1/project.pb.validate.go",
+      "source_repo_name": "goku321/clutch",
+      "parquet_row_index": 73
+    },
+    {
+      "file": "snippet_0074.go",
+      "sha256": "51c8e1eaf338f9737b591196083aed65a6dbc94b242909e650cf08e8cc64f4a9",
+      "chars": 10715,
+      "source_row_id": "820951",
+      "source_repo_path": "main.go",
+      "source_repo_name": "daniel-trinh/twitch_chat_filter",
+      "parquet_row_index": 74
+    },
+    {
+      "file": "snippet_0075.go",
+      "sha256": "47f224a31dfff440f0922d631efa4aabe01477d40c3d787b5a8e4ca78d1ac9f5",
+      "chars": 491,
+      "source_row_id": "821179",
+      "source_repo_path": "handler/releases.go",
+      "source_repo_name": "panjiang/gohazel",
+      "parquet_row_index": 75
+    },
+    {
+      "file": "snippet_0076.go",
+      "sha256": "5348f6c49c390bba32e2a6c5703547fc952248d0d700db08cec5655176adad04",
+      "chars": 4943,
+      "source_row_id": "821417",
+      "source_repo_path": "commands/recipes.go",
+      "source_repo_name": "michigan-com/newsFetch",
+      "parquet_row_index": 76
+    },
+    {
+      "file": "snippet_0077.go",
+      "sha256": "0667d5ebf45d37e4e01c405d75cdbe3fdd702f71bb17d4503b97e4795c613be5",
+      "chars": 2288,
+      "source_row_id": "823721",
+      "source_repo_path": "wallet/network.go",
+      "source_repo_name": "fistchain/fistwallet",
+      "parquet_row_index": 77
+    },
+    {
+      "file": "snippet_0078.go",
+      "sha256": "e6d6763c8f3901c4b57c04e7395ef2c1a4f947f2cc70a0ba614cea21a5ab95f0",
+      "chars": 1127,
+      "source_row_id": "825661",
+      "source_repo_path": "internal/splunkconfig/config/tags.go",
+      "source_repo_name": "micahkemp-splunk/terraform-provider-splunkconfig",
+      "parquet_row_index": 78
+    },
+    {
+      "file": "snippet_0079.go",
+      "sha256": "2d6046720d2647a7558bc487ce50e640746b92146e0cff386840df9c76273f33",
+      "chars": 46979,
+      "source_row_id": "827617",
+      "source_repo_path": "sdk/go/azure/operationalinsights/v20200801/pulumiEnums.go",
+      "source_repo_name": "polivbr/pulumi-azure-native",
+      "parquet_row_index": 79
+    },
+    {
+      "file": "snippet_0080.go",
+      "sha256": "cc2351e1521c0b19db41238b970846db49e42806e28f65930eae8ec60f78af63",
+      "chars": 1677,
+      "source_row_id": "829561",
+      "source_repo_path": "interval_test.go",
+      "source_repo_name": "bbengfort/raft",
+      "parquet_row_index": 80
+    },
+    {
+      "file": "snippet_0081.go",
+      "sha256": "e53c1367df17197b119bd48b3853dc5ed0d5f45557de5877a10d4683f6e745e0",
+      "chars": 11213,
+      "source_row_id": "829994",
+      "source_repo_path": "lib/auth/webauthn/attestation_test.go",
+      "source_repo_name": "wiredcraft-ops/teleport",
+      "parquet_row_index": 81
+    },
+    {
+      "file": "snippet_0082.go",
+      "sha256": "9b0b2eaa1bf3912ac2fb456431443078ed19499ffc8aab125284636181bc02b8",
+      "chars": 838,
+      "source_row_id": "830798",
+      "source_repo_path": "go/engine/devlist_test.go",
+      "source_repo_name": "jamesmwright/client",
+      "parquet_row_index": 82
+    },
+    {
+      "file": "snippet_0083.go",
+      "sha256": "469016878fc786d52ced5466bb6ea0458c96044f826e62744b453ffcae17cde3",
+      "chars": 4464,
+      "source_row_id": "831379",
+      "source_repo_path": "pkg/network/self_sign_configuration.go",
+      "source_repo_name": "zcahana/cluster-network-addons-operator",
+      "parquet_row_index": 83
+    },
+    {
+      "file": "snippet_0084.go",
+      "sha256": "b5be9b654f472b5e5c72a756fc8a616fcd486f74f80266e5a02b39c480a95622",
+      "chars": 6535,
+      "source_row_id": "831912",
+      "source_repo_path": "util/xmlutil.go",
+      "source_repo_name": "elandcloud/kit",
+      "parquet_row_index": 84
+    },
+    {
+      "file": "snippet_0085.go",
+      "sha256": "09e5ef682b1b1e147f1825c41575ced03ad7244bce1ff6b967f713842a155e55",
+      "chars": 188,
+      "source_row_id": "833115",
+      "source_repo_path": "utils/ip/get_address_test.go",
+      "source_repo_name": "joesenvv1/test",
+      "parquet_row_index": 85
+    },
+    {
+      "file": "snippet_0086.go",
+      "sha256": "b253c7a352e38e2b056b657d8bd5464dee54049950e864caa928361896a2d680",
+      "chars": 2788,
+      "source_row_id": "834570",
+      "source_repo_path": "pkg/controller/remotecluster/status/subnet.go",
+      "source_repo_name": "hhyasdf/rama",
+      "parquet_row_index": 86
+    },
+    {
+      "file": "snippet_0087.go",
+      "sha256": "f2a3e8713252f2f7db2ed4363d021919677f5e7a4552de71c4af4b09690bbcbb",
+      "chars": 759,
+      "source_row_id": "835180",
+      "source_repo_path": "src/services/authentication_handler_service/pkg/helper/requestutils.go",
+      "source_repo_name": "Lens-Platform/Platform",
+      "parquet_row_index": 87
+    },
+    {
+      "file": "snippet_0088.go",
+      "sha256": "1c072833db55c8b184009ee9f4017af98c0fea4c241deec23fec70157988a2bc",
+      "chars": 2038,
+      "source_row_id": "835370",
+      "source_repo_path": "storage/ws/hub/hub.go",
+      "source_repo_name": "happy-astrouant/study",
+      "parquet_row_index": 88
+    },
+    {
+      "file": "snippet_0089.go",
+      "sha256": "ec77f31e8045f1d4630b1b1ae6ed5505537a2b2c7e8a74b6c60b46bd1f6beed9",
+      "chars": 2330,
+      "source_row_id": "837690",
+      "source_repo_path": "vendor/github.com/mkrautz/goar/rwcompat_test.go",
+      "source_repo_name": "steven-aerts/aptly",
+      "parquet_row_index": 89
+    },
+    {
+      "file": "snippet_0090.go",
+      "sha256": "05bb9c8021c19e61ff338acc027ac16e58e7a070f198ddc0cdbbca2b3347f95d",
+      "chars": 5645,
+      "source_row_id": "845957",
+      "source_repo_path": "sdk/go/azure/netapp/v20190501/pulumiEnums.go",
+      "source_repo_name": "polivbr/pulumi-azure-native",
+      "parquet_row_index": 90
+    },
+    {
+      "file": "snippet_0091.go",
+      "sha256": "89e4681fcffcb47fb14ad7dfa99db892da0d1ecb7107a7808f33db221bd65471",
+      "chars": 922,
+      "source_row_id": "851112",
+      "source_repo_path": "cmd/f3/f3_test.go",
+      "source_repo_name": "kingster/f3",
+      "parquet_row_index": 91
+    },
+    {
+      "file": "snippet_0092.go",
+      "sha256": "aa1658aa7f54eee2cb834de01171381b39a2f2fe42af93693cdce4ed7574727b",
+      "chars": 3675,
+      "source_row_id": "852225",
+      "source_repo_path": "boltdb.go",
+      "source_repo_name": "astutic/boltWorker",
+      "parquet_row_index": 92
+    },
+    {
+      "file": "snippet_0093.go",
+      "sha256": "0d85966c156b5f610a645d51be1a5a4dc8662660922b367db6487e4a2de653e6",
+      "chars": 4757,
+      "source_row_id": "854333",
+      "source_repo_path": "internal/cmd/create/helper.go",
+      "source_repo_name": "Mogball/wio",
+      "parquet_row_index": 93
+    },
+    {
+      "file": "snippet_0094.go",
+      "sha256": "3945c2e305aa06074fab7f31093112713c86a6e59137da18c82470574122c6ec",
+      "chars": 15997,
+      "source_row_id": "855064",
+      "source_repo_path": "vm/vmExprFunction.go",
+      "source_repo_name": "chyroc/anbko",
+      "parquet_row_index": 94
+    },
+    {
+      "file": "snippet_0095.go",
+      "sha256": "2e75d16cb4f736c1798747b204a43b40197a244cfbc00806a6145a10c9dd057f",
+      "chars": 565,
+      "source_row_id": "855582",
+      "source_repo_path": "cmd/root.go",
+      "source_repo_name": "awstooling/aws-state-check",
+      "parquet_row_index": 95
+    },
+    {
+      "file": "snippet_0096.go",
+      "sha256": "b3bc2af706959fc97a1ff918dc50f744680530ce2bea611f451e2e11f98a3ba0",
+      "chars": 9039,
+      "source_row_id": "856078",
+      "source_repo_path": "cmd/containerd/config_v2_test.go",
+      "source_repo_name": "mgiessing/container-config",
+      "parquet_row_index": 96
+    },
+    {
+      "file": "snippet_0097.go",
+      "sha256": "052edc7dd09c55a169d2c7dff8892a627703b9a3d0cd33eb7554ce5f0a802c95",
+      "chars": 1343,
+      "source_row_id": "856773",
+      "source_repo_path": "src/draw/system.go",
+      "source_repo_name": "lioneagle/goutil",
+      "parquet_row_index": 97
+    },
+    {
+      "file": "snippet_0098.go",
+      "sha256": "de5c175188ce079a4235e281e976f6c1bb09683266cce31e19a84b77b7bc7550",
+      "chars": 1573,
+      "source_row_id": "858277",
+      "source_repo_path": "artifactory/commands/buildinfo/collectenv.go",
+      "source_repo_name": "dvavili/jfrog-cli-core",
+      "parquet_row_index": 98
+    },
+    {
+      "file": "snippet_0099.go",
+      "sha256": "fd4dc91aef3433b82822882ba6d37e64e03323796557f8187b8fc841b2b43fdf",
+      "chars": 2752,
+      "source_row_id": "858494",
+      "source_repo_path": "src/payouts/model_additional_data_open_invoice.go",
+      "source_repo_name": "sooand/adyen-go-api-library",
+      "parquet_row_index": 99
+    }
+  ]
+}

@@ -1,0 +1,921 @@
+{
+  "lang": "python",
+  "paper_label": "Py",
+  "built": "2026-08-28T06:10:40.772081+00:00",
+  "n_snippets": 100,
+  "eval_snippets_per_lang_constant": 100,
+  "selection_rule": "first N non-blank snippets in eval-parquet row order after CodeDataLoader's own normalisation (_strip_starcoder_metadata, _normalize_source, rstrip) -- identical to CodeDataLoader(max_snippets_per_lang=N) on that parquet",
+  "deterministic": true,
+  "seed": null,
+  "seed_note": "selection is by parquet row order, not sampling, so no seed exists to record; the file list below IS the selection",
+  "eval_parquet": "<local>/tokenizer-intrinsic-evals/starcoder/python.parquet",
+  "eval_parquet_sha256": "e10d833ce5a28d90b4985b6b7c2280bd3e97025755397c54ca3641230228c510",
+  "eval_parquet_rows": 4714,
+  "rows_scanned_to_fill": 100,
+  "extension": ".py",
+  "dir": "<repo>/eval_results/code_ast_v1/evalsets/python",
+  "total_chars": 393388,
+  "roundtrip_verified_through": "CodeDataLoader(dir).get_code_snippets",
+  "files": [
+    {
+      "file": "snippet_0000.py",
+      "sha256": "2460983e4a16e1ae329c3f2aeaf045cdd758802d660ec5afadac99b30589990b",
+      "chars": 2874,
+      "source_row_id": "3092",
+      "source_repo_path": "services/model.py",
+      "source_repo_name": "theallknowng/eKheti",
+      "parquet_row_index": 0
+    },
+    {
+      "file": "snippet_0001.py",
+      "sha256": "b26a85313009e85f7b069a68b005bf8fb8eb1a9c6ebbe69dd2c84760ae6739f9",
+      "chars": 516,
+      "source_row_id": "8306",
+      "source_repo_path": "trompace/mutations/__init__.py",
+      "source_repo_name": "trompamusic/ce-queries-template",
+      "parquet_row_index": 1
+    },
+    {
+      "file": "snippet_0002.py",
+      "sha256": "44f659bcd4efd2e517507dd11cd8fdd42db40150190746cc7aa188a5c271bd61",
+      "chars": 5525,
+      "source_row_id": "10001",
+      "source_repo_path": "src/test/cli/component.py",
+      "source_repo_name": "huseyinbolt/cord-tester",
+      "parquet_row_index": 2
+    },
+    {
+      "file": "snippet_0003.py",
+      "sha256": "9fe16f6af7455b5b9e915913490dd564474b4fd9cfae556e4fba00ca11f1a5cc",
+      "chars": 2390,
+      "source_row_id": "11340",
+      "source_repo_path": "nncf/experimental/onnx/algorithms/quantization/default_quantization.py",
+      "source_repo_name": "vuiseng9/nncf_pytorch",
+      "parquet_row_index": 3
+    },
+    {
+      "file": "snippet_0004.py",
+      "sha256": "afd9ca85f4994c959320f6b85f4317f3cabc5db375230b8141bbac8dc4829d37",
+      "chars": 2386,
+      "source_row_id": "19526",
+      "source_repo_path": "setup.py",
+      "source_repo_name": "mehta-lab/recOrder",
+      "parquet_row_index": 4
+    },
+    {
+      "file": "snippet_0005.py",
+      "sha256": "7471729b6b5c94648814241d732e06d354e507350143115be8a6d79d5355aff6",
+      "chars": 3635,
+      "source_row_id": "20255",
+      "source_repo_path": "cldfbench_lapollaqiang.py",
+      "source_repo_name": "cldf-datasets/lapollaqiang",
+      "parquet_row_index": 5
+    },
+    {
+      "file": "snippet_0006.py",
+      "sha256": "ab8ce2e0da0310965dc7c44c1d38240eb031d25f9c5c0ddea0b25f7e5c76a355",
+      "chars": 216,
+      "source_row_id": "21622",
+      "source_repo_path": "bazel_versions.bzl",
+      "source_repo_name": "pennig/rules_xcodeproj",
+      "parquet_row_index": 6
+    },
+    {
+      "file": "snippet_0007.py",
+      "sha256": "8265c659383c8d2264693e4bc45f910dff4845fd77b670f58b4595566613d0cf",
+      "chars": 3069,
+      "source_row_id": "24999",
+      "source_repo_path": "tests/parser/test_lambda.py",
+      "source_repo_name": "csun-comp430-s22/lispy",
+      "parquet_row_index": 7
+    },
+    {
+      "file": "snippet_0008.py",
+      "sha256": "351798beae7a370d461a1520782cdb9c7237918a0a5d4cbc7faaa0d6074d8674",
+      "chars": 15853,
+      "source_row_id": "26602",
+      "source_repo_path": "selfdrive/car/hyundai/values.py",
+      "source_repo_name": "agegold/OPKR080",
+      "parquet_row_index": 8
+    },
+    {
+      "file": "snippet_0009.py",
+      "sha256": "1a50b41cf63e67798bdd8d706fa9d676c47b927801dfeaa19a67ff76d16671f6",
+      "chars": 4651,
+      "source_row_id": "30163",
+      "source_repo_path": "mi/dataset/parser/test/test_flntu_x_mmp_cds.py",
+      "source_repo_name": "petercable/mi-dataset",
+      "parquet_row_index": 9
+    },
+    {
+      "file": "snippet_0010.py",
+      "sha256": "84d30d9c4435b9d15fc292a34814e51e6875f3e5c700a3da8b650b45596ea302",
+      "chars": 476,
+      "source_row_id": "33832",
+      "source_repo_path": "user/migrations/0002_userprofile_relations.py",
+      "source_repo_name": "Trippr-dwoc/Trippr-backend",
+      "parquet_row_index": 10
+    },
+    {
+      "file": "snippet_0011.py",
+      "sha256": "d7ee545ff5dae62d38d80c4928ad90681a0a7f3adad52897fd3dcdd4e4bb83ba",
+      "chars": 374,
+      "source_row_id": "41491",
+      "source_repo_path": "taskmanager/src/modules/events/infrastructure/persistence/models/event_model.py",
+      "source_repo_name": "alice-biometrics/petisco-task-manager",
+      "parquet_row_index": 11
+    },
+    {
+      "file": "snippet_0012.py",
+      "sha256": "d394099e3043910ea4c81c7be4b22fbc73b36fb946775adf3f414e03393f877d",
+      "chars": 3331,
+      "source_row_id": "46356",
+      "source_repo_path": "pythonProjects/guess_number/guess_number.py",
+      "source_repo_name": "chisma/pythonProjects",
+      "parquet_row_index": 12
+    },
+    {
+      "file": "snippet_0013.py",
+      "sha256": "7988167ab6d975d9f11d0376e39290c6c672ea596620b1269e8dd8c89a54eb59",
+      "chars": 2296,
+      "source_row_id": "47272",
+      "source_repo_path": "Powerswitch.py",
+      "source_repo_name": "NikBenson/LINDY-IPower-Stripe-Lite-web-scrapping",
+      "parquet_row_index": 13
+    },
+    {
+      "file": "snippet_0014.py",
+      "sha256": "c0bceddd3295096a671896c2ab8b684886eb8ff53447554aa898cc85f4c1846a",
+      "chars": 148,
+      "source_row_id": "49023",
+      "source_repo_path": "reviewboard/oauth/apps.py",
+      "source_repo_name": "pombredanne/reviewboard",
+      "parquet_row_index": 14
+    },
+    {
+      "file": "snippet_0015.py",
+      "sha256": "58ca6134946504e2cd3f61295b94a26316d17b8d62e40c5ffa1fd982adadfa3b",
+      "chars": 1312,
+      "source_row_id": "50591",
+      "source_repo_path": "python/ml4ir/applications/ranking/tests/test_ranklib_to_ml4ir.py",
+      "source_repo_name": "ducouloa/ml4ir",
+      "parquet_row_index": 15
+    },
+    {
+      "file": "snippet_0016.py",
+      "sha256": "09eab20a2f490d8822e8420d0861a5192e161dcc0ff072f6cb3210f0272bd078",
+      "chars": 2229,
+      "source_row_id": "51603",
+      "source_repo_path": "educative/course1/graphs/ch2_dfs.py",
+      "source_repo_name": "liveroot/ambition2020",
+      "parquet_row_index": 16
+    },
+    {
+      "file": "snippet_0017.py",
+      "sha256": "5199d9e7534310838bb2bca5c02bf46e9f2d7fc7b726b8f192b87c910d7fe17a",
+      "chars": 1653,
+      "source_row_id": "55488",
+      "source_repo_path": "hatloads/payloads/__init__.py",
+      "source_repo_name": "YurinDoctrine/HatLoads",
+      "parquet_row_index": 17
+    },
+    {
+      "file": "snippet_0018.py",
+      "sha256": "1190df02bc22bc2bdb03222fa186c8b1bc4a001131de99a7d6206b5f09482c40",
+      "chars": 2093,
+      "source_row_id": "59272",
+      "source_repo_path": "examples/admin/make_demos.py",
+      "source_repo_name": "slamavl/quantarhei",
+      "parquet_row_index": 18
+    },
+    {
+      "file": "snippet_0019.py",
+      "sha256": "66e3f5c8b611d4f85e4c143066d1c0fd2b043e6b3860c07584a1fcbbb9a9cf60",
+      "chars": 8466,
+      "source_row_id": "62242",
+      "source_repo_path": "tasks.py",
+      "source_repo_name": "codeghar/docker-compose-jenkins",
+      "parquet_row_index": 19
+    },
+    {
+      "file": "snippet_0020.py",
+      "sha256": "1e8c391f7077f366d12b5fb2b29afe2c4840d8beca8d5d72e0b47a2677859376",
+      "chars": 7934,
+      "source_row_id": "63641",
+      "source_repo_path": "webstats/views.py",
+      "source_repo_name": "biomassives/django-stats",
+      "parquet_row_index": 20
+    },
+    {
+      "file": "snippet_0021.py",
+      "sha256": "881020fdc6d0ab69b6c89e89383643769763e0c69099af4f323b45d5a36592ed",
+      "chars": 12655,
+      "source_row_id": "70318",
+      "source_repo_path": "eigenfaces.py",
+      "source_repo_name": "dongxijia/Eigenfaces",
+      "parquet_row_index": 21
+    },
+    {
+      "file": "snippet_0022.py",
+      "sha256": "768bd7c15c5ba5f07a0f7aa7150f6cefef1552fbd25ace0fd10fda92cba40594",
+      "chars": 2697,
+      "source_row_id": "74124",
+      "source_repo_path": "test/geometry/epipolar/test_epipolar_metrics.py",
+      "source_repo_name": "pmeier/kornia",
+      "parquet_row_index": 22
+    },
+    {
+      "file": "snippet_0023.py",
+      "sha256": "0ff8bb1f70ecc0d75ac543db73e36a3b6949580576202e85563fb0cc2ebe57b2",
+      "chars": 1227,
+      "source_row_id": "80743",
+      "source_repo_path": "ansible/venv/lib/python2.7/site-packages/ansible/plugins/doc_fragments/tower.py",
+      "source_repo_name": "gvashchenkolineate/gvashchenkolineate_infra_trytravis",
+      "parquet_row_index": 23
+    },
+    {
+      "file": "snippet_0024.py",
+      "sha256": "559b5f3a3b1c6f89d22130a0923dd35956770790319ce891c3413e6a85f183a9",
+      "chars": 16483,
+      "source_row_id": "83492",
+      "source_repo_path": "inventory/inventory/inventory/common/storage_backend_conf.py",
+      "source_repo_name": "xe1gyq/metal",
+      "parquet_row_index": 24
+    },
+    {
+      "file": "snippet_0025.py",
+      "sha256": "8633dcb7b4682fa6a1f3991d29fd56a3f02ccb76ea7149e46b95a7e1ae1aed44",
+      "chars": 2194,
+      "source_row_id": "84386",
+      "source_repo_path": "main.py",
+      "source_repo_name": "graille/Hashcode-2017",
+      "parquet_row_index": 25
+    },
+    {
+      "file": "snippet_0026.py",
+      "sha256": "3c24b1708883bbd1b8eddc25e6cdcf3ae21b56342d9fa8a34eb5c0301f6f13b9",
+      "chars": 1231,
+      "source_row_id": "94196",
+      "source_repo_path": "tapas/utils/constants.py",
+      "source_repo_name": "Martin36/tapas",
+      "parquet_row_index": 26
+    },
+    {
+      "file": "snippet_0027.py",
+      "sha256": "087276c8068814f0de45a36f84290cbe4e5648c2d64a255fa4e3c9c35a4b5146",
+      "chars": 851,
+      "source_row_id": "94264",
+      "source_repo_path": "html/pelicanconf.py",
+      "source_repo_name": "rolando-contribute/aosabook-500lines",
+      "parquet_row_index": 27
+    },
+    {
+      "file": "snippet_0028.py",
+      "sha256": "6abb14401b77fdaaf3f846dd373c7a057b2c195715f83d6f5e10ddac62f272be",
+      "chars": 3861,
+      "source_row_id": "95980",
+      "source_repo_path": "avalanche_rl/logging/interactive_logging.py",
+      "source_repo_name": "coreylowman/avalanche-rl",
+      "parquet_row_index": 28
+    },
+    {
+      "file": "snippet_0029.py",
+      "sha256": "e0b966ba98855e8f27a86381235c20cedd930b2b4e5294b671c0966aa3350694",
+      "chars": 9330,
+      "source_row_id": "101106",
+      "source_repo_path": "puppetbeacon/monitors.py",
+      "source_repo_name": "ericwestfall/puppetbeacon",
+      "parquet_row_index": 29
+    },
+    {
+      "file": "snippet_0030.py",
+      "sha256": "a96f8298573b69bdd2bcd211ff603bd828a3422b4ceae259df0ac73d30142a14",
+      "chars": 5399,
+      "source_row_id": "107392",
+      "source_repo_path": "card_probabilities_test.py",
+      "source_repo_name": "matthewj8489/mtgarena",
+      "parquet_row_index": 30
+    },
+    {
+      "file": "snippet_0031.py",
+      "sha256": "a89053cb16fea19a431860c8371422a8de556eed38b2f6d5a4de13a3defc0e0d",
+      "chars": 1970,
+      "source_row_id": "110521",
+      "source_repo_path": "netutils_linux_monitoring/softirqs.py",
+      "source_repo_name": "AlexeyAB/netutils-linux",
+      "parquet_row_index": 31
+    },
+    {
+      "file": "snippet_0032.py",
+      "sha256": "da387801578f8f449f614c8cd0dbafc4160dd8ada5a71f83bd896e8da1c055ac",
+      "chars": 3324,
+      "source_row_id": "115482",
+      "source_repo_path": "data_cube_ui/settings-sansa-desa.py",
+      "source_repo_name": "SANSA-DESA/data_cube_ui",
+      "parquet_row_index": 32
+    },
+    {
+      "file": "snippet_0033.py",
+      "sha256": "d7f7c7da2dfb351de0a024fac7b56a017e5b4090c2fa5af5ce69712c5613b0f1",
+      "chars": 3872,
+      "source_row_id": "115555",
+      "source_repo_path": "bin/parsers/pyangParser.py",
+      "source_repo_name": "SlavomirMazurPantheon/sdo_analysis",
+      "parquet_row_index": 33
+    },
+    {
+      "file": "snippet_0034.py",
+      "sha256": "051453b01856ddd639dbbd3a5eede28cabdcbc9090dec54912da17bc7657bf3a",
+      "chars": 4578,
+      "source_row_id": "116892",
+      "source_repo_path": "patton_server/dal/common/fields.py",
+      "source_repo_name": "directionless/patton-server",
+      "parquet_row_index": 34
+    },
+    {
+      "file": "snippet_0035.py",
+      "sha256": "2c64d35dab9ab6deae0504dc2ac05ec91614337c7cfdaad6e478c7fa9aaf9c6a",
+      "chars": 1050,
+      "source_row_id": "118916",
+      "source_repo_path": "t2to3/cmd/cmd.py",
+      "source_repo_name": "trumanw/t2to3",
+      "parquet_row_index": 35
+    },
+    {
+      "file": "snippet_0036.py",
+      "sha256": "49b317b4e4df9733ccc35c35eeb115f12a3c9ff59e2c57736369150933e781ca",
+      "chars": 1583,
+      "source_row_id": "121243",
+      "source_repo_path": "scripts/transform_binding_files_to_fasta.py",
+      "source_repo_name": "raharjaliu/BIFers",
+      "parquet_row_index": 36
+    },
+    {
+      "file": "snippet_0037.py",
+      "sha256": "331f811a9087c1fdac333f960bee0db97086d384b63e87a016bf5c03a83af08e",
+      "chars": 13794,
+      "source_row_id": "121835",
+      "source_repo_path": "azext_iot/tests/iothub/core/test_iot_hub_unit.py",
+      "source_repo_name": "lucadruda/azure-iot-cli-extension",
+      "parquet_row_index": 37
+    },
+    {
+      "file": "snippet_0038.py",
+      "sha256": "504d372e994efa3dc939c7f55dd6fc82fecce64e3df138fd7e122af6547194e5",
+      "chars": 4280,
+      "source_row_id": "129686",
+      "source_repo_path": "invoicing/taxation/eu.py",
+      "source_repo_name": "Python-Marketing/django-content-server",
+      "parquet_row_index": 38
+    },
+    {
+      "file": "snippet_0039.py",
+      "sha256": "dcf56b68fdd6974f274446ff7cca6a8a74acdc8d5cd04a4d7e0157555259fc78",
+      "chars": 3153,
+      "source_row_id": "132170",
+      "source_repo_path": "Table_6_6.py",
+      "source_repo_name": "Jonghyun-Kim-73/SAMG_Project",
+      "parquet_row_index": 39
+    },
+    {
+      "file": "snippet_0040.py",
+      "sha256": "4c84eed85f423c60da21a50b4e629a512080ff0276fce1b6e2203cf694798af6",
+      "chars": 38,
+      "source_row_id": "136144",
+      "source_repo_path": "python/testData/completion/mockPatchObject1Py2/a.after.py",
+      "source_repo_name": "jnthn/intellij-community",
+      "parquet_row_index": 40
+    },
+    {
+      "file": "snippet_0041.py",
+      "sha256": "f5cd6bccabce50aaff9111ed307c3ba275c5c006f7e8a327f090f5ff9bbca526",
+      "chars": 1813,
+      "source_row_id": "137194",
+      "source_repo_path": "lesleyloraine/apps/core/migrations/0002_auto_20160130_1756.py",
+      "source_repo_name": "ninapavlich/lesleyloraine",
+      "parquet_row_index": 41
+    },
+    {
+      "file": "snippet_0042.py",
+      "sha256": "cde2101e5f0309b8e39bab1de2debf4cd598f35b01358bcd1720ae4b9f45ec2c",
+      "chars": 829,
+      "source_row_id": "139537",
+      "source_repo_path": "pykeys.py",
+      "source_repo_name": "palsayantan/PyKeys",
+      "parquet_row_index": 42
+    },
+    {
+      "file": "snippet_0043.py",
+      "sha256": "3516e08c0e5d648de64c18aad830db160d56670492cde32c2a6cbf85d88cba69",
+      "chars": 2993,
+      "source_row_id": "141455",
+      "source_repo_path": "edg_core/ScalaCompilerInterface.py",
+      "source_repo_name": "tengisd/PolymorphicBlocks",
+      "parquet_row_index": 43
+    },
+    {
+      "file": "snippet_0044.py",
+      "sha256": "7537def152d26527f8f02f411e4559a685f4f78ff5198540ddf0ad0ceb8259a7",
+      "chars": 67,
+      "source_row_id": "142249",
+      "source_repo_path": "Chapter 01/Chap01_Example1.107.py",
+      "source_repo_name": "bpbpublications/Programming-Techniques-using-Python",
+      "parquet_row_index": 44
+    },
+    {
+      "file": "snippet_0045.py",
+      "sha256": "96090c3279c812a8c313403535dcdb0d69f7c5376e17876bd516e9bf1875e6fe",
+      "chars": 2361,
+      "source_row_id": "142754",
+      "source_repo_path": "zentral/contrib/munki/forms.py",
+      "source_repo_name": "mikemcdonald/zentral",
+      "parquet_row_index": 45
+    },
+    {
+      "file": "snippet_0046.py",
+      "sha256": "920852a8a9e76d0649fedc380253988bff44862090c5f2cfa72e1f495e9ab55f",
+      "chars": 1778,
+      "source_row_id": "144621",
+      "source_repo_path": "tests/autodiff/pytorch/test_dropout.py",
+      "source_repo_name": "spcl/dace-onnx",
+      "parquet_row_index": 46
+    },
+    {
+      "file": "snippet_0047.py",
+      "sha256": "e28d29a488924e2ad474d4f5d88841fc2f438ab64b8acb8c635765f6045ee55b",
+      "chars": 312,
+      "source_row_id": "149424",
+      "source_repo_path": "docs/assets/greeting.py",
+      "source_repo_name": "pablodevs/StarwarsBlog",
+      "parquet_row_index": 47
+    },
+    {
+      "file": "snippet_0048.py",
+      "sha256": "8c170f460373480a011a897e7c3cd464db35ee95dd31672e49274a4d756fe555",
+      "chars": 201,
+      "source_row_id": "149541",
+      "source_repo_path": "Python Library/Pandas/creating,reading2.py",
+      "source_repo_name": "hammad1201/Hacktoberfest-2021",
+      "parquet_row_index": 48
+    },
+    {
+      "file": "snippet_0049.py",
+      "sha256": "41a40853782f96ac33a5428e48f9fbc5a7898f36bee55702915fd722cad1a9f1",
+      "chars": 342,
+      "source_row_id": "157926",
+      "source_repo_path": "ubfcart/tasks.py",
+      "source_repo_name": "himasnhu1/example",
+      "parquet_row_index": 49
+    },
+    {
+      "file": "snippet_0050.py",
+      "sha256": "d57d4fc2732f985c7868c219e4d65f5ee39d1e9b13af0aac3b19716b9e9d2477",
+      "chars": 1646,
+      "source_row_id": "162230",
+      "source_repo_path": "test/_init_test.py",
+      "source_repo_name": "innorobotics/unitreepy",
+      "parquet_row_index": 50
+    },
+    {
+      "file": "snippet_0051.py",
+      "sha256": "585ade9fa2dda1d907a4c2366416fe2e2871a50c4593724a88998ac78678d419",
+      "chars": 296,
+      "source_row_id": "163295",
+      "source_repo_path": "python-sanic/classifier/dataset.py",
+      "source_repo_name": "yonatanMedan/ui_classifier",
+      "parquet_row_index": 51
+    },
+    {
+      "file": "snippet_0052.py",
+      "sha256": "dbfd8e002f85d2c28a1ce313ba42b45939a0a73cf24c9d6cb4c124af26a45d50",
+      "chars": 332,
+      "source_row_id": "163307",
+      "source_repo_path": "16/00/4.py",
+      "source_repo_name": "pylangstudy/201712",
+      "parquet_row_index": 52
+    },
+    {
+      "file": "snippet_0053.py",
+      "sha256": "05fd46f1755604adc98aed4f68fef92aa79834675bd8cca9a94cedc4b5078860",
+      "chars": 71,
+      "source_row_id": "163448",
+      "source_repo_path": "transformer_baselines/tasks/__init__.py",
+      "source_repo_name": "MilaNLProc/nlpb",
+      "parquet_row_index": 53
+    },
+    {
+      "file": "snippet_0054.py",
+      "sha256": "a36df3a601336447df884eef3256f1fd0f4be210bd6c32bc19ae83f70ca0917b",
+      "chars": 18566,
+      "source_row_id": "164512",
+      "source_repo_path": "bmtk/builder/bionet/swc_reader.py",
+      "source_repo_name": "mjhyman/bmtk",
+      "parquet_row_index": 54
+    },
+    {
+      "file": "snippet_0055.py",
+      "sha256": "a8b872653cffe1f71cade9c07f8cc4018db51a0026331ad85f5a78ef47d10d79",
+      "chars": 658,
+      "source_row_id": "165697",
+      "source_repo_path": "matplotlib/7.py",
+      "source_repo_name": "lcl1026504480/mfpython",
+      "parquet_row_index": 55
+    },
+    {
+      "file": "snippet_0056.py",
+      "sha256": "f313631a313e087487477ea90de7d08eb40d0334754824bf9feed2e1a01689b7",
+      "chars": 1571,
+      "source_row_id": "166649",
+      "source_repo_path": "source/button.py",
+      "source_repo_name": "BastiHz/Minefields",
+      "parquet_row_index": 56
+    },
+    {
+      "file": "snippet_0057.py",
+      "sha256": "5492986c4dc38f506eec0c5e743ee57927a05673dce4473be5a03cc4ff201a64",
+      "chars": 3951,
+      "source_row_id": "170467",
+      "source_repo_path": "__main__.py",
+      "source_repo_name": "xaroth8088/mtg-shuffle",
+      "parquet_row_index": 57
+    },
+    {
+      "file": "snippet_0058.py",
+      "sha256": "02c8b809376639e8b421d1175887f2b2e61b614cc0cfdba2ed74b1a3e8031445",
+      "chars": 529,
+      "source_row_id": "172180",
+      "source_repo_path": "aoc20191203a.py",
+      "source_repo_name": "BarnabyShearer/aoc",
+      "parquet_row_index": 58
+    },
+    {
+      "file": "snippet_0059.py",
+      "sha256": "e149714d48b13d43f08673997f1aef399c931c08b50abeeb5fa9657bbddddd65",
+      "chars": 533,
+      "source_row_id": "179053",
+      "source_repo_path": "oculy/plotting/backends/__init__.py",
+      "source_repo_name": "MatthieuDartiailh/oculy",
+      "parquet_row_index": 59
+    },
+    {
+      "file": "snippet_0060.py",
+      "sha256": "f3d3f2591bff6f98b1d20d072198057482a8882c18a5e39f45ce38202318fb20",
+      "chars": 2666,
+      "source_row_id": "186907",
+      "source_repo_path": "Web Service Endpoint/ocr_site.py",
+      "source_repo_name": "RxID/DS",
+      "parquet_row_index": 60
+    },
+    {
+      "file": "snippet_0061.py",
+      "sha256": "10f3863c44d55440c02fccca734063e270ae9c69a3211b6f61f65d864051ef70",
+      "chars": 2477,
+      "source_row_id": "1600863",
+      "source_repo_path": "oops_fhir/r4/code_system/narrative_status.py",
+      "source_repo_name": "Mikuana/oops_fhir",
+      "parquet_row_index": 61
+    },
+    {
+      "file": "snippet_0062.py",
+      "sha256": "0369862619614bf7b27be74131801e76db3ba7604dcfb5abb8e65de2abc39754",
+      "chars": 1234,
+      "source_row_id": "1601308",
+      "source_repo_path": "orix/tests/test_neoeuler.py",
+      "source_repo_name": "JoonatanL/orix",
+      "parquet_row_index": 62
+    },
+    {
+      "file": "snippet_0063.py",
+      "sha256": "4df10ea11bb833302533cbec77ddd941226b1437b7ca01f55d46055baa943d7d",
+      "chars": 2050,
+      "source_row_id": "1601855",
+      "source_repo_path": "recipes/Python/440657_Determine_functiexecutitime_Pythonic/recipe-440657.py",
+      "source_repo_name": "tdiprima/code",
+      "parquet_row_index": 63
+    },
+    {
+      "file": "snippet_0064.py",
+      "sha256": "521c844059e34d6a57cada6c0104c871e7ee45807733f511446bc616e142f7aa",
+      "chars": 898,
+      "source_row_id": "1602450",
+      "source_repo_path": "python/055_jump_game.py",
+      "source_repo_name": "ufjfeng/leetcode-soln",
+      "parquet_row_index": 64
+    },
+    {
+      "file": "snippet_0065.py",
+      "sha256": "8df05c8f757dd7b58a8072e2bea9246a14f5c8b5572c1c3817c5f4f6f382e78b",
+      "chars": 2434,
+      "source_row_id": "1605092",
+      "source_repo_path": "gen_random.py",
+      "source_repo_name": "proballstar/CovidApplication",
+      "parquet_row_index": 65
+    },
+    {
+      "file": "snippet_0066.py",
+      "sha256": "4797de6d1e164ad2815470b2493fc2a3d66c7e6998412e2bc9c3d679186a9557",
+      "chars": 962,
+      "source_row_id": "1608345",
+      "source_repo_path": "api/main.py",
+      "source_repo_name": "Khaliladib11/Potato-Disease-Classification",
+      "parquet_row_index": 66
+    },
+    {
+      "file": "snippet_0067.py",
+      "sha256": "ea5ebdaf7f88a102fa68fa8bc3798f58e77f3b3142b2668af39317b4095905d3",
+      "chars": 7238,
+      "source_row_id": "1611031",
+      "source_repo_path": "rediscluster/utils.py",
+      "source_repo_name": "wnykuang/redis-py-cluster",
+      "parquet_row_index": 67
+    },
+    {
+      "file": "snippet_0068.py",
+      "sha256": "4a71bee3d03c7880380410196eb433a4e1fa0f8c20704781bd8850020119601d",
+      "chars": 197,
+      "source_row_id": "1612267",
+      "source_repo_path": "backend/libpolytools/poly2tri.py",
+      "source_repo_name": "Karbo123/AnalyticMesh",
+      "parquet_row_index": 68
+    },
+    {
+      "file": "snippet_0069.py",
+      "sha256": "b0de9c4a62a6ddc7bc421bcd1a4d1291bccc9336bfb0ee854b853b4418e507f8",
+      "chars": 2754,
+      "source_row_id": "1615562",
+      "source_repo_path": "function/python/brightics/function/extraction/add_expression_column.py",
+      "source_repo_name": "sharon1321/studio",
+      "parquet_row_index": 69
+    },
+    {
+      "file": "snippet_0070.py",
+      "sha256": "e28e529518e54baf2613680f5e7844bc10fa5d066458fd8f8f07d6051c1655c3",
+      "chars": 1942,
+      "source_row_id": "1615837",
+      "source_repo_path": "bitmovin/services/encodings/generic_muxing_service.py",
+      "source_repo_name": "camberbridge/bitmovin-python",
+      "parquet_row_index": 70
+    },
+    {
+      "file": "snippet_0071.py",
+      "sha256": "281a6b3eb91c126ae4aa063fbab02637688e0843fff038a13fbc0b47c3a4b208",
+      "chars": 87,
+      "source_row_id": "1617520",
+      "source_repo_path": "python/testData/docstrings/googleDescriptionOfReturnValueOnNextLine.py",
+      "source_repo_name": "jnthn/intellij-community",
+      "parquet_row_index": 71
+    },
+    {
+      "file": "snippet_0072.py",
+      "sha256": "dbbce5b310c48f8e8abbd5b0203d453259ba2e40c5aa0e6e5c3b1a3012114771",
+      "chars": 1123,
+      "source_row_id": "1617567",
+      "source_repo_path": "app.py",
+      "source_repo_name": "fianfian237/uro_pred_backend",
+      "parquet_row_index": 72
+    },
+    {
+      "file": "snippet_0073.py",
+      "sha256": "456d609b037d5c248724e7f5d7b101f69900baddb6e9f5db504e4219f6801222",
+      "chars": 18904,
+      "source_row_id": "1622888",
+      "source_repo_path": "src/conv_units.py",
+      "source_repo_name": "Malmactor/maze-solver",
+      "parquet_row_index": 73
+    },
+    {
+      "file": "snippet_0074.py",
+      "sha256": "f251f2c7dd3d6acd02bd506a03aaf3a701cc662ee0940df6ee116018f81fabc7",
+      "chars": 4128,
+      "source_row_id": "1622997",
+      "source_repo_path": "src/tsa/models.py",
+      "source_repo_name": "ODM2/ODM2DataSharingPortal",
+      "parquet_row_index": 74
+    },
+    {
+      "file": "snippet_0075.py",
+      "sha256": "ae55ef06bf4e6cc48d311f54edaa56361b44d3f5bfec93ae28f3e97018cd8787",
+      "chars": 34,
+      "source_row_id": "1625565",
+      "source_repo_path": "OAuth2Util/__init__.py",
+      "source_repo_name": "SmBe19/praw-OAuth2Util",
+      "parquet_row_index": 75
+    },
+    {
+      "file": "snippet_0076.py",
+      "sha256": "649fce256082b2ce45e714e20c372d87a4bce7569eba4c7334aff57539783509",
+      "chars": 3265,
+      "source_row_id": "1641821",
+      "source_repo_path": "benchmark/milliEgo/eval/composing_delta_pose.py",
+      "source_repo_name": "MAPS-Lab/OdomBydVision",
+      "parquet_row_index": 76
+    },
+    {
+      "file": "snippet_0077.py",
+      "sha256": "953886a1d2e27080a4070db0ff9dfaa592005ffa36210dd8619712b3c0050a05",
+      "chars": 2378,
+      "source_row_id": "1645962",
+      "source_repo_path": "bibox.py",
+      "source_repo_name": "mangege/ccxt-ws",
+      "parquet_row_index": 77
+    },
+    {
+      "file": "snippet_0078.py",
+      "sha256": "63a0c6b2864feeb0ad21ef5d77005a3fda315b2d2bdc31d679aca5e6be89382a",
+      "chars": 2735,
+      "source_row_id": "1648003",
+      "source_repo_path": "estorage/machine_sizing_v2.py",
+      "source_repo_name": "EnergyModels/estorage",
+      "parquet_row_index": 78
+    },
+    {
+      "file": "snippet_0079.py",
+      "sha256": "ec6bd2a1323fb867a14de6c691fe34c56f4bd912253ad391246ff656e746e615",
+      "chars": 921,
+      "source_row_id": "1650535",
+      "source_repo_path": "sensor-firmware/read_color.py",
+      "source_repo_name": "romainreignier/robot-software",
+      "parquet_row_index": 79
+    },
+    {
+      "file": "snippet_0080.py",
+      "sha256": "8a9b1e29abf7d29473746032ad01d202e374c1229f806cc556a93f6e16b6e6c3",
+      "chars": 900,
+      "source_row_id": "1650625",
+      "source_repo_path": "conf/settings.py",
+      "source_repo_name": "yizhimanpadewoniu/webdirfuzz",
+      "parquet_row_index": 80
+    },
+    {
+      "file": "snippet_0081.py",
+      "sha256": "41df04855332f58c150c9fd5e5d2009ca68148beed41ae52b0dff59355915c84",
+      "chars": 1781,
+      "source_row_id": "1651567",
+      "source_repo_path": "alembic/versions/1c4fc8c79a04_added_the_postings_model.py",
+      "source_repo_name": "pmatigakis/pagetags",
+      "parquet_row_index": 81
+    },
+    {
+      "file": "snippet_0082.py",
+      "sha256": "edfc7117d189fabc81a641880d3ec6e0163691bec1e0cffc58f87a2b269802a1",
+      "chars": 35,
+      "source_row_id": "1665461",
+      "source_repo_path": "src/lib/repr.py",
+      "source_repo_name": "DTenore/skulpt",
+      "parquet_row_index": 82
+    },
+    {
+      "file": "snippet_0083.py",
+      "sha256": "05d732a6fc4694543b0123ad03fa423be7eb5ab1ee4a2c0d6feaa14d45a3fe69",
+      "chars": 947,
+      "source_row_id": "1667263",
+      "source_repo_path": "api/test/test_fishes_api.py",
+      "source_repo_name": "wujood/AquaPi",
+      "parquet_row_index": 83
+    },
+    {
+      "file": "snippet_0084.py",
+      "sha256": "d52df19d80b60369f423f5b627b660ec322b5ec84821eb0411c55e6dae3d6ab4",
+      "chars": 4001,
+      "source_row_id": "1673194",
+      "source_repo_path": "backend/app/auth/oauth.py",
+      "source_repo_name": "vpaliy/react-chat",
+      "parquet_row_index": 84
+    },
+    {
+      "file": "snippet_0085.py",
+      "sha256": "04b2f856160b0e5138ba72b8092b2bae37aea70059be911a975691a90ea46ea0",
+      "chars": 2227,
+      "source_row_id": "1673300",
+      "source_repo_path": "core/bin/capture_runner.py",
+      "source_repo_name": "near-feign/pcapdb",
+      "parquet_row_index": 85
+    },
+    {
+      "file": "snippet_0086.py",
+      "sha256": "a0bd2ad2d3b77456b539c10255280ac3326a0b68a8930097c9a0168d5eb3f759",
+      "chars": 1640,
+      "source_row_id": "1679750",
+      "source_repo_path": "api/services/algorithm_service.py",
+      "source_repo_name": "UST-QuAntiL/quantum-circuit-generator",
+      "parquet_row_index": 86
+    },
+    {
+      "file": "snippet_0087.py",
+      "sha256": "d8d23f20a164d87eade23c0c43a5d08ad9216ba3497b0db6fdc41afe357718ce",
+      "chars": 30736,
+      "source_row_id": "1679782",
+      "source_repo_path": "steelpy/codes/piping/process.py",
+      "source_repo_name": "svortega/steelpy",
+      "parquet_row_index": 87
+    },
+    {
+      "file": "snippet_0088.py",
+      "sha256": "3b76117960a21ea8aa69855073652918868e3342d889fb7512bdd5f0b1184cb8",
+      "chars": 19153,
+      "source_row_id": "1680502",
+      "source_repo_path": "main.py",
+      "source_repo_name": "aaranyak/Game_Downloader",
+      "parquet_row_index": 88
+    },
+    {
+      "file": "snippet_0089.py",
+      "sha256": "59f32e2546034556549b26883424bdcd789bc0e743f91fd7461b5b2bf87afae6",
+      "chars": 1556,
+      "source_row_id": "1681452",
+      "source_repo_path": "web-interface/app/application/src/samples/extensions/treatment.py",
+      "source_repo_name": "horvathi94/seqmeta",
+      "parquet_row_index": 89
+    },
+    {
+      "file": "snippet_0090.py",
+      "sha256": "4c825d700650baa3b4b85a282b5e6eacf4b9da49b71502ee8c2bb0eb615fd6cd",
+      "chars": 1103,
+      "source_row_id": "1688461",
+      "source_repo_path": "lib/python2.7/site-packages/openopt/solvers/Standalone/arpack_oo.py",
+      "source_repo_name": "wangyum/anaconda",
+      "parquet_row_index": 90
+    },
+    {
+      "file": "snippet_0091.py",
+      "sha256": "fee938d652e1686762a1f6cdac2c9af310b7f883eaebf4c9e7bedf8a5746be3e",
+      "chars": 9553,
+      "source_row_id": "1689293",
+      "source_repo_path": "tests/test_evaluator.py",
+      "source_repo_name": "PythonIsMagic/ponyup",
+      "parquet_row_index": 91
+    },
+    {
+      "file": "snippet_0092.py",
+      "sha256": "382ad7916d1e7425bbda06138073ea281a586cdf0c429092507cb1dc80b82e7c",
+      "chars": 19858,
+      "source_row_id": "1689785",
+      "source_repo_path": "examples/RealCapacity_minGrid_withoutGesscon.py",
+      "source_repo_name": "storage4grid/PROFESS-PROFEV",
+      "parquet_row_index": 92
+    },
+    {
+      "file": "snippet_0093.py",
+      "sha256": "0cef0936769037e6a4d47047ed7e5f261c4115d06fdd2972fb52938c15793b71",
+      "chars": 6746,
+      "source_row_id": "1692752",
+      "source_repo_path": "ecs/docstash/migrations/0005_fix_2to3.py",
+      "source_repo_name": "programmierfabrik/ecs",
+      "parquet_row_index": 93
+    },
+    {
+      "file": "snippet_0094.py",
+      "sha256": "674be8fda0330bb94fcca038b9641ca5bb4a224203669a860105236be5a97d9f",
+      "chars": 25465,
+      "source_row_id": "1697120",
+      "source_repo_path": "proganomaly_modules/beam_image_stitch/beam_image_stitch.py",
+      "source_repo_name": "ryangillard/P-CEAD",
+      "parquet_row_index": 94
+    },
+    {
+      "file": "snippet_0095.py",
+      "sha256": "4fd28603f1de4be058da6c59ed56107da2fb5f34b31ddafcb80ad2718f01b576",
+      "chars": 2040,
+      "source_row_id": "1698116",
+      "source_repo_path": "stations/insure/migrations/0001_initial.py",
+      "source_repo_name": "boyombo/django-stations",
+      "parquet_row_index": 95
+    },
+    {
+      "file": "snippet_0096.py",
+      "sha256": "86727269fbdc641a2597ceacdd06248c7bbccc36b82930dbaa1f1984a9887928",
+      "chars": 239,
+      "source_row_id": "1700420",
+      "source_repo_path": "UnityEngine/Rendering/ComputeQueueType/__init__.py",
+      "source_repo_name": "Grim-es/udon-pie-auto-completion",
+      "parquet_row_index": 96
+    },
+    {
+      "file": "snippet_0097.py",
+      "sha256": "60b2cda04eedd696398210229500d2d2b9243c87cc772e6fe28c6bce7164dcd7",
+      "chars": 264,
+      "source_row_id": "1707382",
+      "source_repo_path": "askbotopenmooc/urls_prefix.py",
+      "source_repo_name": "OpenMOOC/askbot-openmooc",
+      "parquet_row_index": 97
+    },
+    {
+      "file": "snippet_0098.py",
+      "sha256": "99a73edef78dab39851fac113e11ac5bc937e9f87e8882407ddcde6d5ddbda57",
+      "chars": 120,
+      "source_row_id": "1710742",
+      "source_repo_path": "movies/admin.py",
+      "source_repo_name": "christianfm10/REST-Django",
+      "parquet_row_index": 98
+    },
+    {
+      "file": "snippet_0099.py",
+      "sha256": "e534aed3056f382f7632e6edd85b81def7d258c330d7c61800a9d295a99eee9f",
+      "chars": 2751,
+      "source_row_id": "1720387",
+      "source_repo_path": "tensordash/fastdash.py",
+      "source_repo_name": "flyeyesport/TensorDash",
+      "parquet_row_index": 99
+    }
+  ]
+}

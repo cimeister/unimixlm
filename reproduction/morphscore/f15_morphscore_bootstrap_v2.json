@@ -1,0 +1,362 @@
+{
+  "llama3.2-1b|arb_Arab": {
+    "micro_f1": {
+      "delta": 0.007662836413004498,
+      "ci_low": 0.004458179615087614,
+      "ci_high": 0.010830543174845882,
+      "n_boot": 2000,
+      "n_samples": 10603,
+      "delta_full_table": 0.007351012755987485
+    },
+    "macro_f1": {
+      "delta": 0.008641209236546515,
+      "ci_low": 0.005174338374845379,
+      "ci_high": 0.012001632117203878,
+      "n_boot": 2000,
+      "n_samples": 10603,
+      "delta_full_table": 0.0077851065361136396
+    },
+    "morphscore_recall": {
+      "delta": -0.003843298659074623,
+      "ci_low": -0.020292785196382734,
+      "ci_high": 0.011856233667996282,
+      "n_boot": 2000,
+      "n_samples": 10603,
+      "delta_full_table": -0.004336352293139001
+    },
+    "morphscore_precision": {
+      "delta": 0.0021982178263006413,
+      "ci_low": -0.0037710672141645528,
+      "ci_high": 0.008781495549271531,
+      "n_boot": 2000,
+      "n_samples": 10603,
+      "delta_full_table": 0.0014827505901744975
+    },
+    "resample_subset": "intersection",
+    "n_rows_original_arm": 10614,
+    "n_rows_langmap_arm": 10603,
+    "gold": "repaired"
+  },
+  "llama3.2-1b|fin_Latn": {
+    "micro_f1": {
+      "delta": 0.022544230785772855,
+      "ci_low": 0.02125317643870079,
+      "ci_high": 0.023786904289440556,
+      "n_boot": 2000,
+      "n_samples": 40776
+    },
+    "macro_f1": {
+      "delta": 0.02573287177652335,
+      "ci_low": 0.024027418237534466,
+      "ci_high": 0.027405864505159132,
+      "n_boot": 2000,
+      "n_samples": 40776
+    },
+    "morphscore_recall": {
+      "delta": 0.115126220468458,
+      "ci_low": 0.09681945971188541,
+      "ci_high": 0.13284396630584855,
+      "n_boot": 2000,
+      "n_samples": 40776
+    },
+    "morphscore_precision": {
+      "delta": 0.03189268235291881,
+      "ci_low": 0.02518809385487811,
+      "ci_high": 0.03858006103274414,
+      "n_boot": 2000,
+      "n_samples": 40776
+    },
+    "resample_subset": "full",
+    "n_rows_original_arm": 40776,
+    "n_rows_langmap_arm": 40776
+  },
+  "llama3.2-1b|hin_Deva": {
+    "micro_f1": {
+      "delta": -0.0008721232136953139,
+      "ci_low": -0.0013646329527226269,
+      "ci_high": -0.0004110082321117406,
+      "n_boot": 2000,
+      "n_samples": 4723
+    },
+    "macro_f1": {
+      "delta": -0.0005434324613279029,
+      "ci_low": -0.0011138890591093123,
+      "ci_high": 2.9055193658870165e-05,
+      "n_boot": 2000,
+      "n_samples": 4723
+    },
+    "morphscore_recall": {
+      "delta": 0.0010318132477663555,
+      "ci_low": 0.0004808700406892824,
+      "ci_high": 0.0018668456559902248,
+      "n_boot": 2000,
+      "n_samples": 4723
+    },
+    "morphscore_precision": {
+      "delta": -4.182540534569679e-05,
+      "ci_low": -0.00019829882506620656,
+      "ci_high": 0.00010322923162392326,
+      "n_boot": 2000,
+      "n_samples": 4723
+    },
+    "resample_subset": "full",
+    "n_rows_original_arm": 4723,
+    "n_rows_langmap_arm": 4723
+  },
+  "llama3.2-1b|hun_Latn": {
+    "micro_f1": {
+      "delta": 0.041261399994791004,
+      "ci_low": 0.038212690266844825,
+      "ci_high": 0.04424898835025686,
+      "n_boot": 2000,
+      "n_samples": 7924
+    },
+    "macro_f1": {
+      "delta": 0.04734762859255001,
+      "ci_low": 0.04355511754237058,
+      "ci_high": 0.051205878848376254,
+      "n_boot": 2000,
+      "n_samples": 7924
+    },
+    "morphscore_recall": {
+      "delta": 0.16589652611601624,
+      "ci_low": 0.15023624182647854,
+      "ci_high": 0.18143577047542855,
+      "n_boot": 2000,
+      "n_samples": 7924
+    },
+    "morphscore_precision": {
+      "delta": 0.04403057049211817,
+      "ci_low": 0.03926080226875686,
+      "ci_high": 0.04895950671890609,
+      "n_boot": 2000,
+      "n_samples": 7924
+    },
+    "resample_subset": "full",
+    "n_rows_original_arm": 7924,
+    "n_rows_langmap_arm": 7924
+  },
+  "llama3.2-1b|tur_Latn": {
+    "micro_f1": {
+      "delta": 0.08838456351994617,
+      "ci_low": 0.08608136788419599,
+      "ci_high": 0.09087553791167984,
+      "n_boot": 2000,
+      "n_samples": 32560
+    },
+    "macro_f1": {
+      "delta": 0.08905915100867823,
+      "ci_low": 0.08624231803808939,
+      "ci_high": 0.09191677369677125,
+      "n_boot": 2000,
+      "n_samples": 32560
+    },
+    "morphscore_recall": {
+      "delta": 0.19370308590492152,
+      "ci_low": 0.1786817916103485,
+      "ci_high": 0.20858741737866385,
+      "n_boot": 2000,
+      "n_samples": 32560
+    },
+    "morphscore_precision": {
+      "delta": 0.07433215951564545,
+      "ci_low": 0.06722819844738484,
+      "ci_high": 0.08211671680612076,
+      "n_boot": 2000,
+      "n_samples": 32560
+    },
+    "resample_subset": "full",
+    "n_rows_original_arm": 32560,
+    "n_rows_langmap_arm": 32560
+  },
+  "qwen2_5-0_5b|arb_Arab": {
+    "micro_f1": {
+      "delta": 0.07455192604288369,
+      "ci_low": 0.0697301976476381,
+      "ci_high": 0.07966835298616673,
+      "n_boot": 2000,
+      "n_samples": 11256,
+      "delta_full_table": 0.07433267518358844
+    },
+    "macro_f1": {
+      "delta": 0.07797372646751527,
+      "ci_low": 0.07267463138039323,
+      "ci_high": 0.08342613815417078,
+      "n_boot": 2000,
+      "n_samples": 11256,
+      "delta_full_table": 0.07745266486430596
+    },
+    "morphscore_recall": {
+      "delta": 0.06681356229891422,
+      "ci_low": 0.04924487649261541,
+      "ci_high": 0.08873842209119455,
+      "n_boot": 2000,
+      "n_samples": 11256,
+      "delta_full_table": 0.06631343469585449
+    },
+    "morphscore_precision": {
+      "delta": 0.03594605311128585,
+      "ci_low": 0.027648623330235773,
+      "ci_high": 0.046425528799917716,
+      "n_boot": 2000,
+      "n_samples": 11256,
+      "delta_full_table": 0.034954675953410175
+    },
+    "resample_subset": "intersection",
+    "n_rows_original_arm": 11265,
+    "n_rows_langmap_arm": 11256,
+    "gold": "repaired"
+  },
+  "qwen2_5-0_5b|fin_Latn": {
+    "micro_f1": {
+      "delta": 0.02452725050963881,
+      "ci_low": 0.02324042553012275,
+      "ci_high": 0.025822408706234215,
+      "n_boot": 2000,
+      "n_samples": 40776
+    },
+    "macro_f1": {
+      "delta": 0.02795027480794493,
+      "ci_low": 0.02619797089663412,
+      "ci_high": 0.02962781627292615,
+      "n_boot": 2000,
+      "n_samples": 40776
+    },
+    "morphscore_recall": {
+      "delta": 0.13323215460110327,
+      "ci_low": 0.11060078130392723,
+      "ci_high": 0.15627368024324495,
+      "n_boot": 2000,
+      "n_samples": 40776
+    },
+    "morphscore_precision": {
+      "delta": 0.0391199182181759,
+      "ci_low": 0.030340510371475646,
+      "ci_high": 0.04892311191575092,
+      "n_boot": 2000,
+      "n_samples": 40776
+    },
+    "resample_subset": "full",
+    "n_rows_original_arm": 40776,
+    "n_rows_langmap_arm": 40776
+  },
+  "qwen2_5-0_5b|hin_Deva": {
+    "micro_f1": {
+      "delta": -0.011589642197935512,
+      "ci_low": -0.012999273482781905,
+      "ci_high": -0.010196081590508917,
+      "n_boot": 2000,
+      "n_samples": 4723
+    },
+    "macro_f1": {
+      "delta": -0.012362933524715916,
+      "ci_low": -0.014019088435987318,
+      "ci_high": -0.010842028302649874,
+      "n_boot": 2000,
+      "n_samples": 4723
+    },
+    "morphscore_recall": {
+      "delta": 0.100819486359785,
+      "ci_low": 0.06554339540810182,
+      "ci_high": 0.1517113487681961,
+      "n_boot": 2000,
+      "n_samples": 4723
+    },
+    "morphscore_precision": {
+      "delta": 0.02170522963557897,
+      "ci_low": 0.013669024110492312,
+      "ci_high": 0.03354311459716553,
+      "n_boot": 2000,
+      "n_samples": 4723
+    },
+    "resample_subset": "full",
+    "n_rows_original_arm": 4723,
+    "n_rows_langmap_arm": 4723
+  },
+  "qwen2_5-0_5b|hun_Latn": {
+    "micro_f1": {
+      "delta": 0.03501738491383097,
+      "ci_low": 0.0321312529620326,
+      "ci_high": 0.03791542237258812,
+      "n_boot": 2000,
+      "n_samples": 7924
+    },
+    "macro_f1": {
+      "delta": 0.04047232455711791,
+      "ci_low": 0.036803605146665024,
+      "ci_high": 0.04413349279526005,
+      "n_boot": 2000,
+      "n_samples": 7924
+    },
+    "morphscore_recall": {
+      "delta": 0.15302417691228676,
+      "ci_low": 0.13760453474676074,
+      "ci_high": 0.1681166764620055,
+      "n_boot": 2000,
+      "n_samples": 7924
+    },
+    "morphscore_precision": {
+      "delta": 0.038532097011550526,
+      "ci_low": 0.03353172474450491,
+      "ci_high": 0.04363465768499207,
+      "n_boot": 2000,
+      "n_samples": 7924
+    },
+    "resample_subset": "full",
+    "n_rows_original_arm": 7924,
+    "n_rows_langmap_arm": 7924
+  },
+  "qwen2_5-0_5b|tur_Latn": {
+    "micro_f1": {
+      "delta": 0.06875866333199568,
+      "ci_low": 0.06658635274719657,
+      "ci_high": 0.07102353806210848,
+      "n_boot": 2000,
+      "n_samples": 32560
+    },
+    "macro_f1": {
+      "delta": 0.07325347408462066,
+      "ci_low": 0.07064879820015786,
+      "ci_high": 0.07594763815680448,
+      "n_boot": 2000,
+      "n_samples": 32560
+    },
+    "morphscore_recall": {
+      "delta": 0.21083541840422682,
+      "ci_low": 0.1931741163713646,
+      "ci_high": 0.22773356348221568,
+      "n_boot": 2000,
+      "n_samples": 32560
+    },
+    "morphscore_precision": {
+      "delta": 0.07031439338778767,
+      "ci_low": 0.06297618117322448,
+      "ci_high": 0.07823041220988247,
+      "n_boot": 2000,
+      "n_samples": 32560
+    },
+    "resample_subset": "full",
+    "n_rows_original_arm": 32560,
+    "n_rows_langmap_arm": 32560
+  },
+  "_metadata": {
+    "reference_arm": "Original(BPE)",
+    "target_arm": "LangMAP(langspec)",
+    "harness": "offsets-patched",
+    "harness_path": "<repo>/eval_results/f15_intrinsic/harness_patched/morphscore_patched.py",
+    "metric_config": "stem_eq_lemma=False, exclude_single_tok=False, freq_scale=True, by_split=False",
+    "resample_unit": "word type (row), paired across arms, with replacement",
+    "n_boot": 2000,
+    "seed": 1234,
+    "rng_note": "a fresh set of N_BOOT index draws is consumed per metric, in METRICS order, per (family, language) cell -- identical to v1",
+    "ci_method": "percentile",
+    "ci_level": 0.95,
+    "self_check_tolerance": 1e-12,
+    "self_check_passed": true,
+    "self_check_a": "each arm's un-resampled aggregates bit-match f15_morphscore_final_v2.json (all cells)",
+    "self_check_b": "un-resampled delta bit-matches f15_morphscore_final_v2.json on every cell whose two arms retain the same rows (all cells except arb_Arab)",
+    "arb_gold": "repaired (arabic_data_repaired.csv, aligned subset)",
+    "arb_note": "arb_Arab is the only cell where the two arms retain different row sets: the repaired gold contains single-morpheme rows and, under exclude_single_tok=False, such a row is kept when the tokenizer emits one token and dropped when it emits more. The paired bootstrap therefore runs on the intersection of the two arms' retained rows; 'delta' is the intersection delta (the one the CI brackets) and 'delta_full_table' is the full-set delta reported in f15_morphscore_final_v2.json",
+    "source_final_json": "<repo>/eval_results/f15_intrinsic/f15_morphscore_final_v2.json"
+  }
+}

@@ -1,0 +1,71 @@
+{
+  "lang": "deu",
+  "lang_code": "deu_Latn",
+  "repo": "MultilingualUnigramLM/FineWeb2-deu_Latn-100M",
+  "revision": "b6fff5b4ae2b1a3205a030ce5c78903ad71d90d2",
+  "source_note": "Downloaded fresh from the Hub (no pre-existing F15 corpus for deu) into a new cache dir (hf_cache_convergence_v2), NOT hf_cache_pr21. Revision resolved at build time.",
+  "docs_scanned": 70007,
+  "docs_filtered_empty": 0,
+  "docs_filtered_script": 7,
+  "docs_collected": 70000,
+  "base_tokenizer_used_for_sizing": "<repo>/las_tokenizers/f15/qwen2_5-0_5b/base_tokenizer.json",
+  "prod_token_target": 25000000,
+  "points": {
+    "N125": {
+      "n_docs": 125,
+      "n_tokens": 121781,
+      "n_chars": 386535,
+      "tokens_per_char": 0.31505814479930666,
+      "path": "<scratch>/unimixlm_las_tokenizers_corpora/convergence_v2_corpora/deu_Latn_N125.txt",
+      "sha256": "7584feb240f5423fb60be73339fc5574818e3650e7cf825079f8223670e1b294"
+    },
+    "N500": {
+      "n_docs": 500,
+      "n_tokens": 414197,
+      "n_chars": 1315081,
+      "tokens_per_char": 0.31495930668909367,
+      "path": "<scratch>/unimixlm_las_tokenizers_corpora/convergence_v2_corpora/deu_Latn_N500.txt",
+      "sha256": "14e423060117eb170a3d72cd727cb258949982b3397166d731ca842ffe031f34"
+    },
+    "N1000": {
+      "n_docs": 1000,
+      "n_tokens": 901380,
+      "n_chars": 2874612,
+      "tokens_per_char": 0.3135657960100354,
+      "path": "<scratch>/unimixlm_las_tokenizers_corpora/convergence_v2_corpora/deu_Latn_N1000.txt",
+      "sha256": "99eb4774df890a57cb13ce80cfd6deb843abc2de1ed53137eaae75f97c22bbaf"
+    },
+    "N4000": {
+      "n_docs": 4000,
+      "n_tokens": 3609418,
+      "n_chars": 11493256,
+      "tokens_per_char": 0.3140466026337532,
+      "path": "<scratch>/unimixlm_las_tokenizers_corpora/convergence_v2_corpora/deu_Latn_N4000.txt",
+      "sha256": "d0300df75daae975f39510df3eb1c236dcc2f5d866b792315b75704324f9c5d6"
+    },
+    "N16000": {
+      "n_docs": 16000,
+      "n_tokens": 15222469,
+      "n_chars": 48357419,
+      "tokens_per_char": 0.31479076664534145,
+      "path": "<scratch>/unimixlm_las_tokenizers_corpora/convergence_v2_corpora/deu_Latn_N16000.txt",
+      "sha256": "47f5dc5f61d5aecc7ee50855582077330535bfac74c6d61b57fc7cb0b997906f"
+    },
+    "N32000": {
+      "n_docs": 32000,
+      "n_tokens": 31475043,
+      "n_chars": 99912544,
+      "tokens_per_char": 0.3150259390852864,
+      "path": "<scratch>/unimixlm_las_tokenizers_corpora/convergence_v2_corpora/deu_Latn_N32000.txt",
+      "sha256": "f22d60b861f3a38943fd4562554b9b53643efec4b096ed8138dd2371e1fdd3b8"
+    },
+    "prod25M": {
+      "n_docs": 25520,
+      "n_tokens": 25001780,
+      "n_chars": 79380744,
+      "tokens_per_char": 0.3149602629070849,
+      "path": "<scratch>/unimixlm_las_tokenizers_corpora/convergence_v2_corpora/deu_Latn_prod25M.txt",
+      "sha256": "4507a1d9910a7b634274ba3582e7c3d17f673c0a4a0ab314eb63d45cb7d02d0c"
+    }
+  }
+}

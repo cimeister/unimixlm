@@ -1,0 +1,921 @@
+{
+  "lang": "typescript",
+  "paper_label": "TS",
+  "built": "2026-08-28T06:41:50.286356+00:00",
+  "n_snippets": 100,
+  "eval_snippets_per_lang_constant": 100,
+  "selection_rule": "first N non-blank snippets in eval-parquet row order after CodeDataLoader's own normalisation (_strip_starcoder_metadata, _normalize_source, rstrip) -- identical to CodeDataLoader(max_snippets_per_lang=N) on that parquet",
+  "deterministic": true,
+  "seed": null,
+  "seed_note": "selection is by parquet row order, not sampling, so no seed exists to record; the file list below IS the selection",
+  "eval_parquet": "<local>/tokenizer-intrinsic-evals/starcoder/typescript.parquet",
+  "eval_parquet_sha256": "fd9cd0372206c131b9aeebd9ffe51173c25c77e30a6f4bebd9ed6c71f42aeca5",
+  "eval_parquet_rows": 6551,
+  "rows_scanned_to_fill": 100,
+  "extension": ".ts",
+  "dir": "<repo>/eval_results/code_ast_v1/evalsets/typescript",
+  "total_chars": 178875,
+  "roundtrip_verified_through": "CodeDataLoader(dir).get_code_snippets",
+  "files": [
+    {
+      "file": "snippet_0000.ts",
+      "sha256": "190a98c508a7e20df7d1357adbbe562f39854278265a75124178ecb84fc33332",
+      "chars": 35,
+      "source_row_id": "1447",
+      "source_repo_path": "index.ts",
+      "source_repo_name": "tpluscode/rdfxml-streaming-parser.js",
+      "parquet_row_index": 0
+    },
+    {
+      "file": "snippet_0001.ts",
+      "sha256": "18618fcb2ae5c88c38ddc2a749e4517a810152a7dc389935f0277a0e5e23a921",
+      "chars": 5714,
+      "source_row_id": "4139",
+      "source_repo_path": "ts/ArrayBufferWriter.ts",
+      "source_repo_name": "Lihzahrd/heeheebox",
+      "parquet_row_index": 1
+    },
+    {
+      "file": "snippet_0002.ts",
+      "sha256": "70c6f5c822bb20a2b0f56d7b5b9a60c52c0b2e6beac828d638cf256f02c9b77e",
+      "chars": 47,
+      "source_row_id": "6789",
+      "source_repo_path": "packages/app-builder-lib/src/version.ts",
+      "source_repo_name": "oceanlvr/electron-builder",
+      "parquet_row_index": 2
+    },
+    {
+      "file": "snippet_0003.ts",
+      "sha256": "2abb6b9145ff86a37d4578f0cb027b1bdb00429cd03a3037395d2a05e8988d79",
+      "chars": 362,
+      "source_row_id": "7763",
+      "source_repo_path": "backend/src/services/attempts/attempts.service.ts",
+      "source_repo_name": "bansalss001/quizEvaluation",
+      "parquet_row_index": 3
+    },
+    {
+      "file": "snippet_0004.ts",
+      "sha256": "2b919f4db37ad4f45a056323e1e1004e45d61b46e61cd9369728449c0b07c584",
+      "chars": 5885,
+      "source_row_id": "11340",
+      "source_repo_path": "index.d.ts",
+      "source_repo_name": "DemChing/ts-musixmatch",
+      "parquet_row_index": 4
+    },
+    {
+      "file": "snippet_0005.ts",
+      "sha256": "571e02ab332e391f2b3b6cf72736bb320a97ebed7e9e9879464ba1543991aba6",
+      "chars": 371,
+      "source_row_id": "12030",
+      "source_repo_path": "apps/hops-bestiller-backend/src/database/get-items.ts",
+      "source_repo_name": "navikt/behandler-frontend",
+      "parquet_row_index": 5
+    },
+    {
+      "file": "snippet_0006.ts",
+      "sha256": "54ad609af051151bb726396e1984b39e64df460768e549dbcd9a3c14b17528b9",
+      "chars": 894,
+      "source_row_id": "13765",
+      "source_repo_path": "src/atoms/Tabs/index.story.tsx",
+      "source_repo_name": "kudoo-cloud/shared-components",
+      "parquet_row_index": 6
+    },
+    {
+      "file": "snippet_0007.ts",
+      "sha256": "2f006f9d9ae72c3274b126af2d26d37891ecab302bfd41e3ef2b3a4702f7e697",
+      "chars": 1252,
+      "source_row_id": "16259",
+      "source_repo_path": "src/common/runtime/helper/test_worker-worker.ts",
+      "source_repo_name": "sarahM0/cts",
+      "parquet_row_index": 7
+    },
+    {
+      "file": "snippet_0008.ts",
+      "sha256": "e0bb77fe21382d70e46622fe9b541060d252280652a921d8bdce85e679b8414b",
+      "chars": 45,
+      "source_row_id": "16885",
+      "source_repo_path": "node_modules/@coreui/icons/js/brand/cib-powershell.d.ts",
+      "source_repo_name": "FranckPharel/ProjetAdminLotto",
+      "parquet_row_index": 8
+    },
+    {
+      "file": "snippet_0009.ts",
+      "sha256": "e053562f6bc9581bcd9ccfb6ab4cf109bbfe7ebd493c6bc6fe43145483fd9514",
+      "chars": 2803,
+      "source_row_id": "18225",
+      "source_repo_path": "src/app/pages/new-amenity-modal/new-amenity-modal.page.ts",
+      "source_repo_name": "mad-dev-4/GoKidsGo-ManagerUI",
+      "parquet_row_index": 9
+    },
+    {
+      "file": "snippet_0010.ts",
+      "sha256": "73ccf222ee757974f168ad866c0c1697fa8afb23702afc4834fcaa807274a457",
+      "chars": 3262,
+      "source_row_id": "19576",
+      "source_repo_path": "crypto/blockchains/xvg/providers/XvgUnspentsProvider.ts",
+      "source_repo_name": "CEO-NextMindCoin/trusteeWallet",
+      "parquet_row_index": 10
+    },
+    {
+      "file": "snippet_0011.ts",
+      "sha256": "3c06d50f84f739bebb76c817397aab09daf306341351cb5d3257ad41b1305285",
+      "chars": 759,
+      "source_row_id": "23893",
+      "source_repo_path": "packages/icons/src/icons/TextStrikeThrough.tsx",
+      "source_repo_name": "tonyghiani/mountain-ui",
+      "parquet_row_index": 11
+    },
+    {
+      "file": "snippet_0012.ts",
+      "sha256": "a8eeecebdfe97bf8642d3d354285011120071a1b4eb96049104a1fd2b7e19e54",
+      "chars": 743,
+      "source_row_id": "26254",
+      "source_repo_path": "index.d.ts",
+      "source_repo_name": "NicholasBoll/cypress-time",
+      "parquet_row_index": 12
+    },
+    {
+      "file": "snippet_0013.ts",
+      "sha256": "3055fe4ca0ac1d1d5d8f500d92b2a3bab2f06d59c5fd44585aeaf9d2d360b37a",
+      "chars": 2543,
+      "source_row_id": "26862",
+      "source_repo_path": "frontend/packages/kubevirt-plugin/src/components/create-vm-wizard/tabs/advanced-tab/sysprep/SysprepFileField.tsx",
+      "source_repo_name": "ok3sd/console",
+      "parquet_row_index": 13
+    },
+    {
+      "file": "snippet_0014.ts",
+      "sha256": "b7a8a5115979f2fb3805f31fdbd35eb86139813f2ba8b048ff25a16bd13a144b",
+      "chars": 231,
+      "source_row_id": "28039",
+      "source_repo_path": "lib/index.ts",
+      "source_repo_name": "npm-js-ts-angular-modules-course/introduccion-node-ts",
+      "parquet_row_index": 14
+    },
+    {
+      "file": "snippet_0015.ts",
+      "sha256": "9e1f59d43768e9035aaf29fbb40fa1e8ef2d67d326510278c54514fe04b1f09b",
+      "chars": 6058,
+      "source_row_id": "28591",
+      "source_repo_path": "src/request.ts",
+      "source_repo_name": "johnnywang1994/axios-mock-shim",
+      "parquet_row_index": 15
+    },
+    {
+      "file": "snippet_0016.ts",
+      "sha256": "89b5f02e6739e193f28a799a8c6fd25f625b5709000d66853d9ca1e833698856",
+      "chars": 213,
+      "source_row_id": "30972",
+      "source_repo_path": "src/model/IContainer.ts",
+      "source_repo_name": "kenfehling/react-router-nested-history",
+      "parquet_row_index": 16
+    },
+    {
+      "file": "snippet_0017.ts",
+      "sha256": "16c20835d6c3472c07083e83582ac6be370746ce5965806848288fd7a84a0435",
+      "chars": 166,
+      "source_row_id": "33191",
+      "source_repo_path": "ClientApp/src/app/core/models/IPaymentPlan.ts",
+      "source_repo_name": "yovento/Sico.Web.Simulador",
+      "parquet_row_index": 17
+    },
+    {
+      "file": "snippet_0018.ts",
+      "sha256": "9f2615fdbb5ce8fcbaaddf02ce4b6002c7530c5dd42f2c72c1476d22f0166f25",
+      "chars": 679,
+      "source_row_id": "35718",
+      "source_repo_path": "packages/tracking/src/__tests__/user.spec.ts",
+      "source_repo_name": "DanielJDufour/client-modules",
+      "parquet_row_index": 18
+    },
+    {
+      "file": "snippet_0019.ts",
+      "sha256": "b34baf574b18a4dbb1fcc5e442459567e7b33659254af29bae40943c4e9da812",
+      "chars": 1815,
+      "source_row_id": "37367",
+      "source_repo_path": "src/procedures/PlantProcedure.ts",
+      "source_repo_name": "ByTheHugo/farmbot-firmware-os",
+      "parquet_row_index": 19
+    },
+    {
+      "file": "snippet_0020.ts",
+      "sha256": "8ae55d010a9a6bd7f358f26fbd9c2a821ee4a0573afeb5e75b6632130d27bcbb",
+      "chars": 223,
+      "source_row_id": "38580",
+      "source_repo_path": "lib/components/src/typography/elements/H4.tsx",
+      "source_repo_name": "asksyllable/storybook",
+      "parquet_row_index": 20
+    },
+    {
+      "file": "snippet_0021.ts",
+      "sha256": "29a4293966cbc44bd37becc8bc9c97a87dd41da2e30eab4ea69392cc140e1031",
+      "chars": 5356,
+      "source_row_id": "41609",
+      "source_repo_path": "src/server/api/routes/app.ts",
+      "source_repo_name": "SciDev5/nps-applib-v2-server",
+      "parquet_row_index": 21
+    },
+    {
+      "file": "snippet_0022.ts",
+      "sha256": "cfad1cebb24a4304b39ecab7af634533f20c73d518856557303fb740f3dd822b",
+      "chars": 272,
+      "source_row_id": "44461",
+      "source_repo_path": "src/main/webapp/app/shared/model/history-update.model.ts",
+      "source_repo_name": "ndtung01061999/catiny",
+      "parquet_row_index": 22
+    },
+    {
+      "file": "snippet_0023.ts",
+      "sha256": "5ebe4d3aea2f81c7474f136b9e41164cd8cde52f9c44e85dd90205b34e14aaec",
+      "chars": 444,
+      "source_row_id": "46609",
+      "source_repo_path": "frontend/src/components/coverimage/placeholder.tsx",
+      "source_repo_name": "dustinn1/mal-user-stats",
+      "parquet_row_index": 23
+    },
+    {
+      "file": "snippet_0024.ts",
+      "sha256": "b43c29e09208aba585f3d94457b346ba0f779e5d4714292e252b32f663f11730",
+      "chars": 655,
+      "source_row_id": "49023",
+      "source_repo_path": "client/src/components/Core/actions/types.tsx",
+      "source_repo_name": "JeremyCoutellec/CryptoSummary",
+      "parquet_row_index": 24
+    },
+    {
+      "file": "snippet_0025.ts",
+      "sha256": "ea09ceb21831822f765f5eeb65bd35a21fbe8ec869deba70d25521234027dd19",
+      "chars": 1606,
+      "source_row_id": "49878",
+      "source_repo_path": "src/pages/LeaderboardPage/LeaderboardPage.tsx",
+      "source_repo_name": "shobit1337/quizmill",
+      "parquet_row_index": 25
+    },
+    {
+      "file": "snippet_0026.ts",
+      "sha256": "7b9538f3a7f7238ef992ae96102be4ba07c0469c5921d6fe7f8cce7602af4f62",
+      "chars": 1413,
+      "source_row_id": "53903",
+      "source_repo_path": "dist/src/core/ExpressionBuilder.d.ts",
+      "source_repo_name": "hubagaspar91/vue-renderless-expression-builder",
+      "parquet_row_index": 26
+    },
+    {
+      "file": "snippet_0027.ts",
+      "sha256": "6639804e435fe10ffa90a6f1d2c0393a9ef63292209e1cfaa24311c740fab9bc",
+      "chars": 644,
+      "source_row_id": "53973",
+      "source_repo_path": "src/core/list/old/linked/doubly/node/doubly-linked-list-node-interface.ts",
+      "source_repo_name": "lifaon74/common-classes",
+      "parquet_row_index": 27
+    },
+    {
+      "file": "snippet_0028.ts",
+      "sha256": "b54d21ab5733faf129ad23f2b602de7432019fb5dca09eff66c3b371c8c02b71",
+      "chars": 2803,
+      "source_row_id": "54239",
+      "source_repo_path": "packages/page-staking/src/Actions/Account/InputValidateAmount.tsx",
+      "source_repo_name": "OnFinality-io/apps",
+      "parquet_row_index": 28
+    },
+    {
+      "file": "snippet_0029.ts",
+      "sha256": "3a81849c9f39df5c23c0fb21a718f393b12d9e50b5676b96fcb68a1f8528efee",
+      "chars": 148,
+      "source_row_id": "56553",
+      "source_repo_path": "src/Context.ts",
+      "source_repo_name": "xueyou2000/xy-checkbox",
+      "parquet_row_index": 29
+    },
+    {
+      "file": "snippet_0030.ts",
+      "sha256": "9027d1a224ba97ab792ad61fe09d8df608391bfa134ab8aa9e0f20610e1cfa61",
+      "chars": 980,
+      "source_row_id": "60407",
+      "source_repo_path": "frontend/src/app/core/guards/valid-period-of-mentor.guard.ts",
+      "source_repo_name": "UTPL-Rank/Mentorship-Project",
+      "parquet_row_index": 30
+    },
+    {
+      "file": "snippet_0031.ts",
+      "sha256": "9c20be379e3cdeb88547021aae31ee4958b14a82c48133dfa2b971f2d6fb6979",
+      "chars": 6971,
+      "source_row_id": "62609",
+      "source_repo_path": "client/src/components/users/UserOptions.tsx",
+      "source_repo_name": "craigmcc/library",
+      "parquet_row_index": 31
+    },
+    {
+      "file": "snippet_0032.ts",
+      "sha256": "365f506b09f540000573755424f33e3f24bb92830390deaa26c4077a72d7e5bb",
+      "chars": 1365,
+      "source_row_id": "65590",
+      "source_repo_path": "src/entities/trellis/Section.ts",
+      "source_repo_name": "human-nature-lab/trellis-app",
+      "parquet_row_index": 32
+    },
+    {
+      "file": "snippet_0033.ts",
+      "sha256": "2ef8229da7fc447fd3d84a8d5e956b3e7ded9cdab00da5913bbabcd108575d75",
+      "chars": 3772,
+      "source_row_id": "65659",
+      "source_repo_path": "src/aeScript.ts",
+      "source_repo_name": "tjx666/adobe-extension-devtools",
+      "parquet_row_index": 33
+    },
+    {
+      "file": "snippet_0034.ts",
+      "sha256": "78c00668051227d92c54673758b652d243b16f24825eba7eb1cf6a5adf932d14",
+      "chars": 448,
+      "source_row_id": "67788",
+      "source_repo_path": "dist/helpers/pagination.d.ts",
+      "source_repo_name": "Gadzev/typeorm-pagination",
+      "parquet_row_index": 34
+    },
+    {
+      "file": "snippet_0035.ts",
+      "sha256": "64021bbdf5bdb9e976a2c47fedd83edca8eec1473bdcf4a15eadba181a9467f1",
+      "chars": 689,
+      "source_row_id": "68952",
+      "source_repo_path": "src/hospital/hospital.service.ts",
+      "source_repo_name": "hugehoo/Hospital-Playlist-back",
+      "parquet_row_index": 35
+    },
+    {
+      "file": "snippet_0036.ts",
+      "sha256": "c08e8007cccd6350cbab9f3bf19f1e3799001fbf50755ff5a7baa3582116d0c0",
+      "chars": 1169,
+      "source_row_id": "70404",
+      "source_repo_path": "src/components/play-list/index.tsx",
+      "source_repo_name": "refuse-c/emusic",
+      "parquet_row_index": 36
+    },
+    {
+      "file": "snippet_0037.ts",
+      "sha256": "23b04d421a376e5a7e3fb1b9933f1583517e582eb0f2a07023d46d5e343d80f8",
+      "chars": 1310,
+      "source_row_id": "71414",
+      "source_repo_path": "src/houses/house.service.ts",
+      "source_repo_name": "ImanZarin/socity-management",
+      "parquet_row_index": 37
+    },
+    {
+      "file": "snippet_0038.ts",
+      "sha256": "e704151c9db619a9e658cfa6cb3081677d6662d05ef1266ca93fc222b5281efe",
+      "chars": 350,
+      "source_row_id": "73470",
+      "source_repo_path": "src/utils/merge-resolvers/client.ts",
+      "source_repo_name": "meebix/modern-web-app",
+      "parquet_row_index": 38
+    },
+    {
+      "file": "snippet_0039.ts",
+      "sha256": "31a43e0504b96ec50ba69a0c9e1d4015601c79a3860423dc92c769939d894b45",
+      "chars": 56,
+      "source_row_id": "74808",
+      "source_repo_path": "types/crypto-js/hmac-sha1/index.d.ts",
+      "source_repo_name": "fes300/DefinitelyTyped",
+      "parquet_row_index": 39
+    },
+    {
+      "file": "snippet_0040.ts",
+      "sha256": "9e94e0efb258ab02889a0be4acbd585c165b7708d2aefb00544c935c95f04755",
+      "chars": 404,
+      "source_row_id": "78335",
+      "source_repo_path": "src/entities/model/mappers.ts",
+      "source_repo_name": "maxigs7/wal-manager",
+      "parquet_row_index": 40
+    },
+    {
+      "file": "snippet_0041.ts",
+      "sha256": "77288bbecaaba3ca93cf37467f8547510ec063e6e24b67a0329131c40d0f2164",
+      "chars": 35,
+      "source_row_id": "79079",
+      "source_repo_path": "src/constants/layout.ts",
+      "source_repo_name": "El-Potato-Slayer/shinta-mani-wild",
+      "parquet_row_index": 41
+    },
+    {
+      "file": "snippet_0042.ts",
+      "sha256": "a0555a3092406be2e086ddff1f4a82de483d26537969bb829b1316494cc6cfa0",
+      "chars": 2449,
+      "source_row_id": "79984",
+      "source_repo_path": "example/src/Layouting/index.tsx",
+      "source_repo_name": "jaderd-jh/react-flow",
+      "parquet_row_index": 42
+    },
+    {
+      "file": "snippet_0043.ts",
+      "sha256": "287d56d79c9a22e1eb51e2d591a0d0c7d50525d01f11dc0aa39bc8b3cfe37267",
+      "chars": 1180,
+      "source_row_id": "81531",
+      "source_repo_path": "packages/signed-url/src/storage/gcs.storage.ts",
+      "source_repo_name": "Atlantis-Lab/nestjs",
+      "parquet_row_index": 43
+    },
+    {
+      "file": "snippet_0044.ts",
+      "sha256": "4fe69230162abcc6c3ab2855b6cb3e8e6312be7b209460cfa13320a4b9368095",
+      "chars": 788,
+      "source_row_id": "81973",
+      "source_repo_path": "dist/ts-object-transformer.d.ts",
+      "source_repo_name": "F1NYA/ts-object-transformer",
+      "parquet_row_index": 44
+    },
+    {
+      "file": "snippet_0045.ts",
+      "sha256": "c29d2f174c0dd5c676a81366dc7f3ad3a39a9e29f752c472a41a1b6309cbf6f5",
+      "chars": 789,
+      "source_row_id": "82251",
+      "source_repo_path": "packages/client/src/members/verify.ts",
+      "source_repo_name": "rahafoundation/raha-api",
+      "parquet_row_index": 45
+    },
+    {
+      "file": "snippet_0046.ts",
+      "sha256": "e4a4479ea02fc0eee25d857aaac34c588c1bcd0bce14fb439a61614bc948b8f2",
+      "chars": 456,
+      "source_row_id": "82850",
+      "source_repo_path": "src/templates/create/javascript/config.ts",
+      "source_repo_name": "Smaug6739/cli",
+      "parquet_row_index": 46
+    },
+    {
+      "file": "snippet_0047.ts",
+      "sha256": "673b8ecece12ffee5399789cd09ec39daae3843a2e6cda8a0a281c3d3e06b1d5",
+      "chars": 626,
+      "source_row_id": "85400",
+      "source_repo_path": "src/app/form/checkbox/checkbox.module.ts",
+      "source_repo_name": "david23539/mknoark",
+      "parquet_row_index": 47
+    },
+    {
+      "file": "snippet_0048.ts",
+      "sha256": "8adb6c2e0172890e9dbaff91fee72531310b55af5a8d6b7ce957a82d79cf0af0",
+      "chars": 1508,
+      "source_row_id": "85457",
+      "source_repo_path": "src/hooks/useEntityFieldLinkList.tsx",
+      "source_repo_name": "VikingMedicDad/equi2",
+      "parquet_row_index": 48
+    },
+    {
+      "file": "snippet_0049.ts",
+      "sha256": "0a0a40d0ffa05c0eaedc6a259192a95a0a3ad8cf0b557f51ea33f23bcf397962",
+      "chars": 8590,
+      "source_row_id": "91762",
+      "source_repo_path": "src/logging/setupLogging.ts",
+      "source_repo_name": "emmajsadams/discord-mgmt-bot",
+      "parquet_row_index": 49
+    },
+    {
+      "file": "snippet_0050.ts",
+      "sha256": "71e7f101de4f870f0d204ecba34a8b12ccd0c8072eb3e7938fbb9259fc08ea2e",
+      "chars": 3868,
+      "source_row_id": "95250",
+      "source_repo_path": "src/action/help-table.ts",
+      "source_repo_name": "garysoed/protoboard2",
+      "parquet_row_index": 50
+    },
+    {
+      "file": "snippet_0051.ts",
+      "sha256": "58632d55aa290ccdd8bd472e770679cf3817146a10f57760778557e73a0346d9",
+      "chars": 128,
+      "source_row_id": "95992",
+      "source_repo_path": "types/ramda/test/mean-tests.ts",
+      "source_repo_name": "fes300/DefinitelyTyped",
+      "parquet_row_index": 51
+    },
+    {
+      "file": "snippet_0052.ts",
+      "sha256": "183ed2b51d599a3833ba5e991d8ac14fbf465ee2729f6fe1d3ff542634fa87e5",
+      "chars": 558,
+      "source_row_id": "96085",
+      "source_repo_path": "projects/ng-translation/src/lib/testing/ng-trans-testing.module.ts",
+      "source_repo_name": "wjx774326739/ng-translation",
+      "parquet_row_index": 52
+    },
+    {
+      "file": "snippet_0053.ts",
+      "sha256": "d856a5b75afce2bb9b60c3bf2ac89810586b8cbcd057c03b7f0a783ddcc46dd6",
+      "chars": 327,
+      "source_row_id": "96335",
+      "source_repo_path": "src/RealtimeServer/typings/sharedb-mongo.d.ts",
+      "source_repo_name": "Nateowami/web-xforge-test",
+      "parquet_row_index": 53
+    },
+    {
+      "file": "snippet_0054.ts",
+      "sha256": "22798f4ebd81cc30f798046bf5328b489dc49977011837ce128d7345b6cf98ba",
+      "chars": 1586,
+      "source_row_id": "96478",
+      "source_repo_path": "subschemas/substrate-chain/src/resolvers/Query/registrars.ts",
+      "source_repo_name": "litentry/litentry-graph",
+      "parquet_row_index": 54
+    },
+    {
+      "file": "snippet_0055.ts",
+      "sha256": "15cc0f6b62a0cbc0586501b681fcd830f777e56956ee97d9a34dccfba0cd3f6c",
+      "chars": 2063,
+      "source_row_id": "97123",
+      "source_repo_path": "src/inrix/handler/steps/filterByLocation.test.ts",
+      "source_repo_name": "UrbanOS-Examples/alerts-dashboard",
+      "parquet_row_index": 55
+    },
+    {
+      "file": "snippet_0056.ts",
+      "sha256": "d42e8469353e7693c32732068628c1c8ceb8658c53aca86d8ea65c59d52e7c37",
+      "chars": 180,
+      "source_row_id": "97535",
+      "source_repo_path": "src/menu/dto/EditMenuName.dto.ts",
+      "source_repo_name": "Delivery-System-App/delivery-app-be",
+      "parquet_row_index": 56
+    },
+    {
+      "file": "snippet_0057.ts",
+      "sha256": "aa240c098422f7e6ae1e69526e478a8e8b920015cadb99774b519500c9804339",
+      "chars": 1939,
+      "source_row_id": "98919",
+      "source_repo_path": "src/app/global/modals/keybindings/keybindings-modal.component.ts",
+      "source_repo_name": "nb48/chart-hero",
+      "parquet_row_index": 57
+    },
+    {
+      "file": "snippet_0058.ts",
+      "sha256": "a919cde1fa470fd0157e32391862c5802a531e0abdbb1fd34bf645fec4900adf",
+      "chars": 1088,
+      "source_row_id": "99617",
+      "source_repo_path": "generators/feather.ts",
+      "source_repo_name": "mithril-icons/builder",
+      "parquet_row_index": 58
+    },
+    {
+      "file": "snippet_0059.ts",
+      "sha256": "ceef7332f674b99c79720f30ecfd433f842119321288a698765a7791e4015c98",
+      "chars": 7187,
+      "source_row_id": "105921",
+      "source_repo_path": "WebRxWithAsp4/WebRxWithAsp4/Scripts/es6_modules/Core/Command.d.ts",
+      "source_repo_name": "ibebbs/BlogProjects",
+      "parquet_row_index": 59
+    },
+    {
+      "file": "snippet_0060.ts",
+      "sha256": "22adb36ed795256cd1577735eff52ab29de32efcb41508216206c8fdbf5baaba",
+      "chars": 762,
+      "source_row_id": "109449",
+      "source_repo_path": "generators/templates/scripts/webpack/common.ts",
+      "source_repo_name": "Himenon/generator-react-app",
+      "parquet_row_index": 60
+    },
+    {
+      "file": "snippet_0061.ts",
+      "sha256": "90d2db50fa6994cc66a3deac8880e7a4f8d1f94e9b5abde14fd6ddfc644dfc8b",
+      "chars": 70,
+      "source_row_id": "116389",
+      "source_repo_path": "ClientApp/app/components/Model/myModel.ts",
+      "source_repo_name": "nicolgit/visualstudio-lametric",
+      "parquet_row_index": 61
+    },
+    {
+      "file": "snippet_0062.ts",
+      "sha256": "c9d2b15a317730ab22c6e91460c49adb0c24c994e3959da06d09ad7ad130cf36",
+      "chars": 4811,
+      "source_row_id": "116866",
+      "source_repo_path": "src/Services/TweetCrawlService.ts",
+      "source_repo_name": "sexismDecector/WebServer",
+      "parquet_row_index": 62
+    },
+    {
+      "file": "snippet_0063.ts",
+      "sha256": "1d7bbaf3bd7117ec56ed56e27612f9184e7d0dcce1b1981e6983d61c54011cb9",
+      "chars": 398,
+      "source_row_id": "117156",
+      "source_repo_path": "src/app/applications/application-detail/credits-extension-detail/credits-extension-detail.component.ts",
+      "source_repo_name": "deNBI/cloud-portal-webapp",
+      "parquet_row_index": 63
+    },
+    {
+      "file": "snippet_0064.ts",
+      "sha256": "4c467ddaa498e90e4631d9be43acb152495b435d39f6c7aa805071d88fa2acda",
+      "chars": 689,
+      "source_row_id": "117680",
+      "source_repo_path": "Meadowlark-js/packages/meadowlark-core/src/helpers/AuthorizationHeader.ts",
+      "source_repo_name": "Ed-Fi-Exchange-OSS/Meadowlark",
+      "parquet_row_index": 64
+    },
+    {
+      "file": "snippet_0065.ts",
+      "sha256": "6a7d3dbdf736ac34d019eb608359fff35392e42742b11f08bf55a7be8db3f99e",
+      "chars": 1865,
+      "source_row_id": "119359",
+      "source_repo_path": "Kynda/src/app/companyadmin-dashboard/review-template/review-template.component.ts",
+      "source_repo_name": "Project-C-Kynda/Project-C",
+      "parquet_row_index": 65
+    },
+    {
+      "file": "snippet_0066.ts",
+      "sha256": "bf807389344339813fe7141c1a664d772485ec7346446f656fec521ba98eb5f3",
+      "chars": 3375,
+      "source_row_id": "121198",
+      "source_repo_path": "src/frontend/ts/user-interactions.ts",
+      "source_repo_name": "rlosada/app-fullstack-base",
+      "parquet_row_index": 66
+    },
+    {
+      "file": "snippet_0067.ts",
+      "sha256": "79079ca936969c779f4c1f2f12c37b36d8a9c98a5c6c6e6c5699f429860ad6ff",
+      "chars": 1289,
+      "source_row_id": "121762",
+      "source_repo_path": "src/util.ts",
+      "source_repo_name": "alexanderwe/the-traveler",
+      "parquet_row_index": 67
+    },
+    {
+      "file": "snippet_0068.ts",
+      "sha256": "5a6ac0073fc8536365295f22e1868f39caf612876a349078ffd989f56bedba61",
+      "chars": 424,
+      "source_row_id": "122856",
+      "source_repo_path": "src/app/via/light/light.reducer.ts",
+      "source_repo_name": "ToCHoNeR/Miguelio-VIA-Keyboards",
+      "parquet_row_index": 68
+    },
+    {
+      "file": "snippet_0069.ts",
+      "sha256": "90024d5084b292429594c6858ba67e22fb0967167be1b2652aa4f0c383aba01d",
+      "chars": 425,
+      "source_row_id": "124719",
+      "source_repo_path": "talon/runtime/handlers/ReadInputHandler.ts",
+      "source_repo_name": "Norhaven/Talon",
+      "parquet_row_index": 69
+    },
+    {
+      "file": "snippet_0070.ts",
+      "sha256": "5d19ec59e127af5e3029e2a295aabca1e76f4d2b8521b37fc2cfd600194c77f5",
+      "chars": 2647,
+      "source_row_id": "124785",
+      "source_repo_path": "meteor/server/api/evaluations.ts",
+      "source_repo_name": "alvancamp/tv-automation-server-core",
+      "parquet_row_index": 70
+    },
+    {
+      "file": "snippet_0071.ts",
+      "sha256": "81517c8f9dd194a155d6f69e8cddfd535248d478a266bd83e7006b502f381c04",
+      "chars": 88,
+      "source_row_id": "124877",
+      "source_repo_path": "src/api/constants/emailTemplate.ts",
+      "source_repo_name": "Fezzzi/Household-Chores",
+      "parquet_row_index": 71
+    },
+    {
+      "file": "snippet_0072.ts",
+      "sha256": "2675ce8c9642a4800f01414375787f93eed114ef525bbab8ef4a5702ad6d24fa",
+      "chars": 3470,
+      "source_row_id": "125082",
+      "source_repo_path": "src/extensions/bindingDemo/BindingDemoApplicationCustomizer.ts",
+      "source_repo_name": "juliemturner/AppCustomDemo",
+      "parquet_row_index": 72
+    },
+    {
+      "file": "snippet_0073.ts",
+      "sha256": "3e17c25a91459d4791f8169552629c11a6b2ded7d974c318c7b15080a300ba67",
+      "chars": 572,
+      "source_row_id": "130063",
+      "source_repo_path": "node_modules/node-libcurl/dist/lib/enum/CurlFtpSsl.d.ts",
+      "source_repo_name": "HankRobot/NEMRFID",
+      "parquet_row_index": 73
+    },
+    {
+      "file": "snippet_0074.ts",
+      "sha256": "87ffb17639136371f5586d0d8cc8685aea377b51c3800ecafef0d03f6a3cf6cd",
+      "chars": 614,
+      "source_row_id": "130231",
+      "source_repo_path": "packages/pipenv-pipfile/src/is-pipenv-supported-version.ts",
+      "source_repo_name": "snyk/python-fix",
+      "parquet_row_index": 74
+    },
+    {
+      "file": "snippet_0075.ts",
+      "sha256": "1bacb868b22c72730c17821cb64060ed9ad8be07bcd51b1c0db51f3fd33bbe66",
+      "chars": 3069,
+      "source_row_id": "130905",
+      "source_repo_path": "src/typings/ntt.ts",
+      "source_repo_name": "ntt-city/ntt-flow",
+      "parquet_row_index": 75
+    },
+    {
+      "file": "snippet_0076.ts",
+      "sha256": "75aa90cf02cee6b2f70f67092213dfed79479b60ffc2f9364144d48267492922",
+      "chars": 5410,
+      "source_row_id": "139836",
+      "source_repo_path": "src/app/model/tsv/TSV2File.ts",
+      "source_repo_name": "chipster/Chipster-Web",
+      "parquet_row_index": 76
+    },
+    {
+      "file": "snippet_0077.ts",
+      "sha256": "233f8903e7a2f32b311298236896bba67c575d2121f7de67e335883039b6434c",
+      "chars": 735,
+      "source_row_id": "140728",
+      "source_repo_path": "src/app/pages/yannbf/components/slides/slide-nested/slide-nested.page.ts",
+      "source_repo_name": "victor5516/awesome-components-ionic",
+      "parquet_row_index": 77
+    },
+    {
+      "file": "snippet_0078.ts",
+      "sha256": "5d749b4872f418325bea386ce2693829c655f54c474a497cbf7898ee592f523a",
+      "chars": 1333,
+      "source_row_id": "141455",
+      "source_repo_path": "src/docs/form/tree/big-data.tsx",
+      "source_repo_name": "Iixianjie/flicker",
+      "parquet_row_index": 78
+    },
+    {
+      "file": "snippet_0079.ts",
+      "sha256": "10b523851280f82c4a482c816d889464337448ac06b81fd9222db35dbbd7f0b4",
+      "chars": 2339,
+      "source_row_id": "142754",
+      "source_repo_path": "src/UI/Buyer/src/app/profile/containers/user-table/user-table.component.ts",
+      "source_repo_name": "Pritesh-Bavaskar/NGX-Shopper",
+      "parquet_row_index": 79
+    },
+    {
+      "file": "snippet_0080.ts",
+      "sha256": "644cd871c5bb08505a7d95c8ce94391930e3f26aac535d3f41dad507d94b20e5",
+      "chars": 1215,
+      "source_row_id": "142955",
+      "source_repo_path": "src/app/filesystem/filesystem.module.ts",
+      "source_repo_name": "TU-Blueberry/bluestberry",
+      "parquet_row_index": 80
+    },
+    {
+      "file": "snippet_0081.ts",
+      "sha256": "7087d0f9587e4b1d2cad35e2b2dbe1e6a49409bad4ffdb1654bf05ccf0179c8f",
+      "chars": 6976,
+      "source_row_id": "143242",
+      "source_repo_path": "src/jackett/potuk.ts",
+      "source_repo_name": "TypeCtrl/jackett-definitions",
+      "parquet_row_index": 81
+    },
+    {
+      "file": "snippet_0082.ts",
+      "sha256": "af31d37aa6dc27a9ef09db3f1060d67a2ab5897fc67476443f28da682cc9b595",
+      "chars": 275,
+      "source_row_id": "152195",
+      "source_repo_path": "src/hooks/deleteJournalEntry.ts",
+      "source_repo_name": "crimsonknave/kanka-foundry",
+      "parquet_row_index": 82
+    },
+    {
+      "file": "snippet_0083.ts",
+      "sha256": "89cf122cf25b79293f13f18808e296fd94cccf2768cf9f58eaddd7332c233df8",
+      "chars": 475,
+      "source_row_id": "153219",
+      "source_repo_path": "src/server/migrations/1585425364746-UserName.ts",
+      "source_repo_name": "PublicMapping/district-builder-2",
+      "parquet_row_index": 83
+    },
+    {
+      "file": "snippet_0084.ts",
+      "sha256": "b515fc2cb85ef98929a83e695c63a3c2191b202e7ec2610f32de87ca5793fb47",
+      "chars": 170,
+      "source_row_id": "158805",
+      "source_repo_path": "src/index.ts",
+      "source_repo_name": "manwaring-games/codenames-common-library",
+      "parquet_row_index": 84
+    },
+    {
+      "file": "snippet_0085.ts",
+      "sha256": "957f3b546cedf39ef019c9ba7c5f2763017719f2e227b66ee8cc121b32df2997",
+      "chars": 2589,
+      "source_row_id": "159111",
+      "source_repo_path": "src/components/cms-textareas-lists-structure/subcomponents/CmsTextareasAddNewArea.tsx",
+      "source_repo_name": "Milosz08/ReactJS_Web_Application_Digititles_Imagine",
+      "parquet_row_index": 85
+    },
+    {
+      "file": "snippet_0086.ts",
+      "sha256": "8505fd6b51af772bb6f643ed452cdba88c01beb92186d6084481b848469c957d",
+      "chars": 3026,
+      "source_row_id": "162230",
+      "source_repo_path": "src/i18nsupport-lib/impl/parsed-message-tokenizer.ts",
+      "source_repo_name": "Chocobozzz/ngx-i18nsupport",
+      "parquet_row_index": 86
+    },
+    {
+      "file": "snippet_0087.ts",
+      "sha256": "1b4247d9fc56cc264457ab67919db1ba0d3a9292086aa4c9fabcdfc8ea0f13a1",
+      "chars": 3445,
+      "source_row_id": "162240",
+      "source_repo_path": "components/composite/StepPayment/index.tsx",
+      "source_repo_name": "jessejones/commercelayer-react-checkout",
+      "parquet_row_index": 87
+    },
+    {
+      "file": "snippet_0088.ts",
+      "sha256": "30720d6d78870f0332c596e49c3dc28d1a2a109f22d47f47d693196bd10c4d57",
+      "chars": 2486,
+      "source_row_id": "162470",
+      "source_repo_path": "assets/tinymce/src/themes/inlite/main/ts/core/Actions.ts",
+      "source_repo_name": "arifwidiyatmiko/smanbul",
+      "parquet_row_index": 88
+    },
+    {
+      "file": "snippet_0089.ts",
+      "sha256": "50e443070db0a702a710426790127dfcbd30f21f72bc952e95597e31cee0d387",
+      "chars": 999,
+      "source_row_id": "163214",
+      "source_repo_path": "src/domain/model/valueObjects/Money.ts",
+      "source_repo_name": "MarcAtrapalo/webflix-js-ports-adapters",
+      "parquet_row_index": 89
+    },
+    {
+      "file": "snippet_0090.ts",
+      "sha256": "7be231df31cb8dc6e8e7700d328b83265571db561d710e74d0fe7f025b282786",
+      "chars": 1190,
+      "source_row_id": "167461",
+      "source_repo_path": "packages/core/src/core/shared/types/index.ts",
+      "source_repo_name": "hugonteifeh/rosebox",
+      "parquet_row_index": 90
+    },
+    {
+      "file": "snippet_0091.ts",
+      "sha256": "aecdbd72cd1fee006e62d14d2f8cd0ec1b9049fc2c20ad8bbd2e0640d32a10c4",
+      "chars": 1291,
+      "source_row_id": "168103",
+      "source_repo_path": "src/controllers/FolderFileController.ts",
+      "source_repo_name": "powilliam/HomeCloud",
+      "parquet_row_index": 91
+    },
+    {
+      "file": "snippet_0092.ts",
+      "sha256": "0e7fb40b364b600259b86ccf49a518e08e5835dd0d30a7b9cef165701132684e",
+      "chars": 342,
+      "source_row_id": "168458",
+      "source_repo_path": "test/dist/systems/clauses.entity.d.ts",
+      "source_repo_name": "vijayda11458/nestjs",
+      "parquet_row_index": 92
+    },
+    {
+      "file": "snippet_0093.ts",
+      "sha256": "2d78a5c846dcee9e4d8871f9cde5e4b67c8201bcd880364ce1b7ddbe0cb0af14",
+      "chars": 3004,
+      "source_row_id": "170443",
+      "source_repo_path": "src/user/auth.controller.ts",
+      "source_repo_name": "MSU-Students/konek-to-book-serviceside",
+      "parquet_row_index": 93
+    },
+    {
+      "file": "snippet_0094.ts",
+      "sha256": "b5ab22dd1f9d9c66da7c613d7ed733110abb0a0f9ccaef5c1c45f2a53974c0e3",
+      "chars": 249,
+      "source_row_id": "172703",
+      "source_repo_path": "src/contentBlock/web-api-params.ts",
+      "source_repo_name": "2sic/2sxc-inpage",
+      "parquet_row_index": 94
+    },
+    {
+      "file": "snippet_0095.ts",
+      "sha256": "c2086c71b6748b6765fefee5e0bf27b9406fb07088b0ca184f43e488c73e26ea",
+      "chars": 8381,
+      "source_row_id": "173214",
+      "source_repo_path": "WebGL/Graphic/Model.ts",
+      "source_repo_name": "butibuti/UDS",
+      "parquet_row_index": 95
+    },
+    {
+      "file": "snippet_0096.ts",
+      "sha256": "8a2b52de41b559b955a7b54b3288368c86982a78c0c3da993acf3d3b3008ab97",
+      "chars": 2772,
+      "source_row_id": "174089",
+      "source_repo_path": "_mock/_logs.ts",
+      "source_repo_name": "wangwenyin/Edu-Cloud",
+      "parquet_row_index": 96
+    },
+    {
+      "file": "snippet_0097.ts",
+      "sha256": "22ccfb97fa9ab8e51065885d93e08a7e3c77bed6e22844c8c92d41574cc6152e",
+      "chars": 756,
+      "source_row_id": "177948",
+      "source_repo_path": "VocaDbWeb/Scripts/Components/Shared/Partials/Artist/ArtistIconLink.tsx",
+      "source_repo_name": "kateabr/vocadb",
+      "parquet_row_index": 97
+    },
+    {
+      "file": "snippet_0098.ts",
+      "sha256": "f43353bcb1f65e9b4b671cffbc822b43cb596ac6840dfe151784be13cd4040ad",
+      "chars": 2992,
+      "source_row_id": "179053",
+      "source_repo_path": "test/transformer.test.ts",
+      "source_repo_name": "haapanen/react-intl-translations-tool",
+      "parquet_row_index": 98
+    },
+    {
+      "file": "snippet_0099.ts",
+      "sha256": "659af9d06bfe4b4533f30b9f994ab9e38eb28fc20cac9ca0b23f4f7377d70724",
+      "chars": 1557,
+      "source_row_id": "184878",
+      "source_repo_path": "lib/account/AccountDetailsResponse.d.ts",
+      "source_repo_name": "moonthug/betfair-ts",
+      "parquet_row_index": 99
+    }
+  ]
+}

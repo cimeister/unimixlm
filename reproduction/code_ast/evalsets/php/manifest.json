@@ -1,0 +1,921 @@
+{
+  "lang": "php",
+  "paper_label": "PHP",
+  "built": "2026-08-28T06:38:18.831008+00:00",
+  "n_snippets": 100,
+  "eval_snippets_per_lang_constant": 100,
+  "selection_rule": "first N non-blank snippets in eval-parquet row order after CodeDataLoader's own normalisation (_strip_starcoder_metadata, _normalize_source, rstrip) -- identical to CodeDataLoader(max_snippets_per_lang=N) on that parquet",
+  "deterministic": true,
+  "seed": null,
+  "seed_note": "selection is by parquet row order, not sampling, so no seed exists to record; the file list below IS the selection",
+  "eval_parquet": "<local>/tokenizer-intrinsic-evals/starcoder/php.parquet",
+  "eval_parquet_sha256": "c69a3af0dda7f11207d73790ad1e4a999bf8866a7f8c3908d7e14fc358a346c6",
+  "eval_parquet_rows": 6233,
+  "rows_scanned_to_fill": 100,
+  "extension": ".php",
+  "dir": "<repo>/eval_results/code_ast_v1/evalsets/php",
+  "total_chars": 306173,
+  "roundtrip_verified_through": "CodeDataLoader(dir).get_code_snippets",
+  "files": [
+    {
+      "file": "snippet_0000.php",
+      "sha256": "9766dac30f3efd85f0c53b8b34da856df2d0b4dbdfd0c7fe8054b29a94ef60cd",
+      "chars": 49,
+      "source_row_id": "3092",
+      "source_repo_path": "codes/ku_TR/icu-countries.php",
+      "source_repo_name": "ecommerce-utilities/php-countries",
+      "parquet_row_index": 0
+    },
+    {
+      "file": "snippet_0001.php",
+      "sha256": "943e1a24729c2b55b889aa639d864062a07bb006f4e4cfa0443bc46489779e2f",
+      "chars": 2348,
+      "source_row_id": "7792",
+      "source_repo_path": "src/classes/Mail/MailSender.php",
+      "source_repo_name": "MarkusGehrig/Diary",
+      "parquet_row_index": 1
+    },
+    {
+      "file": "snippet_0002.php",
+      "sha256": "ded8462d1420995e4f08ed13538775059f62d9ba70ff28cd5e40fca3ed24ed7a",
+      "chars": 35696,
+      "source_row_id": "9594",
+      "source_repo_path": "modules/correspondence/views/setting/setting_document.php",
+      "source_repo_name": "BenzPowder/e-office",
+      "parquet_row_index": 2
+    },
+    {
+      "file": "snippet_0003.php",
+      "sha256": "ea75bbf07dcbbd4137c0f21002bada9e50e9bd39af28bbaa6e1acc7be30994e0",
+      "chars": 2376,
+      "source_row_id": "11118",
+      "source_repo_path": "app/Http/Livewire/Supply/SupplyCreate.php",
+      "source_repo_name": "aderitonprado/laraControl",
+      "parquet_row_index": 3
+    },
+    {
+      "file": "snippet_0004.php",
+      "sha256": "352074b406a2736eb78098cc73b792da65674835b7a97723877edb7448a3d4e6",
+      "chars": 1975,
+      "source_row_id": "18410",
+      "source_repo_path": "app/Views/pemeriksaan/view.php",
+      "source_repo_name": "rickya4a/ci-app",
+      "parquet_row_index": 4
+    },
+    {
+      "file": "snippet_0005.php",
+      "sha256": "154235efb9486c61b14340aad44d99ada3efe3c8497ecaa6ffc589aad9d29443",
+      "chars": 1176,
+      "source_row_id": "19707",
+      "source_repo_path": ".phpinsights-config.php",
+      "source_repo_name": "willenglishiv/dotfiles",
+      "parquet_row_index": 5
+    },
+    {
+      "file": "snippet_0006.php",
+      "sha256": "ebe5954d66072c088041b6a6dfc9f24ad8cec2290ea37c112d4de5516f51ee66",
+      "chars": 2476,
+      "source_row_id": "21177",
+      "source_repo_path": "src/udokmeci/yii2payment/models/ExchangeRates.php",
+      "source_repo_name": "mskayali/yii2-payment",
+      "parquet_row_index": 6
+    },
+    {
+      "file": "snippet_0007.php",
+      "sha256": "de712e2c131e63a18721e92277ee0a93bf6b86fcd6c5f31f41bf6f497c9c431e",
+      "chars": 14578,
+      "source_row_id": "24371",
+      "source_repo_path": "Classes/Filter/FilterResult.php",
+      "source_repo_name": "cundd/pos",
+      "parquet_row_index": 7
+    },
+    {
+      "file": "snippet_0008.php",
+      "sha256": "1b8aad19e329f6c10b8ced85d4a489b209ebc49187c296292579e6080b3e4105",
+      "chars": 1648,
+      "source_row_id": "25295",
+      "source_repo_path": "Modules/Birth/Services/Register/RegisterBirth.php",
+      "source_repo_name": "abdulweb/nifis",
+      "parquet_row_index": 8
+    },
+    {
+      "file": "snippet_0009.php",
+      "sha256": "a471dd4d5a003d4aa2a69d04428ff544887740c8688becf3e0bffe7c97c1b5e8",
+      "chars": 1200,
+      "source_row_id": "27018",
+      "source_repo_path": "shop/useCases/auth/PasswordResetService.php",
+      "source_repo_name": "voltexman/shop",
+      "parquet_row_index": 9
+    },
+    {
+      "file": "snippet_0010.php",
+      "sha256": "dee114322cff827a19d962a3b4a04f4fbcb0faa90d4460db3823795c135b9e12",
+      "chars": 1652,
+      "source_row_id": "31557",
+      "source_repo_path": "php/modificarCliente.php",
+      "source_repo_name": "otnielmunozdev/Project-Incubator-webApp-",
+      "parquet_row_index": 10
+    },
+    {
+      "file": "snippet_0011.php",
+      "sha256": "a20e3d33caf6c25f47107250e31382e5cec58e735077414df10226d9af8aa1f6",
+      "chars": 3032,
+      "source_row_id": "37773",
+      "source_repo_path": "src/_class_tpay/Notifications/CardNotificationHandler.php",
+      "source_repo_name": "MasterSalomon/omnipay-tpay",
+      "parquet_row_index": 11
+    },
+    {
+      "file": "snippet_0012.php",
+      "sha256": "00fbb30478488419df85ae0b62f127a519d2f86fe365555f2571c86bf170b9c7",
+      "chars": 961,
+      "source_row_id": "44673",
+      "source_repo_path": "app/Http/Controllers/SettingsController.php",
+      "source_repo_name": "pennyvoid/simple-cms",
+      "parquet_row_index": 12
+    },
+    {
+      "file": "snippet_0013.php",
+      "sha256": "954c57ee751287130ce7457ba5c790d1387bffab5ad4e6b4ec4cabf73903944e",
+      "chars": 180,
+      "source_row_id": "45178",
+      "source_repo_path": "app/Http/Controllers/TodayController.php",
+      "source_repo_name": "sitiaisyah14/03_praktikum_web_lanjut_dua",
+      "parquet_row_index": 13
+    },
+    {
+      "file": "snippet_0014.php",
+      "sha256": "6398af26060088d712fd1ed77bbb0859ee229127f0530ed3b55e24d2522a3ec3",
+      "chars": 3581,
+      "source_row_id": "46609",
+      "source_repo_path": "application/view/productos/insert_form.php",
+      "source_repo_name": "LlorcaFlo/proyecto13",
+      "parquet_row_index": 14
+    },
+    {
+      "file": "snippet_0015.php",
+      "sha256": "49d87abb795167732e960052bbb5ad16ce41deec6b9480e8585894227c709d32",
+      "chars": 113,
+      "source_row_id": "47272",
+      "source_repo_path": "src/Framework/Model/EntityInterface.php",
+      "source_repo_name": "machineforged/senshu",
+      "parquet_row_index": 15
+    },
+    {
+      "file": "snippet_0016.php",
+      "sha256": "ebb9728707bb47b578739c91f51cbd61685bd0f40aba87513d912619352f028c",
+      "chars": 1930,
+      "source_row_id": "48421",
+      "source_repo_path": "common/components/Tools.php",
+      "source_repo_name": "collinswang/yii2-multi-module",
+      "parquet_row_index": 16
+    },
+    {
+      "file": "snippet_0017.php",
+      "sha256": "c1b9ebc4509a3fc45e65892045734aaa09b67812f2035f5364ceca7fbbb0fac1",
+      "chars": 2109,
+      "source_row_id": "51603",
+      "source_repo_path": "client/contact.php",
+      "source_repo_name": "jumratiansari/btc-faucet",
+      "parquet_row_index": 17
+    },
+    {
+      "file": "snippet_0018.php",
+      "sha256": "4448fc97df7a5b794738ed294e989d5ac9ac1071147b6fdd653cbc63f2971396",
+      "chars": 1331,
+      "source_row_id": "55306",
+      "source_repo_path": "common/mail/exportWasteComing-html.php",
+      "source_repo_name": "romankarkachev/fresh-office",
+      "parquet_row_index": 18
+    },
+    {
+      "file": "snippet_0019.php",
+      "sha256": "400c30640a3a55668e57f0d020fc99d22348b2d6384ded691e69150785da0b37",
+      "chars": 467,
+      "source_row_id": "58592",
+      "source_repo_path": "app/view/tag/tags.tpl.php",
+      "source_repo_name": "GunnarEriksson/wgtotw",
+      "parquet_row_index": 19
+    },
+    {
+      "file": "snippet_0020.php",
+      "sha256": "883cbf980eb0042113c3ef3c18fba0ff9f5011eaa5d8105287ae6989d9d2f523",
+      "chars": 528,
+      "source_row_id": "60279",
+      "source_repo_path": "form-handler.php",
+      "source_repo_name": "sanket9999/bhetar-school",
+      "parquet_row_index": 20
+    },
+    {
+      "file": "snippet_0021.php",
+      "sha256": "5d8e9f949addc9f7a7473b3657e1f82fa4f172cf9632640a2e2cdf6c4c6737c5",
+      "chars": 1206,
+      "source_row_id": "63630",
+      "source_repo_path": "resources/views/admin/room/edit.blade.php",
+      "source_repo_name": "nguyentri7991/vnvc",
+      "parquet_row_index": 21
+    },
+    {
+      "file": "snippet_0022.php",
+      "sha256": "db14a230f26ff946d2157121de5102d332b7524ddb67577844927c847d607722",
+      "chars": 2485,
+      "source_row_id": "70318",
+      "source_repo_path": "src/Parser/Strategy/Strategy.php",
+      "source_repo_name": "agratushniy/PhpDependencyAnalysis",
+      "parquet_row_index": 22
+    },
+    {
+      "file": "snippet_0023.php",
+      "sha256": "ae7cbc3d7d1cd0d6233115824306b21aced7fb26c80eca5820a4ec0de3392459",
+      "chars": 2828,
+      "source_row_id": "74124",
+      "source_repo_path": "resources/views/blocks/header-service.blade.php",
+      "source_repo_name": "SergeyHub/data-center",
+      "parquet_row_index": 23
+    },
+    {
+      "file": "snippet_0024.php",
+      "sha256": "50c3b8a275c8acc4ec11a2845b5cbafeb0a256e50362277d0eb1f00e71a29726",
+      "chars": 466,
+      "source_row_id": "78335",
+      "source_repo_path": "resources/views/Publicacao.blade.php",
+      "source_repo_name": "Dev0Nakayama/laravel_portifolio",
+      "parquet_row_index": 24
+    },
+    {
+      "file": "snippet_0025.php",
+      "sha256": "7445ce00dfc5b0e1ef5be34e61605081acb2b01808fdf0f81f9d6c71341ccfe7",
+      "chars": 6123,
+      "source_row_id": "79387",
+      "source_repo_path": "application/views/Admin/loginstaff.php",
+      "source_repo_name": "jashwanthkumar2468/Ecommerce",
+      "parquet_row_index": 25
+    },
+    {
+      "file": "snippet_0026.php",
+      "sha256": "b2a9ed31be0177c94f08bd842e67ae5cf58411dbf0f5dd18f21a8c00304fc946",
+      "chars": 244,
+      "source_row_id": "85715",
+      "source_repo_path": "app/helper.php",
+      "source_repo_name": "Min-thike-kyaw/the_unique",
+      "parquet_row_index": 26
+    },
+    {
+      "file": "snippet_0027.php",
+      "sha256": "9d5f91b9806b3948096f08ff1b48b263299d087816fd6b0105f2645f629da649",
+      "chars": 4593,
+      "source_row_id": "86205",
+      "source_repo_path": "resources/views/home/menu_content.blade.php",
+      "source_repo_name": "aylinyildiz/Laravel8-Kurumsal-Site",
+      "parquet_row_index": 27
+    },
+    {
+      "file": "snippet_0028.php",
+      "sha256": "a33d60ec8b2b24ede7f6873edc9ed57a5a8f71d5e8234794a25e9cd3e08a89c2",
+      "chars": 1922,
+      "source_row_id": "86930",
+      "source_repo_path": "tests/Model/Catalog/FederalTaxTest.php",
+      "source_repo_name": "rafa-dx/facturama-php-sdk",
+      "parquet_row_index": 28
+    },
+    {
+      "file": "snippet_0029.php",
+      "sha256": "26295ef7bbb9c3d38b884566fba649ae2b2a0d7cf4c399d531c2446673128e19",
+      "chars": 4324,
+      "source_row_id": "93993",
+      "source_repo_path": "tests/FondOfSpryker/Glue/UnpaginatedCatalogSearchRestApi/Controller/UnpaginatedCatalogSearchResourceControllerTest.php",
+      "source_repo_name": "fond-of/spryker-unpaginated-catalog-search-rest-api",
+      "parquet_row_index": 29
+    },
+    {
+      "file": "snippet_0030.php",
+      "sha256": "31c4f89703aace6825983ee941eeed57223ede910148bcc7b6bccc3ad609dad5",
+      "chars": 1950,
+      "source_row_id": "99617",
+      "source_repo_path": "src/AppBundle/Form/Type/IndividuType.php",
+      "source_repo_name": "Walirhs/festival",
+      "parquet_row_index": 30
+    },
+    {
+      "file": "snippet_0031.php",
+      "sha256": "3d4e5e9c4d86a73afe38e7cf931295166cdde52f8bc7f9ad5f2493c5cdea4b8c",
+      "chars": 141,
+      "source_row_id": "104807",
+      "source_repo_path": "CaponicaAmazonMwsBundle.php",
+      "source_repo_name": "caponica/AmazonMwsBundle",
+      "parquet_row_index": 31
+    },
+    {
+      "file": "snippet_0032.php",
+      "sha256": "ab6b5e668aba8afbc1a675fa303889ecc281d48dc058980ad61c815395dad224",
+      "chars": 2094,
+      "source_row_id": "107714",
+      "source_repo_path": "src/CafFileStorage/Driver/FileSystem.php",
+      "source_repo_name": "caferrari/CafFileStorage",
+      "parquet_row_index": 32
+    },
+    {
+      "file": "snippet_0033.php",
+      "sha256": "b11383728664b46207ef6380a77edda06fc7650604778808a5485c3a6be1e1e2",
+      "chars": 457,
+      "source_row_id": "108226",
+      "source_repo_path": "app/Grade.php",
+      "source_repo_name": "PoolMoo13/laura_api",
+      "parquet_row_index": 33
+    },
+    {
+      "file": "snippet_0034.php",
+      "sha256": "0433e855b1db4f28c9826b018db926de9f8d175e1a797fda85dce7623de8bd13",
+      "chars": 346,
+      "source_row_id": "109341",
+      "source_repo_path": "MVC/Rotas/router_simple_oo/Controller/ProdutosController.php",
+      "source_repo_name": "ribafs/phpoo",
+      "parquet_row_index": 34
+    },
+    {
+      "file": "snippet_0035.php",
+      "sha256": "0f5f2fa38db468bd76fe6b790fb23dcb29d52f348594ab8fb9e456219a85fd59",
+      "chars": 330,
+      "source_row_id": "111014",
+      "source_repo_path": "src/Admin/Com/Navigation/AdminNavigation.php",
+      "source_repo_name": "nemundo/framework",
+      "parquet_row_index": 35
+    },
+    {
+      "file": "snippet_0036.php",
+      "sha256": "a4b4277f59410c8aca19b2fa8ab663ae2fe83b8ed04cb37ff4dc962a1e316584",
+      "chars": 4013,
+      "source_row_id": "112869",
+      "source_repo_path": "resources/views/admin/management/menu/index.blade.php",
+      "source_repo_name": "fajarfathirwan97/laravel-boilerplate",
+      "parquet_row_index": 36
+    },
+    {
+      "file": "snippet_0037.php",
+      "sha256": "c003f763f97b8f22769b651851f408aae92e98c92a8bc5f3c98bb04cf971ef9d",
+      "chars": 8158,
+      "source_row_id": "114698",
+      "source_repo_path": "app/Http/Controllers/Admin/PropertyManage/PropertyManageController111.php",
+      "source_repo_name": "Umairnaveed1/vkp9july2020",
+      "parquet_row_index": 37
+    },
+    {
+      "file": "snippet_0038.php",
+      "sha256": "f047fbd0467b11e6a46203056cdaaa4cb6c874ad52bb99655543be2dba8a13bc",
+      "chars": 3005,
+      "source_row_id": "119375",
+      "source_repo_path": "app/modelmanagement/model/CompleteModel.php",
+      "source_repo_name": "zhy19712/xin",
+      "parquet_row_index": 38
+    },
+    {
+      "file": "snippet_0039.php",
+      "sha256": "1221a32390cc8e1d9bfd4f4ece1b813567eb25137b015a3772561aa730066781",
+      "chars": 1938,
+      "source_row_id": "121508",
+      "source_repo_path": "signup2.php",
+      "source_repo_name": "nikhilbisht21/QuizPortal",
+      "parquet_row_index": 39
+    },
+    {
+      "file": "snippet_0040.php",
+      "sha256": "c368151a258aeb680f0927da2868bb2525a05f219fc217483a4dc0d8a2f22455",
+      "chars": 4063,
+      "source_row_id": "127889",
+      "source_repo_path": "application/views/leave_types/modal_form.php",
+      "source_repo_name": "vinnyvinn/tk",
+      "parquet_row_index": 40
+    },
+    {
+      "file": "snippet_0041.php",
+      "sha256": "2da9d360652c9c24cc339cb012d11e9ed6696e6742b0ff384a8da75e4bb202c4",
+      "chars": 13706,
+      "source_row_id": "128821",
+      "source_repo_path": "pages/area_param.php",
+      "source_repo_name": "winnieth/admes",
+      "parquet_row_index": 41
+    },
+    {
+      "file": "snippet_0042.php",
+      "sha256": "b7c5430e2897c55844438e51539e0645401c41e70d2a13485dd5b38024561308",
+      "chars": 2452,
+      "source_row_id": "130063",
+      "source_repo_path": "src/Domain/User/Entity/User.php",
+      "source_repo_name": "ginsen/user-admin",
+      "parquet_row_index": 42
+    },
+    {
+      "file": "snippet_0043.php",
+      "sha256": "559d3ab6dd4c48b1afe6e9fc04bd0549f83ac10f9c99ca62c561b6d3d27cdf47",
+      "chars": 2928,
+      "source_row_id": "132170",
+      "source_repo_path": "app/Http/Controllers/exportController.php",
+      "source_repo_name": "riyanto978/sistem-laporan-karyawan-dengan-laravel-dan-vue-js",
+      "parquet_row_index": 43
+    },
+    {
+      "file": "snippet_0044.php",
+      "sha256": "57fadaaad307b8b505c3aee25ae24a3999f1dcbad2e3002a46b6d088542af9f0",
+      "chars": 3807,
+      "source_row_id": "133148",
+      "source_repo_path": "app/Http/Controllers/PostController.php",
+      "source_repo_name": "NaufalNur25/music-app",
+      "parquet_row_index": 44
+    },
+    {
+      "file": "snippet_0045.php",
+      "sha256": "67c98477b53936fd2050d5d995ab6a0a9915456892fa9b894fb46d84e8e635b1",
+      "chars": 130,
+      "source_row_id": "133496",
+      "source_repo_path": "app/Permission.php",
+      "source_repo_name": "victorngure/LMS",
+      "parquet_row_index": 45
+    },
+    {
+      "file": "snippet_0046.php",
+      "sha256": "91dbd5e22f73d7fa93b99e264baf6a7c24f51276dad695109f71535e69df467d",
+      "chars": 2667,
+      "source_row_id": "134133",
+      "source_repo_path": "resources/views/frontend/category.blade.php",
+      "source_repo_name": "ducnamk11/cloth-shop",
+      "parquet_row_index": 46
+    },
+    {
+      "file": "snippet_0047.php",
+      "sha256": "d4dd167ee6f5310ccaec46b3dee09c32dc732ada71bf7a4ab8d665c0d71efa13",
+      "chars": 239,
+      "source_row_id": "138790",
+      "source_repo_path": "routes/web.php",
+      "source_repo_name": "Luigi019/portafolio2021",
+      "parquet_row_index": 47
+    },
+    {
+      "file": "snippet_0048.php",
+      "sha256": "c53a45f6a504a729b66d94da524df23744e52540686153ab6e5ad96cb121d511",
+      "chars": 640,
+      "source_row_id": "139487",
+      "source_repo_path": "app/Http/Controllers/Backend/BackController.php",
+      "source_repo_name": "wesleysilva059/projeto-show",
+      "parquet_row_index": 48
+    },
+    {
+      "file": "snippet_0049.php",
+      "sha256": "75292703ba16cd5e4a9fc51622e0a5090b0928a18db09be066bc95dfb89efa43",
+      "chars": 2753,
+      "source_row_id": "145335",
+      "source_repo_path": "app/Http/Controllers/ProjectsController.php",
+      "source_repo_name": "SOP6/Urenregistratie",
+      "parquet_row_index": 49
+    },
+    {
+      "file": "snippet_0050.php",
+      "sha256": "3fb09fcd5468209bd426f1149e891c654365d11edaec95d853b756147e807d65",
+      "chars": 2084,
+      "source_row_id": "149359",
+      "source_repo_path": "fileSystem/school-projects/production/phpandmysqlfordesignerscas225/cas225week3/index.php",
+      "source_repo_name": "nomad-mystic/nomadmystic",
+      "parquet_row_index": 50
+    },
+    {
+      "file": "snippet_0051.php",
+      "sha256": "c8a888e4aff090ae63dd68d20ba4b0592ed3ab1572aec0ce48b02e3426deeefd",
+      "chars": 1402,
+      "source_row_id": "152551",
+      "source_repo_path": "udemy_8_7/public/typo3conf/ext/memory/Tests/Unit/Domain/Model/HighscoreTest.php",
+      "source_repo_name": "slaleye/typo3-v8.7-extension",
+      "parquet_row_index": 51
+    },
+    {
+      "file": "snippet_0052.php",
+      "sha256": "d52d20d9751774d23e19ac95a2b9d10c77e8152ce4f4d1e14bb7aa5a6bb977ae",
+      "chars": 2218,
+      "source_row_id": "153009",
+      "source_repo_path": "application/views/admin/a_types_view.php",
+      "source_repo_name": "cosmicHatdog/luna_likha_system",
+      "parquet_row_index": 52
+    },
+    {
+      "file": "snippet_0053.php",
+      "sha256": "1edb7e8a20bcbf3643815704f53a5f2dd25916ee634d6899cff1186bfcc90343",
+      "chars": 287,
+      "source_row_id": "153033",
+      "source_repo_path": "tests/compilation-error-when-javascript-style-doc-encountered.phpt",
+      "source_repo_name": "box/augmented_types",
+      "parquet_row_index": 53
+    },
+    {
+      "file": "snippet_0054.php",
+      "sha256": "4cb01a79bc9a26abcafef83f8b36a5649d89555d6c7b8f03e2b7b264e48a4369",
+      "chars": 7648,
+      "source_row_id": "153218",
+      "source_repo_path": "resources/views/admin/detailvouchers/edit.blade.php",
+      "source_repo_name": "trekexol/arya",
+      "parquet_row_index": 54
+    },
+    {
+      "file": "snippet_0055.php",
+      "sha256": "49b8c5cbda6755e3a41eaabf9e495331d8415f9e632cf2bfdb382923f6bec8c2",
+      "chars": 618,
+      "source_row_id": "153613",
+      "source_repo_path": "app/Http/Controllers/AdminController.php",
+      "source_repo_name": "muhammadqasim3/tech-blog",
+      "parquet_row_index": 55
+    },
+    {
+      "file": "snippet_0056.php",
+      "sha256": "ff01a807b1bf0c119e40398f0cc0efce03a8eb47bf01f1e139ccaa0fc0aba8aa",
+      "chars": 239,
+      "source_row_id": "155325",
+      "source_repo_path": "mysite/code/TeamMemberPageHolder.php",
+      "source_repo_name": "vinstah/body",
+      "parquet_row_index": 56
+    },
+    {
+      "file": "snippet_0057.php",
+      "sha256": "95149b2b5d6d61922458eeae8c5a5f24f0031264b9b9bf90bc73194a139beb72",
+      "chars": 859,
+      "source_row_id": "157537",
+      "source_repo_path": "lib/AntifraudAnalysis/Request/AntifraudAnalysisList.php",
+      "source_repo_name": "devpilha/custom-pagarme",
+      "parquet_row_index": 57
+    },
+    {
+      "file": "snippet_0058.php",
+      "sha256": "9a132d8f84b157b46a1fa4c0c68c8c28f9c33ab4ddd8da68a988c80ca1e2c581",
+      "chars": 374,
+      "source_row_id": "158547",
+      "source_repo_path": "app/jadwal_pemeriksaan.php",
+      "source_repo_name": "muhamadanjar/baper",
+      "parquet_row_index": 58
+    },
+    {
+      "file": "snippet_0059.php",
+      "sha256": "cbbaee8e8583cc23ce31085b40c6a8179cd9830a3ca486f1ceb4915d46aee677",
+      "chars": 175,
+      "source_row_id": "165941",
+      "source_repo_path": "application/views/home/list.php",
+      "source_repo_name": "IconyxZr/ISSHO-MERCH-STORE",
+      "parquet_row_index": 59
+    },
+    {
+      "file": "snippet_0060.php",
+      "sha256": "ed7e93d8293aa0a5d381f6db073d8b8ac0712f6d71fe8237767e20b32e29f643",
+      "chars": 102,
+      "source_row_id": "173214",
+      "source_repo_path": "FnTest/DictTreeDelete.php",
+      "source_repo_name": "kxduan/zoombox",
+      "parquet_row_index": 60
+    },
+    {
+      "file": "snippet_0061.php",
+      "sha256": "ea80bd8f6d53486fbe7d4cfe206c4778b42d2cd6b41d42a16fcda408d82072db",
+      "chars": 1952,
+      "source_row_id": "185491",
+      "source_repo_path": "src/applications/differential/field/specification/summary/DifferentialSummaryFieldSpecification.php",
+      "source_repo_name": "joetyson/phabricator",
+      "parquet_row_index": 61
+    },
+    {
+      "file": "snippet_0062.php",
+      "sha256": "40f22eab2e55fb120906a038b29b3dc8c06f54142d5121753b096f1e48456147",
+      "chars": 5146,
+      "source_row_id": "186116",
+      "source_repo_path": "app/Http/Controllers/AgentController.php",
+      "source_repo_name": "djbiswas/C-F",
+      "parquet_row_index": 62
+    },
+    {
+      "file": "snippet_0063.php",
+      "sha256": "c6a17314d0fd4117a603d400d3abbf43d5c73e38ca4b9d2dd62704010c8b3b61",
+      "chars": 146,
+      "source_row_id": "186907",
+      "source_repo_path": "resources/views/panel-cliente/botonestable/opinar.blade.php",
+      "source_repo_name": "answer1986/Clickealo-FInal",
+      "parquet_row_index": 63
+    },
+    {
+      "file": "snippet_0064.php",
+      "sha256": "b1ed52db6179e03fc2d051842855a1a7b16c6451b193c4829ed500793db41b18",
+      "chars": 2816,
+      "source_row_id": "187797",
+      "source_repo_path": "src/Export/OutputSinkFactory.php",
+      "source_repo_name": "wikimedia/mediawiki-extensions-DumpsOnDemand",
+      "parquet_row_index": 64
+    },
+    {
+      "file": "snippet_0065.php",
+      "sha256": "5c69e06daa8669005f1c2d5b28c221b6e76176a3361162c31f4915e601f044f4",
+      "chars": 969,
+      "source_row_id": "191186",
+      "source_repo_path": "routes/api_v1.php",
+      "source_repo_name": "goldenglorys/eden-work-sample",
+      "parquet_row_index": 65
+    },
+    {
+      "file": "snippet_0066.php",
+      "sha256": "457ff578124bc4eb9f05abf8f15a8b741f33d50aa4d4c8f6d4e61359fe6408b0",
+      "chars": 85,
+      "source_row_id": "193577",
+      "source_repo_path": "src/Appwrite/Database/Exception/Duplicate.php",
+      "source_repo_name": "nakshatrasinghh/appwrite",
+      "parquet_row_index": 66
+    },
+    {
+      "file": "snippet_0067.php",
+      "sha256": "d54f35c361ffd684dc654776c10f2f72c2a52a9e4621b46ea83d8d7173b014fc",
+      "chars": 2696,
+      "source_row_id": "194871",
+      "source_repo_path": "vendor/google/apiclient-services/src/TrafficDirectorService/PerXdsConfig.php",
+      "source_repo_name": "thecherepaha/thecherepaha.github.io",
+      "parquet_row_index": 67
+    },
+    {
+      "file": "snippet_0068.php",
+      "sha256": "50e287c4d2a39053211422511c096c34ea117cad94567821953a1bd426bbb6d5",
+      "chars": 768,
+      "source_row_id": "197144",
+      "source_repo_path": "admin/includes/init.php",
+      "source_repo_name": "verteloes/BLOG-OOP",
+      "parquet_row_index": 68
+    },
+    {
+      "file": "snippet_0069.php",
+      "sha256": "06ba5ff25bb6de441691ed088c6e3fc8c7ecb2f82114db8da47ce50f581fc0d4",
+      "chars": 3860,
+      "source_row_id": "1600679",
+      "source_repo_path": "resources/views/includes/navbar.blade.php",
+      "source_repo_name": "AfiaAkterMunni/laravelblog",
+      "parquet_row_index": 69
+    },
+    {
+      "file": "snippet_0070.php",
+      "sha256": "63e5c29fc063c20aee1221ab6a322cad5989f32777104445312086641151179f",
+      "chars": 2318,
+      "source_row_id": "1601005",
+      "source_repo_path": "resources/views/intern/transportistas/index.blade.php",
+      "source_repo_name": "Jacobo23/ecex",
+      "parquet_row_index": 70
+    },
+    {
+      "file": "snippet_0071.php",
+      "sha256": "a92406a024ea443aee35edea9fde1378229383daee95f494db4650b5f9a03fc1",
+      "chars": 17756,
+      "source_row_id": "1601308",
+      "source_repo_path": "vendor/htmlburger/carbon-fields/core/Field/Complex_Field.php",
+      "source_repo_name": "mecca2/bsrg",
+      "parquet_row_index": 71
+    },
+    {
+      "file": "snippet_0072.php",
+      "sha256": "609fca71d75c527d72435c03e9d43e1afb2db02c694dca517fefaaae6efb2805",
+      "chars": 676,
+      "source_row_id": "1601699",
+      "source_repo_path": "application/views/404.php",
+      "source_repo_name": "divakarmalladi/online-exams",
+      "parquet_row_index": 72
+    },
+    {
+      "file": "snippet_0073.php",
+      "sha256": "c940d1bdd4ce09cd35e36ad64e955f4ac741107f3cd167ee293dab6b59b96212",
+      "chars": 2802,
+      "source_row_id": "1606168",
+      "source_repo_path": "app/Http/Controllers/Backend/PermissionController.php",
+      "source_repo_name": "MilesPong/indigo",
+      "parquet_row_index": 73
+    },
+    {
+      "file": "snippet_0074.php",
+      "sha256": "c48377ad3298e8279d738a86511f5f6f97416a66d148dcf30898175a9fdd9e0c",
+      "chars": 1863,
+      "source_row_id": "1606766",
+      "source_repo_path": "database/seeds/CategoriasTableSeeder.php",
+      "source_repo_name": "DevLinks-Leaks/ws.redlinks.com.ec",
+      "parquet_row_index": 74
+    },
+    {
+      "file": "snippet_0075.php",
+      "sha256": "e01e6b83669b70cf34e5dab94a3766987172bb516e4829db81ecadbf76756143",
+      "chars": 662,
+      "source_row_id": "1607198",
+      "source_repo_path": "app/Controllers/PagesController.php",
+      "source_repo_name": "mgasca93/Medical-Pet",
+      "parquet_row_index": 75
+    },
+    {
+      "file": "snippet_0076.php",
+      "sha256": "cbe09d23a8be27e55e4f4d4d3cf682bd1f15ff33f119ad67f830dc62765d43c4",
+      "chars": 543,
+      "source_row_id": "1622628",
+      "source_repo_path": "tests/MySimpleORM/Test/TransformTest.php",
+      "source_repo_name": "delirius325/MySimpleORM",
+      "parquet_row_index": 76
+    },
+    {
+      "file": "snippet_0077.php",
+      "sha256": "8e8e0c0e07ff52a13113a9e8c730a2f923414049ebb4853eedafe20b687b7e7a",
+      "chars": 380,
+      "source_row_id": "1625565",
+      "source_repo_path": "Application/Admin/Controller/IndexController.class.php",
+      "source_repo_name": "cavem/pgymall",
+      "parquet_row_index": 77
+    },
+    {
+      "file": "snippet_0078.php",
+      "sha256": "4f51c49a0d78ab0d40706137f986cf408974f19d278a4c9f6e5115b926bc56c9",
+      "chars": 27212,
+      "source_row_id": "1628581",
+      "source_repo_path": "resources/views/layouts/qliveLayout/qlive_header.blade.php",
+      "source_repo_name": "lucusyuan/qlive",
+      "parquet_row_index": 78
+    },
+    {
+      "file": "snippet_0079.php",
+      "sha256": "cc9a045450a40dca87a89d2c4623d8e84194d1b136827e69578d4fc31c771cd3",
+      "chars": 697,
+      "source_row_id": "1630853",
+      "source_repo_path": "database/seeds/UserSeeder.php",
+      "source_repo_name": "PerhapsSomeone/SocialNetworkFacharbeit",
+      "parquet_row_index": 79
+    },
+    {
+      "file": "snippet_0080.php",
+      "sha256": "1408230a4bfa120e77ed9d1f2abc0cd35ddc33f0c17450526cacc17b62c615e2",
+      "chars": 1095,
+      "source_row_id": "1630982",
+      "source_repo_path": "app/Models/Investigacion.php",
+      "source_repo_name": "cpaucarc/sgc-fcm",
+      "parquet_row_index": 80
+    },
+    {
+      "file": "snippet_0081.php",
+      "sha256": "61bf0d6911e71a41e554e89e0c38f77b075695273e42ab093646e26aaef545ef",
+      "chars": 1133,
+      "source_row_id": "1631415",
+      "source_repo_path": "database/migrations/2022_02_19_001349_criar_tabela_clientes.php",
+      "source_repo_name": "marcospedroweb/senac-mvc-2201",
+      "parquet_row_index": 81
+    },
+    {
+      "file": "snippet_0082.php",
+      "sha256": "ca7175a77cbac345a76c284919774e4cfc4d44b5a7c63ac50837f1c053608605",
+      "chars": 12407,
+      "source_row_id": "1641860",
+      "source_repo_path": "src/PlanIt/RestBundle/Controller/EventRestController.php",
+      "source_repo_name": "marionlecorre/planit",
+      "parquet_row_index": 82
+    },
+    {
+      "file": "snippet_0083.php",
+      "sha256": "fc012574a84ad151241bc6b7c398a836efeba195fdb7073f0be38758b7ff2313",
+      "chars": 2515,
+      "source_row_id": "1645962",
+      "source_repo_path": "frontend/modules/admin/views/dashboard/_expand-invoice-view.php",
+      "source_repo_name": "spiro-stathakis/projects",
+      "parquet_row_index": 83
+    },
+    {
+      "file": "snippet_0084.php",
+      "sha256": "8e87c4f551bfceb882870cfc615778f2878be6577a83575edbfd19cb19b6c9f9",
+      "chars": 4509,
+      "source_row_id": "1654735",
+      "source_repo_path": "resources/views/encuesta/listarencuestas.blade.php",
+      "source_repo_name": "fericell2909/AppMarketNetwork",
+      "parquet_row_index": 84
+    },
+    {
+      "file": "snippet_0085.php",
+      "sha256": "8fe9237d66b40bd22b4c05cd37e0afab3cf1665abcba1e0b2213bebcd375aa14",
+      "chars": 2177,
+      "source_row_id": "1655437",
+      "source_repo_path": "vendor/paragonie/certainty/test/CustomCASupportTest.php",
+      "source_repo_name": "obaidaattaee/elearn-sys",
+      "parquet_row_index": 85
+    },
+    {
+      "file": "snippet_0086.php",
+      "sha256": "0f11777f1c11327f83fd4833f46cfe3c9fb62e7e311651a342a6da8e08a66bba",
+      "chars": 2104,
+      "source_row_id": "1661652",
+      "source_repo_path": "src/UI/Web/Slim/Controllers/DraftAdController.php",
+      "source_repo_name": "MontealegreLuis/ads-api",
+      "parquet_row_index": 86
+    },
+    {
+      "file": "snippet_0087.php",
+      "sha256": "25957af9ba5fd7caa57e1ed987bf6d26e9d9920baa4da7ae0345bb70ae09853c",
+      "chars": 4365,
+      "source_row_id": "1662129",
+      "source_repo_path": "application/views/pages/phic-contribution-matrix-details.php",
+      "source_repo_name": "nadsrice/kawani",
+      "parquet_row_index": 87
+    },
+    {
+      "file": "snippet_0088.php",
+      "sha256": "1fde147c55b6b40c0dbd8f2b03f0048f7b171ce39046aefd0dfc73150391d30f",
+      "chars": 1763,
+      "source_row_id": "1662420",
+      "source_repo_path": "essay/1664-fires-that-changed-cities.php",
+      "source_repo_name": "javanigus/zabuun",
+      "parquet_row_index": 88
+    },
+    {
+      "file": "snippet_0089.php",
+      "sha256": "f22592874e5e9d6c242d3d29d9c3ee6551dd5dfef4ff3937c57cef9ea1b20f50",
+      "chars": 367,
+      "source_row_id": "1663021",
+      "source_repo_path": "app/Transformers/ProjectMemberTransformer.php",
+      "source_repo_name": "farnetani/codeproject",
+      "parquet_row_index": 89
+    },
+    {
+      "file": "snippet_0090.php",
+      "sha256": "c98005d62e275102a5b261c368b719ba43e51c6a8d2631ce37568f1072eb1dc1",
+      "chars": 3465,
+      "source_row_id": "1670862",
+      "source_repo_path": "app/Http/Controllers/EditalController.php",
+      "source_repo_name": "josenildotiago/edital",
+      "parquet_row_index": 90
+    },
+    {
+      "file": "snippet_0091.php",
+      "sha256": "75d77a4dc4868bf3440ed21118b4dc98a5a08b6064429c93f8a70f52ead895bc",
+      "chars": 285,
+      "source_row_id": "1670875",
+      "source_repo_path": "application/controllers/mahasiswa.php",
+      "source_repo_name": "suryamaris/SPK-Hosting-Metode-MOORA",
+      "parquet_row_index": 91
+    },
+    {
+      "file": "snippet_0092.php",
+      "sha256": "e9b4073cdc7fb5a2d019aab00b88f096aabbf5e69dd4d96fd8ff09f402c4512f",
+      "chars": 723,
+      "source_row_id": "1671644",
+      "source_repo_path": "app/Models/Emails.php",
+      "source_repo_name": "cesarmarduk/muestra",
+      "parquet_row_index": 92
+    },
+    {
+      "file": "snippet_0093.php",
+      "sha256": "e40cb0667a924f435040f5be5673c448d56ff3950f65f539c7ca80f4ef779313",
+      "chars": 1907,
+      "source_row_id": "1672943",
+      "source_repo_path": "docs/articles/installation.php",
+      "source_repo_name": "gyohk/knockoutjs-doc-ja",
+      "parquet_row_index": 93
+    },
+    {
+      "file": "snippet_0094.php",
+      "sha256": "25740b026b01a566b9e6ceb56c3c54865f196f5b86f91f0a12f26f92e65bd693",
+      "chars": 2282,
+      "source_row_id": "1675590",
+      "source_repo_path": "views/invoices/cheque.php",
+      "source_repo_name": "motae99/infi",
+      "parquet_row_index": 94
+    },
+    {
+      "file": "snippet_0095.php",
+      "sha256": "2883d6e044e0126bccf44d6e752311d9e8d32d72530bba84f1d1148ef74c5618",
+      "chars": 730,
+      "source_row_id": "1675882",
+      "source_repo_path": "app/Models/Insurance.php",
+      "source_repo_name": "sanyath007/laravel-carservice",
+      "parquet_row_index": 95
+    },
+    {
+      "file": "snippet_0096.php",
+      "sha256": "16d8d57c9636ec0c2132c15da13fa7798d23ae6156351506b0543510c041528b",
+      "chars": 6781,
+      "source_row_id": "1678043",
+      "source_repo_path": "module/Seller/src/Seller/Controller/SellerController.php",
+      "source_repo_name": "iqbaltiger/zend2App",
+      "parquet_row_index": 96
+    },
+    {
+      "file": "snippet_0097.php",
+      "sha256": "f8b9eadc2306b7cae915ce64ffff598873df5aadcf09385e08a4abaa06139090",
+      "chars": 233,
+      "source_row_id": "1683679",
+      "source_repo_path": "packages/phpstan-rules/tests/Rules/ForbiddenNestedCallInAssertMethodCallRule/Fixture/SkipAssertNothing.php",
+      "source_repo_name": "zingimmick/symplify",
+      "parquet_row_index": 97
+    },
+    {
+      "file": "snippet_0098.php",
+      "sha256": "f9efc1cb1a729044ab3ebec65c6fe47b9d24c6f614bedca94411bf05e398690f",
+      "chars": 5505,
+      "source_row_id": "1685508",
+      "source_repo_path": "resources/views/user-views/pages/pelatihan/detail.blade.php",
+      "source_repo_name": "adimertap/Sistem-Informasi-Kepegawaian-Pelindo-Basis-Web",
+      "parquet_row_index": 98
+    },
+    {
+      "file": "snippet_0099.php",
+      "sha256": "4f05d504240f98d4151ac7e04503bdfc94c87eb330975d00fbd7eeb6bbd92e47",
+      "chars": 3060,
+      "source_row_id": "1694219",
+      "source_repo_path": "resources/views/admin/petugas/index.blade.php",
+      "source_repo_name": "riskaamelia15/perpus",
+      "parquet_row_index": 99
+    }
+  ]
+}

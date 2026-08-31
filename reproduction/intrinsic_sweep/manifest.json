@@ -1,0 +1,3900 @@
+{
+  "schema": "intrinsic_sweep_v2/manifest/1",
+  "date": "2026-08-28T06:13:35.381165+00:00",
+  "git_commit": "66d52fdf5442c0f6e56022c7af14c362eb9e5645",
+  "driver": "scripts/sweep_intrinsic_v2.py",
+  "families": {
+    "bloom-3b": {
+      "model_id": "bigscience/bloom-3b",
+      "paper_row": "Bloom-3b",
+      "paper_V": 250880,
+      "provenance": "new"
+    },
+    "gemma3-1b": {
+      "model_id": "google/gemma-3-1b-pt",
+      "paper_row": "Gemma 2 & 3",
+      "paper_V": 256000,
+      "provenance": "new",
+      "paper_V_note": "tab:tokenizers prints 256,000; the tokenizer this row was measured on has 262,144 entries. See module docstring.",
+      "embed_rows_gate": "measurement_only_bypass",
+      "embed_rows_gate_reason": "gemma-3-1b-pt's <image_soft_token> sits at id 262144 == config.vocab_size (262144), so vocab_size_total (262145) exceeds the embedding rows by exactly that one token. The gate guards LM training against out-of-range embedding lookups; this sweep computes MorphScore from tokenizer offsets alone and instantiates no model."
+    },
+    "granite3.0-8b": {
+      "model_id": "ibm-granite/granite-3.0-8b-base",
+      "paper_row": "Granite 3.0-8b",
+      "paper_V": 49152,
+      "provenance": "new"
+    },
+    "llama3.2-1b": {
+      "model_id": "meta-llama/Llama-3.2-1B",
+      "paper_row": "Llama 3",
+      "paper_V": 128256,
+      "provenance": "f15"
+    },
+    "mistral-7b-v0.3": {
+      "model_id": "mistralai/Mistral-7B-v0.3",
+      "paper_row": "Mistral-7b-v0.3",
+      "paper_V": 32768,
+      "provenance": "new"
+    },
+    "mistral-nemo-12b": {
+      "model_id": "mistralai/Mistral-Nemo-Base-2407",
+      "paper_row": "Mistral-Nemo-12b",
+      "paper_V": 131072,
+      "provenance": "new"
+    },
+    "olmo3-7b": {
+      "model_id": "allenai/Olmo-3-1025-7B",
+      "paper_row": null,
+      "paper_V": 100278,
+      "provenance": "new",
+      "paper_V_note": "Not one of tab:tokenizers' 11 families (paper_row=None; excluded from PAPER_GRID). OLMo-3-7B is the paper's own base model and appears separately in sec:olmo / tab:morph-expanded-olmo-perlang, an unreproducible 19-language, 10k-line-corpus, single-seed sweep this family entry exists to replace with an artifact-backed cell grid under THIS driver's 50k-line protocol. paper_V=100278 is config.vocab_size, confirmed via AutoConfig.from_pretrained and identical to the fitted tokenizer's vocab_size_total (100278 entries + 22 added tokens, all within the same 100278 ids) -- not a tab:tokenizers citation.",
+      "old_overlays_not_reused": "las_tokenizers/olmo3-7b_v100k_fineweb2sample_10klines_* were fit under a different (10k-line) protocol and are NOT read or reused by this driver; this family's base and overlays are refit at the sweep's 50k-line protocol under las_tokenizers/intrinsic_sweep_v2/<protocol_tag>/olmo3-7b/."
+    },
+    "phi-3-mini": {
+      "model_id": "microsoft/Phi-3-mini-4k-instruct",
+      "paper_row": "Phi-3-mini",
+      "paper_V": 32064,
+      "provenance": "new",
+      "excluded": "microsoft/Phi-3-mini-4k-instruct's tokenizer.json has pre_tokenizer: null (its space handling lives entirely in a Prepend+Replace normalizer). The base-Unigram conversion pre-tokenizes the corpus with the pre-tokenizer and validate_tokenizers requires it to be non-null, so this family cannot be converted by this pipeline. Confirmed by a failed conversion attempt on 2026-08-27; excluded by decision 2026-08-28. No substitute was used."
+    },
+    "phi-4": {
+      "model_id": "microsoft/phi-4",
+      "paper_row": "Phi-4",
+      "paper_V": 100352,
+      "provenance": "new"
+    },
+    "qwen2_5-0_5b": {
+      "model_id": "Qwen/Qwen2.5-0.5B",
+      "paper_row": "Qwen 2.5 & 3",
+      "paper_V": 151936,
+      "provenance": "f15"
+    },
+    "xglm-2.9b": {
+      "model_id": "facebook/xglm-2.9B",
+      "paper_row": "XGLM-2.9b",
+      "paper_V": 256008,
+      "provenance": "new"
+    },
+    "yi-1.5-6b": {
+      "model_id": "01-ai/Yi-1.5-6B",
+      "paper_row": "Yi-1.5-6b",
+      "paper_V": 64000,
+      "provenance": "new",
+      "tokenizer_rewritten_by_transformers": true
+    }
+  },
+  "langs": {
+    "deu": "deu_Latn",
+    "fin": "fin_Latn",
+    "hun": "hun_Latn",
+    "tur": "tur_Latn",
+    "hin": "hin_Deva",
+    "arb": "arb_Arab",
+    "tam": "tam_Taml"
+  },
+  "paper_table_corrections": {
+    "tab:tokenizers Gemma row |V|": {
+      "published": 256000,
+      "actual": 262144,
+      "evidence": "The row's Devanagari-Complete count (13,684 in tab:deva-eng-subwords) is reproduced exactly by google/gemma-3-1b-pt and not by google/gemma-2-2b (1,514). gemma-3-1b-pt's tokenizer has 262,144 vocab entries (262,145 counting the added token at id 262144); the published 256,000 is Gemma 2's size."
+    },
+    "tab:tokenizers Gemma row label": {
+      "published": "Gemma 2 & 3",
+      "problem": "Gemma 2 and Gemma 3 do not share a tokenizer: 256,000 vs 262,144 entries, 1,514 vs 13,684 Devanagari-Complete pieces. One row cannot cover both. The measurements in the paper are Gemma 3's."
+    }
+  },
+  "excluded_families": {
+    "phi-3-mini": "microsoft/Phi-3-mini-4k-instruct's tokenizer.json has pre_tokenizer: null (its space handling lives entirely in a Prepend+Replace normalizer). The base-Unigram conversion pre-tokenizes the corpus with the pre-tokenizer and validate_tokenizers requires it to be non-null, so this family cannot be converted by this pipeline. Confirmed by a failed conversion attempt on 2026-08-27; excluded by decision 2026-08-28. No substitute was used."
+  },
+  "not_paper_rows": [
+    "olmo3-7b"
+  ],
+  "conversions": {
+    "bloom-3b__fw2-100m_50klines_scriptfilt_base-tur-fin-hun-arb-hin_softem_seed-baselogscores_em10.json": {
+      "family": "bloom-3b",
+      "status": "pass",
+      "error": null,
+      "base_sha256": "a3fb35a3eb9a0d39d3d83e2b6c2cc4885f9a15f14cfaeee6e617891c6a8ecbcc",
+      "wall_seconds": 10.42,
+      "family_no_longer_in_sweep": false
+    },
+    "gemma2-2b__fw2-100m_50klines_scriptfilt_base-tur-fin-hun-arb-hin_softem_seed-baselogscores_em10.json": {
+      "family": "gemma2-2b",
+      "status": "pass",
+      "error": null,
+      "base_sha256": "64c348dd095efbdebbb62ef4a0bbf4b80af6ae428ea25f9617e0e4b5091b6fac",
+      "wall_seconds": 14.7,
+      "family_no_longer_in_sweep": true
+    },
+    "gemma3-1b__fw2-100m_50klines_scriptfilt_base-tur-fin-hun-arb-hin_softem_seed-baselogscores_em10.json": {
+      "family": "gemma3-1b",
+      "status": "pass",
+      "error": null,
+      "base_sha256": "f73529fd3995c46b9db445bb1a0186dc191fdd916b8f76b28d3f1d9bea332746",
+      "wall_seconds": 16.28,
+      "family_no_longer_in_sweep": false
+    },
+    "granite3.0-8b__fw2-100m_50klines_scriptfilt_base-tur-fin-hun-arb-hin_softem_seed-baselogscores_em10.json": {
+      "family": "granite3.0-8b",
+      "status": "pass",
+      "error": null,
+      "base_sha256": "d00a1b38d1207fa085343817d1eb121a7ff48862c87aadf7e6cb9a401d1bfdd7",
+      "wall_seconds": 5.96,
+      "family_no_longer_in_sweep": false
+    },
+    "llama3.2-1b__fw2-100m_50klines_scriptfilt_base-tur-fin-hun-arb-hin_softem_seed-baselogscores_em10.json": {
+      "family": "llama3.2-1b",
+      "status": "pass",
+      "error": null,
+      "base_sha256": "629241a726ba71d8912c99b369a7110255f2d496667b87095aaa5e65be1c65c0",
+      "wall_seconds": 522.94,
+      "family_no_longer_in_sweep": false
+    },
+    "mistral-7b-v0.3__fw2-100m_50klines_scriptfilt_base-tur-fin-hun-arb-hin_softem_seed-baselogscores_em10.json": {
+      "family": "mistral-7b-v0.3",
+      "status": "pass",
+      "error": null,
+      "base_sha256": "65780bb7887e3395f8e473e6dfc79fe3bb86b437c1a07b6f5c86e354cfe3173b",
+      "wall_seconds": 5.96,
+      "family_no_longer_in_sweep": false
+    },
+    "mistral-nemo-12b__fw2-100m_50klines_scriptfilt_base-tur-fin-hun-arb-hin_softem_seed-baselogscores_em10.json": {
+      "family": "mistral-nemo-12b",
+      "status": "pass",
+      "error": null,
+      "base_sha256": "7cfa6a7fd35f4bf3d84dc16e5b9be815280c624677a0be564a76285d28329921",
+      "wall_seconds": 10.15,
+      "family_no_longer_in_sweep": false
+    },
+    "olmo3-7b__fw2-100m_50klines_scriptfilt_base-tur-fin-hun-arb-hin_softem_seed-baselogscores_em10.json": {
+      "family": "olmo3-7b",
+      "status": "pass",
+      "error": null,
+      "base_sha256": "4944bfb4cd18177665960d152577471350d5802d89f538e1bb7e8686112502bd",
+      "wall_seconds": 793.2,
+      "family_no_longer_in_sweep": false
+    },
+    "phi-3-mini__fw2-100m_50klines_scriptfilt_base-tur-fin-hun-arb-hin_softem_seed-baselogscores_em10.json": {
+      "family": "phi-3-mini",
+      "status": "fail",
+      "error": "RuntimeError: phi-3-mini (microsoft/Phi-3-mini-4k-instruct): the tokenizer at <repo>/las_tokenizers/intrinsic_sweep_v2/fw2-100m_50klines_scriptfilt_base-tur-fin-hun-arb-hin_softem_seed-baselogscores_em10/phi-3-mini/model_tokenizer/tokenizer.json has no pre_tokenizer. The base-Unigram conversion pre-tokenizes the corpus with it and validate_tokenizers requires it to be non-null, so this family cannot be converted by this pipeline. EXCLUDED.",
+      "base_sha256": null,
+      "wall_seconds": 27.01,
+      "family_no_longer_in_sweep": false
+    },
+    "phi-4__fw2-100m_50klines_scriptfilt_base-tur-fin-hun-arb-hin_softem_seed-baselogscores_em10.json": {
+      "family": "phi-4",
+      "status": "pass",
+      "error": null,
+      "base_sha256": "13159621c8b2c3e25a944b354131998997c1d4e7d3ee6830abf34c5acff4e20d",
+      "wall_seconds": 5.42,
+      "family_no_longer_in_sweep": false
+    },
+    "qwen2_5-0_5b__fw2-100m_50klines_scriptfilt_base-tur-fin-hun-arb-hin_softem_seed-baselogscores_em10.json": {
+      "family": "qwen2_5-0_5b",
+      "status": "pass",
+      "error": null,
+      "base_sha256": "7a74f4d0c41b726425fceebab6007686bec2168ccb8840b5666c24af7a8e6801",
+      "wall_seconds": 10.92,
+      "family_no_longer_in_sweep": false
+    },
+    "xglm-2.9b__fw2-100m_50klines_scriptfilt_base-tur-fin-hun-arb-hin_softem_seed-baselogscores_em10.json": {
+      "family": "xglm-2.9b",
+      "status": "pass",
+      "error": null,
+      "base_sha256": "bf5cee6f6a0f17d6c576e075bd129bbe5d269706f0a578af350f4c7e7b1bb873",
+      "wall_seconds": 9.33,
+      "family_no_longer_in_sweep": false
+    },
+    "yi-1.5-6b__fw2-100m_50klines_scriptfilt_base-tur-fin-hun-arb-hin_softem_seed-baselogscores_em10.json": {
+      "family": "yi-1.5-6b",
+      "status": "pass",
+      "error": null,
+      "base_sha256": "21e078158caa8fa69fdd7acbaa6344bd2dbc8ca3113bbfe87aea33a870df659c",
+      "wall_seconds": 8.77,
+      "family_no_longer_in_sweep": false
+    }
+  },
+  "cells": {
+    "bloom-3b__arb_Arab__stem_eq_lemma-False__fw2-100m_50klines_scriptfilt_base-tur-fin-hun-arb-hin_softem_seed-baselogscores_em10.json": {
+      "family": "bloom-3b",
+      "lang": "arb",
+      "stem_eq_lemma": false,
+      "protocol_tag": "fw2-100m_50klines_scriptfilt_base-tur-fin-hun-arb-hin_softem_seed-baselogscores_em10",
+      "harness_sha256": "bd82ce343b437fb293ebc350394563022930750be3ac2fd8f38a04b5e1f13de3",
+      "gold_sha256": "896f572adc9652c138ea02326e9a701648a1336dc559da06c5a68aecb8cbf10f",
+      "arm_sha256": {
+        "Original(BPE)": "d963066d6adae5034a1dc114c3ac444512de09928cf14ed4562ba94d9a440e66",
+        "base_tokenizer.json": "a3fb35a3eb9a0d39d3d83e2b6c2cc4885f9a15f14cfaeee6e617891c6a8ecbcc",
+        "LangMAP(langspec)": "b51859ca9fb855f4eecb82a079518eb6655a41873791712f4cf492cf2036dfea"
+      },
+      "metrics": {
+        "Original(BPE)": {
+          "micro_f1": 0.22907899074918062,
+          "macro_f1": 0.26445599482353754,
+          "morphscore_recall": 0.6640056741013569,
+          "morphscore_precision": 0.5779932393686154,
+          "micro_precision": 0.21083821219477367,
+          "micro_recall": 0.25077491401638996,
+          "mean_token_char_ratio": 0.41644610101559615,
+          "num_samples": 11231,
+          "score_seconds": 3.3
+        },
+        "base_tokenizer.json": {
+          "micro_f1": 0.2853523858531083,
+          "macro_f1": 0.3216732865973528,
+          "morphscore_recall": 0.6962431714604845,
+          "morphscore_precision": 0.5967104799847175,
+          "micro_precision": 0.2672375444839858,
+          "micro_recall": 0.3061016517345336,
+          "mean_token_char_ratio": 0.40203570606028094,
+          "num_samples": 11231,
+          "score_seconds": 3.55
+        },
+        "LangMAP(langspec)": {
+          "micro_f1": 0.2927921733493114,
+          "macro_f1": 0.3293430634120435,
+          "morphscore_recall": 0.7038998392052425,
+          "morphscore_precision": 0.5996722454145904,
+          "micro_precision": 0.27234851253563336,
+          "micro_recall": 0.3165540971071747,
+          "mean_token_char_ratio": 0.40794276993145184,
+          "num_samples": 11221,
+          "score_seconds": 3.63
+        }
+      }
+    },
+    "bloom-3b__deu_Latn__stem_eq_lemma-False__fw2-100m_50klines_scriptfilt_base-tur-fin-hun-arb-hin_softem_seed-baselogscores_em10.json": {
+      "family": "bloom-3b",
+      "lang": "deu",
+      "stem_eq_lemma": false,
+      "protocol_tag": "fw2-100m_50klines_scriptfilt_base-tur-fin-hun-arb-hin_softem_seed-baselogscores_em10",
+      "harness_sha256": "bd82ce343b437fb293ebc350394563022930750be3ac2fd8f38a04b5e1f13de3",
+      "gold_sha256": "47945ff9cb6abe9c2f0ac86aa970297fc9502bee921758b67bfc42ef9bd0c570",
+      "arm_sha256": {
+        "Original(BPE)": "d963066d6adae5034a1dc114c3ac444512de09928cf14ed4562ba94d9a440e66",
+        "base_tokenizer.json": "a3fb35a3eb9a0d39d3d83e2b6c2cc4885f9a15f14cfaeee6e617891c6a8ecbcc",
+        "LangMAP(langspec)": "6fc47ba8fb4b2d84daaba323cb26bcd0a90f4f9cf88a4101fea62d84c830d638"
+      },
+      "metrics": {
+        "Original(BPE)": {
+          "micro_f1": 0.07315512329496912,
+          "macro_f1": 0.08553954387421263,
+          "morphscore_recall": 0.4517723813588441,
+          "morphscore_precision": 0.36089138308511265,
+          "micro_precision": 0.053797861463340056,
+          "micro_recall": 0.11427179638105484,
+          "mean_token_char_ratio": 0.36319218574331474,
+          "num_samples": 47723,
+          "score_seconds": 10.55
+        },
+        "base_tokenizer.json": {
+          "micro_f1": 0.12708789693666672,
+          "macro_f1": 0.14476016360178603,
+          "morphscore_recall": 0.4467551413637385,
+          "morphscore_precision": 0.2903932133369412,
+          "micro_precision": 0.09146983266136226,
+          "micro_recall": 0.20813501527345057,
+          "mean_token_char_ratio": 0.39006993998315254,
+          "num_samples": 47723,
+          "score_seconds": 10.33
+        },
+        "LangMAP(langspec)": {
+          "micro_f1": 0.14604581362171076,
+          "macro_f1": 0.16351840466232986,
+          "morphscore_recall": 0.6314623572313007,
+          "morphscore_precision": 0.43134971356574836,
+          "micro_precision": 0.10696662924210547,
+          "micro_recall": 0.230116605944975,
+          "mean_token_char_ratio": 0.3693416816919539,
+          "num_samples": 47723,
+          "score_seconds": 10.94
+        }
+      }
+    },
+    "bloom-3b__fin_Latn__stem_eq_lemma-False__fw2-100m_50klines_scriptfilt_base-tur-fin-hun-arb-hin_softem_seed-baselogscores_em10.json": {
+      "family": "bloom-3b",
+      "lang": "fin",
+      "stem_eq_lemma": false,
+      "protocol_tag": "fw2-100m_50klines_scriptfilt_base-tur-fin-hun-arb-hin_softem_seed-baselogscores_em10",
+      "harness_sha256": "bd82ce343b437fb293ebc350394563022930750be3ac2fd8f38a04b5e1f13de3",
+      "gold_sha256": "5120f4b2b23112565f83c524bbc711761cc8864b96c348c761946aa47381b9cb",
+      "arm_sha256": {
+        "Original(BPE)": "d963066d6adae5034a1dc114c3ac444512de09928cf14ed4562ba94d9a440e66",
+        "base_tokenizer.json": "a3fb35a3eb9a0d39d3d83e2b6c2cc4885f9a15f14cfaeee6e617891c6a8ecbcc",
+        "LangMAP(langspec)": "3b439a50805337293423b64fb0aad13cd1c26fbfd1bcae409e3f39c888c6cce3"
+      },
+      "metrics": {
+        "Original(BPE)": {
+          "micro_f1": 0.06783731627873071,
+          "macro_f1": 0.08387984061436181,
+          "morphscore_recall": 0.40134061820205613,
+          "morphscore_precision": 0.18082938751439523,
+          "micro_precision": 0.05041053711939788,
+          "micro_recall": 0.1036787728823895,
+          "mean_token_char_ratio": 0.40436719060694903,
+          "num_samples": 40776,
+          "score_seconds": 9.24
+        },
+        "base_tokenizer.json": {
+          "micro_f1": 0.08465522384012583,
+          "macro_f1": 0.10362745391899686,
+          "morphscore_recall": 0.46685890625790705,
+          "morphscore_precision": 0.20084050459060723,
+          "micro_precision": 0.06320569180934753,
+          "micro_recall": 0.1281413812109343,
+          "mean_token_char_ratio": 0.39972149421141123,
+          "num_samples": 40776,
+          "score_seconds": 7.49
+        },
+        "LangMAP(langspec)": {
+          "micro_f1": 0.08539858535652838,
+          "macro_f1": 0.10478808987795939,
+          "morphscore_recall": 0.48995295188951543,
+          "morphscore_precision": 0.204678997953297,
+          "micro_precision": 0.06335483358577693,
+          "micro_recall": 0.130967598184654,
+          "mean_token_char_ratio": 0.407876613905698,
+          "num_samples": 40776,
+          "score_seconds": 8.06
+        }
+      }
+    },
+    "bloom-3b__hin_Deva__stem_eq_lemma-False__fw2-100m_50klines_scriptfilt_base-tur-fin-hun-arb-hin_softem_seed-baselogscores_em10.json": {
+      "family": "bloom-3b",
+      "lang": "hin",
+      "stem_eq_lemma": false,
+      "protocol_tag": "fw2-100m_50klines_scriptfilt_base-tur-fin-hun-arb-hin_softem_seed-baselogscores_em10",
+      "harness_sha256": "bd82ce343b437fb293ebc350394563022930750be3ac2fd8f38a04b5e1f13de3",
+      "gold_sha256": "0ce256a9b55eddf21061d093949b7c36ccf88b6f0855c6d7d49665911b8ef2a1",
+      "arm_sha256": {
+        "Original(BPE)": "d963066d6adae5034a1dc114c3ac444512de09928cf14ed4562ba94d9a440e66",
+        "base_tokenizer.json": "a3fb35a3eb9a0d39d3d83e2b6c2cc4885f9a15f14cfaeee6e617891c6a8ecbcc",
+        "LangMAP(langspec)": "570aae950444fb9c112b190880ea3b8c0d7f37774278e61536b2ad10241d4ce4"
+      },
+      "metrics": {
+        "Original(BPE)": {
+          "micro_f1": 0.20850211440017805,
+          "macro_f1": 0.219220795817675,
+          "morphscore_recall": 0.6892631779848163,
+          "morphscore_precision": 0.580247010354503,
+          "micro_precision": 0.18043143297380584,
+          "micro_recall": 0.24691618344754876,
+          "mean_token_char_ratio": 0.4697881718838301,
+          "num_samples": 4723,
+          "score_seconds": 139.97
+        },
+        "base_tokenizer.json": {
+          "micro_f1": 0.24477261437022985,
+          "macro_f1": 0.2572661439240718,
+          "morphscore_recall": 0.738307110565064,
+          "morphscore_precision": 0.6041802495096708,
+          "micro_precision": 0.2140938536893664,
+          "micro_recall": 0.2857142857142857,
+          "mean_token_char_ratio": 0.45893572123146414,
+          "num_samples": 4723,
+          "score_seconds": 2.48
+        },
+        "LangMAP(langspec)": {
+          "micro_f1": 0.24558399423215574,
+          "macro_f1": 0.25852990278764687,
+          "morphscore_recall": 0.7191619052163338,
+          "morphscore_precision": 0.5853676498571864,
+          "micro_precision": 0.21444872904698198,
+          "micro_recall": 0.28729573010015813,
+          "mean_token_char_ratio": 0.4606110411711289,
+          "num_samples": 4723,
+          "score_seconds": 2.06
+        }
+      }
+    },
+    "bloom-3b__hun_Latn__stem_eq_lemma-False__fw2-100m_50klines_scriptfilt_base-tur-fin-hun-arb-hin_softem_seed-baselogscores_em10.json": {
+      "family": "bloom-3b",
+      "lang": "hun",
+      "stem_eq_lemma": false,
+      "protocol_tag": "fw2-100m_50klines_scriptfilt_base-tur-fin-hun-arb-hin_softem_seed-baselogscores_em10",
+      "harness_sha256": "bd82ce343b437fb293ebc350394563022930750be3ac2fd8f38a04b5e1f13de3",
+      "gold_sha256": "f0dfe8467291a60da39c13366562bc14af7b0142cf70110b7a867665dbfd3faf",
+      "arm_sha256": {
+        "Original(BPE)": "d963066d6adae5034a1dc114c3ac444512de09928cf14ed4562ba94d9a440e66",
+        "base_tokenizer.json": "a3fb35a3eb9a0d39d3d83e2b6c2cc4885f9a15f14cfaeee6e617891c6a8ecbcc",
+        "LangMAP(langspec)": "8f815de6f21109934b5e4723901c8747c13a40ac135bfef585c1601e954c1f6f"
+      },
+      "metrics": {
+        "Original(BPE)": {
+          "micro_f1": 0.16513973807549132,
+          "macro_f1": 0.18978595795710881,
+          "morphscore_recall": 0.6569848997442027,
+          "morphscore_precision": 0.19280777647598316,
+          "micro_precision": 0.1200605771657739,
+          "micro_recall": 0.2644224830142063,
+          "mean_token_char_ratio": 0.4618060479387801,
+          "num_samples": 7924,
+          "score_seconds": 1.98
+        },
+        "base_tokenizer.json": {
+          "micro_f1": 0.1949029602038816,
+          "macro_f1": 0.2207347989339704,
+          "morphscore_recall": 0.7087218417361171,
+          "morphscore_precision": 0.20486946972217973,
+          "micro_precision": 0.14276278001148765,
+          "micro_recall": 0.307041383570105,
+          "mean_token_char_ratio": 0.45141941530064683,
+          "num_samples": 7924,
+          "score_seconds": 2.2
+        },
+        "LangMAP(langspec)": {
+          "micro_f1": 0.20178863352245408,
+          "macro_f1": 0.23033067734062732,
+          "morphscore_recall": 0.7614489644360093,
+          "morphscore_precision": 0.21493523300603018,
+          "micro_precision": 0.14651584974165618,
+          "micro_recall": 0.3240271772699197,
+          "mean_token_char_ratio": 0.4644853247021456,
+          "num_samples": 7924,
+          "score_seconds": 2.11
+        }
+      }
+    },
+    "bloom-3b__tam_Taml__stem_eq_lemma-False__fw2-100m_50klines_scriptfilt_base-tur-fin-hun-arb-hin_softem_seed-baselogscores_em10.json": {
+      "family": "bloom-3b",
+      "lang": "tam",
+      "stem_eq_lemma": false,
+      "protocol_tag": "fw2-100m_50klines_scriptfilt_base-tur-fin-hun-arb-hin_softem_seed-baselogscores_em10",
+      "harness_sha256": "bd82ce343b437fb293ebc350394563022930750be3ac2fd8f38a04b5e1f13de3",
+      "gold_sha256": "31448fcaf1c3e3f65b85386250382fb63b6ede33910c30be7298d4c38b24179d",
+      "arm_sha256": {
+        "Original(BPE)": "d963066d6adae5034a1dc114c3ac444512de09928cf14ed4562ba94d9a440e66",
+        "base_tokenizer.json": "a3fb35a3eb9a0d39d3d83e2b6c2cc4885f9a15f14cfaeee6e617891c6a8ecbcc",
+        "LangMAP(langspec)": "b5facae0d17ef37338901ba7c8dc7e69719e581ef377ba4d6bc56e35d20ee2ea"
+      },
+      "metrics": {
+        "Original(BPE)": {
+          "micro_f1": 0.13340583650534713,
+          "macro_f1": 0.14876593845058567,
+          "morphscore_recall": 0.3236682400539448,
+          "morphscore_precision": 0.16759678472423464,
+          "micro_precision": 0.10906935388263189,
+          "micro_recall": 0.17172188520765283,
+          "mean_token_char_ratio": 0.349444140548321,
+          "num_samples": 2136,
+          "score_seconds": 155.55
+        },
+        "base_tokenizer.json": {
+          "micro_f1": 0.1344770337576093,
+          "macro_f1": 0.14920474914931295,
+          "morphscore_recall": 0.3260283209710056,
+          "morphscore_precision": 0.1703063288700569,
+          "micro_precision": 0.11119585112873703,
+          "micro_recall": 0.1700886607559496,
+          "mean_token_char_ratio": 0.3397807281128258,
+          "num_samples": 2136,
+          "score_seconds": 2.67
+        },
+        "LangMAP(langspec)": {
+          "micro_f1": 0.1762106426072546,
+          "macro_f1": 0.19313336638572134,
+          "morphscore_recall": 0.4423465947403937,
+          "morphscore_precision": 0.211255605861142,
+          "micro_precision": 0.14552919708029197,
+          "micro_recall": 0.22328511432571163,
+          "mean_token_char_ratio": 0.3408465039152589,
+          "num_samples": 2136,
+          "score_seconds": 2.25
+        }
+      }
+    },
+    "bloom-3b__tur_Latn__stem_eq_lemma-False__fw2-100m_50klines_scriptfilt_base-tur-fin-hun-arb-hin_softem_seed-baselogscores_em10.json": {
+      "family": "bloom-3b",
+      "lang": "tur",
+      "stem_eq_lemma": false,
+      "protocol_tag": "fw2-100m_50klines_scriptfilt_base-tur-fin-hun-arb-hin_softem_seed-baselogscores_em10",
+      "harness_sha256": "bd82ce343b437fb293ebc350394563022930750be3ac2fd8f38a04b5e1f13de3",
+      "gold_sha256": "5bff599769937acadb0d4444785968ca1bc5eacc3714de596e79806ab186c188",
+      "arm_sha256": {
+        "Original(BPE)": "d963066d6adae5034a1dc114c3ac444512de09928cf14ed4562ba94d9a440e66",
+        "base_tokenizer.json": "a3fb35a3eb9a0d39d3d83e2b6c2cc4885f9a15f14cfaeee6e617891c6a8ecbcc",
+        "LangMAP(langspec)": "0d839afdd885f03465babf76d54a708cc7c4ca5c0f94562569d9cc7673656b81"
+      },
+      "metrics": {
+        "Original(BPE)": {
+          "micro_f1": 0.11193996020852748,
+          "macro_f1": 0.13506460842272966,
+          "morphscore_recall": 0.5722755073672489,
+          "morphscore_precision": 0.1828896836027757,
+          "micro_precision": 0.08329835082458771,
+          "micro_recall": 0.17059952406540263,
+          "mean_token_char_ratio": 0.4651063638160809,
+          "num_samples": 32560,
+          "score_seconds": 5.9
+        },
+        "base_tokenizer.json": {
+          "micro_f1": 0.1401824487180791,
+          "macro_f1": 0.1672004235969752,
+          "morphscore_recall": 0.7076522101751456,
+          "morphscore_precision": 0.222858380962007,
+          "micro_precision": 0.10480296221953575,
+          "micro_recall": 0.2116220158133108,
+          "mean_token_char_ratio": 0.46023877236246186,
+          "num_samples": 32560,
+          "score_seconds": 6.03
+        },
+        "LangMAP(langspec)": {
+          "micro_f1": 0.13815453352433807,
+          "macro_f1": 0.16556517338100568,
+          "morphscore_recall": 0.7232763413956075,
+          "morphscore_precision": 0.2235649662557484,
+          "micro_precision": 0.10252693088297611,
+          "micro_recall": 0.21172948491594382,
+          "mean_token_char_ratio": 0.4709873556266129,
+          "num_samples": 32560,
+          "score_seconds": 6.54
+        }
+      }
+    },
+    "gemma3-1b__arb_Arab__stem_eq_lemma-False__fw2-100m_50klines_scriptfilt_base-tur-fin-hun-arb-hin_softem_seed-baselogscores_em10.json": {
+      "family": "gemma3-1b",
+      "lang": "arb",
+      "stem_eq_lemma": false,
+      "protocol_tag": "fw2-100m_50klines_scriptfilt_base-tur-fin-hun-arb-hin_softem_seed-baselogscores_em10",
+      "harness_sha256": "bd82ce343b437fb293ebc350394563022930750be3ac2fd8f38a04b5e1f13de3",
+      "gold_sha256": "896f572adc9652c138ea02326e9a701648a1336dc559da06c5a68aecb8cbf10f",
+      "arm_sha256": {
+        "Original(BPE)": "daab2354f8a74e70d70b4d1f804939b68a8c9624dd06cb7858e52dd8970e9726",
+        "base_tokenizer.json": "f73529fd3995c46b9db445bb1a0186dc191fdd916b8f76b28d3f1d9bea332746",
+        "LangMAP(langspec)": "a9b12b958918b0490d6bda92bcd4043928c3bdad7cfbf4449882bb7e8578832b"
+      },
+      "metrics": {
+        "Original(BPE)": {
+          "micro_f1": 0.20707126335499504,
+          "macro_f1": 0.22245216723384234,
+          "morphscore_recall": 0.6118639045284451,
+          "morphscore_precision": 0.4777288387226294,
+          "micro_precision": 0.1796349969742332,
+          "micro_recall": 0.24439918533604887,
+          "mean_token_char_ratio": 0.4780182387205721,
+          "num_samples": 10757,
+          "score_seconds": 5.67
+        },
+        "base_tokenizer.json": {
+          "micro_f1": 0.21609229959788043,
+          "macro_f1": 0.2350991484141711,
+          "morphscore_recall": 0.5966289208775333,
+          "morphscore_precision": 0.4766095840180691,
+          "micro_precision": 0.1907573897754039,
+          "micro_recall": 0.24918743228602383,
+          "mean_token_char_ratio": 0.460100319124029,
+          "num_samples": 10755,
+          "score_seconds": 5.36
+        },
+        "LangMAP(langspec)": {
+          "micro_f1": 0.2253709944699946,
+          "macro_f1": 0.24464784368923087,
+          "morphscore_recall": 0.6066835962826993,
+          "morphscore_precision": 0.478810964627922,
+          "micro_precision": 0.1974873551966063,
+          "micro_recall": 0.2624230335617032,
+          "mean_token_char_ratio": 0.46788678000044603,
+          "num_samples": 10742,
+          "score_seconds": 5.41
+        }
+      }
+    },
+    "gemma3-1b__deu_Latn__stem_eq_lemma-False__fw2-100m_50klines_scriptfilt_base-tur-fin-hun-arb-hin_softem_seed-baselogscores_em10.json": {
+      "family": "gemma3-1b",
+      "lang": "deu",
+      "stem_eq_lemma": false,
+      "protocol_tag": "fw2-100m_50klines_scriptfilt_base-tur-fin-hun-arb-hin_softem_seed-baselogscores_em10",
+      "harness_sha256": "bd82ce343b437fb293ebc350394563022930750be3ac2fd8f38a04b5e1f13de3",
+      "gold_sha256": "47945ff9cb6abe9c2f0ac86aa970297fc9502bee921758b67bfc42ef9bd0c570",
+      "arm_sha256": {
+        "Original(BPE)": "daab2354f8a74e70d70b4d1f804939b68a8c9624dd06cb7858e52dd8970e9726",
+        "base_tokenizer.json": "f73529fd3995c46b9db445bb1a0186dc191fdd916b8f76b28d3f1d9bea332746",
+        "LangMAP(langspec)": "af4e4799596dde32e0492e3d7b2215b8ad8214bce34829e440cfce070f179282"
+      },
+      "metrics": {
+        "Original(BPE)": {
+          "micro_f1": 0.08482783956183415,
+          "macro_f1": 0.09465606822461974,
+          "morphscore_recall": 0.4773270824266276,
+          "morphscore_precision": 0.4117309553831507,
+          "micro_precision": 0.06686165545481135,
+          "micro_recall": 0.11599703664613292,
+          "mean_token_char_ratio": 0.30167477653799046,
+          "num_samples": 47723,
+          "score_seconds": 21.95
+        },
+        "base_tokenizer.json": {
+          "micro_f1": 0.1527022544027924,
+          "macro_f1": 0.1671734189876938,
+          "morphscore_recall": 0.4609575380610981,
+          "morphscore_precision": 0.33003804465736825,
+          "micro_precision": 0.11843142957821318,
+          "micro_recall": 0.21488374925155018,
+          "mean_token_char_ratio": 0.31700445755257906,
+          "num_samples": 47723,
+          "score_seconds": 22.56
+        },
+        "LangMAP(langspec)": {
+          "micro_f1": 0.1734224112210947,
+          "macro_f1": 0.18541915012070795,
+          "morphscore_recall": 0.6035007119949068,
+          "morphscore_precision": 0.4643811710618277,
+          "micro_precision": 0.13810526315789473,
+          "micro_recall": 0.23300892050701766,
+          "mean_token_char_ratio": 0.29482145791486497,
+          "num_samples": 47723,
+          "score_seconds": 20.96
+        }
+      }
+    },
+    "gemma3-1b__fin_Latn__stem_eq_lemma-False__fw2-100m_50klines_scriptfilt_base-tur-fin-hun-arb-hin_softem_seed-baselogscores_em10.json": {
+      "family": "gemma3-1b",
+      "lang": "fin",
+      "stem_eq_lemma": false,
+      "protocol_tag": "fw2-100m_50klines_scriptfilt_base-tur-fin-hun-arb-hin_softem_seed-baselogscores_em10",
+      "harness_sha256": "bd82ce343b437fb293ebc350394563022930750be3ac2fd8f38a04b5e1f13de3",
+      "gold_sha256": "5120f4b2b23112565f83c524bbc711761cc8864b96c348c761946aa47381b9cb",
+      "arm_sha256": {
+        "Original(BPE)": "daab2354f8a74e70d70b4d1f804939b68a8c9624dd06cb7858e52dd8970e9726",
+        "base_tokenizer.json": "f73529fd3995c46b9db445bb1a0186dc191fdd916b8f76b28d3f1d9bea332746",
+        "LangMAP(langspec)": "6ce95b641fbd9f9b8b93d7c83f05f5acefbe8580eeb8ea701780e9b26afddf84"
+      },
+      "metrics": {
+        "Original(BPE)": {
+          "micro_f1": 0.07747654780428945,
+          "macro_f1": 0.09338583306312168,
+          "morphscore_recall": 0.3673799767288941,
+          "morphscore_precision": 0.18053622217987306,
+          "micro_precision": 0.059272935238024196,
+          "micro_recall": 0.11181733960339146,
+          "mean_token_char_ratio": 0.3714108308272789,
+          "num_samples": 40776,
+          "score_seconds": 17.14
+        },
+        "base_tokenizer.json": {
+          "micro_f1": 0.10461558980685712,
+          "macro_f1": 0.1235854472220908,
+          "morphscore_recall": 0.44726564476147307,
+          "morphscore_precision": 0.20514053792169026,
+          "micro_precision": 0.08114941190924198,
+          "micro_recall": 0.14717436937834955,
+          "mean_token_char_ratio": 0.35816623239886497,
+          "num_samples": 40776,
+          "score_seconds": 17.29
+        },
+        "LangMAP(langspec)": {
+          "micro_f1": 0.10955476712946823,
+          "macro_f1": 0.129873775512794,
+          "morphscore_recall": 0.4907067334446318,
+          "morphscore_precision": 0.2158965466106173,
+          "micro_precision": 0.08424166729745414,
+          "micro_recall": 0.15661463769305642,
+          "mean_token_char_ratio": 0.3674832536206374,
+          "num_samples": 40776,
+          "score_seconds": 17.19
+        }
+      }
+    },
+    "gemma3-1b__hin_Deva__stem_eq_lemma-False__fw2-100m_50klines_scriptfilt_base-tur-fin-hun-arb-hin_softem_seed-baselogscores_em10.json": {
+      "family": "gemma3-1b",
+      "lang": "hin",
+      "stem_eq_lemma": false,
+      "protocol_tag": "fw2-100m_50klines_scriptfilt_base-tur-fin-hun-arb-hin_softem_seed-baselogscores_em10",
+      "harness_sha256": "bd82ce343b437fb293ebc350394563022930750be3ac2fd8f38a04b5e1f13de3",
+      "gold_sha256": "0ce256a9b55eddf21061d093949b7c36ccf88b6f0855c6d7d49665911b8ef2a1",
+      "arm_sha256": {
+        "Original(BPE)": "daab2354f8a74e70d70b4d1f804939b68a8c9624dd06cb7858e52dd8970e9726",
+        "base_tokenizer.json": "f73529fd3995c46b9db445bb1a0186dc191fdd916b8f76b28d3f1d9bea332746",
+        "LangMAP(langspec)": "b4dfe25b144991ecce49d9f87ad5d7d457b6346fe8a7b31933d4078a556d7b9c"
+      },
+      "metrics": {
+        "Original(BPE)": {
+          "micro_f1": 0.21850672328379336,
+          "macro_f1": 0.2308155602101225,
+          "morphscore_recall": 0.6409349540157321,
+          "morphscore_precision": 0.5246690557701876,
+          "micro_precision": 0.18821915720490742,
+          "micro_recall": 0.26041117554032683,
+          "mean_token_char_ratio": 0.47505169044476053,
+          "num_samples": 4723,
+          "score_seconds": 2.71
+        },
+        "base_tokenizer.json": {
+          "micro_f1": 0.24702620516948395,
+          "macro_f1": 0.2605163365717842,
+          "morphscore_recall": 0.6653346534181145,
+          "morphscore_precision": 0.5359305319589592,
+          "micro_precision": 0.2144909528616914,
+          "micro_recall": 0.2911966262519768,
+          "mean_token_char_ratio": 0.46734749072277554,
+          "num_samples": 4723,
+          "score_seconds": 2.57
+        },
+        "LangMAP(langspec)": {
+          "micro_f1": 0.24731951393852752,
+          "macro_f1": 0.261119824831754,
+          "morphscore_recall": 0.6488972123149678,
+          "morphscore_precision": 0.5183111776076489,
+          "micro_precision": 0.21459027831614855,
+          "micro_recall": 0.2918292040063258,
+          "mean_token_char_ratio": 0.4681098021403909,
+          "num_samples": 4723,
+          "score_seconds": 2.7
+        }
+      }
+    },
+    "gemma3-1b__hun_Latn__stem_eq_lemma-False__fw2-100m_50klines_scriptfilt_base-tur-fin-hun-arb-hin_softem_seed-baselogscores_em10.json": {
+      "family": "gemma3-1b",
+      "lang": "hun",
+      "stem_eq_lemma": false,
+      "protocol_tag": "fw2-100m_50klines_scriptfilt_base-tur-fin-hun-arb-hin_softem_seed-baselogscores_em10",
+      "harness_sha256": "bd82ce343b437fb293ebc350394563022930750be3ac2fd8f38a04b5e1f13de3",
+      "gold_sha256": "f0dfe8467291a60da39c13366562bc14af7b0142cf70110b7a867665dbfd3faf",
+      "arm_sha256": {
+        "Original(BPE)": "daab2354f8a74e70d70b4d1f804939b68a8c9624dd06cb7858e52dd8970e9726",
+        "base_tokenizer.json": "f73529fd3995c46b9db445bb1a0186dc191fdd916b8f76b28d3f1d9bea332746",
+        "LangMAP(langspec)": "f6b40df8ad1f855f5f666178c73a1f7c28ce02136c3f3296a67dcb9eea3b2365"
+      },
+      "metrics": {
+        "Original(BPE)": {
+          "micro_f1": 0.2018101290198344,
+          "macro_f1": 0.22623511987456155,
+          "morphscore_recall": 0.5905190197210997,
+          "morphscore_precision": 0.19931587308639878,
+          "micro_precision": 0.15438504599469668,
+          "micro_recall": 0.2912909203211859,
+          "mean_token_char_ratio": 0.39978686111964845,
+          "num_samples": 7924,
+          "score_seconds": 4.17
+        },
+        "base_tokenizer.json": {
+          "micro_f1": 0.24932817723012385,
+          "macro_f1": 0.275787054559557,
+          "morphscore_recall": 0.6821519927386759,
+          "morphscore_precision": 0.23176662478997656,
+          "micro_precision": 0.1928940874209797,
+          "micro_recall": 0.3524397776405188,
+          "mean_token_char_ratio": 0.3879728249529904,
+          "num_samples": 7924,
+          "score_seconds": 4.08
+        },
+        "LangMAP(langspec)": {
+          "micro_f1": 0.255196329721929,
+          "macro_f1": 0.28421108723740907,
+          "morphscore_recall": 0.720975327997361,
+          "morphscore_precision": 0.24283473286072527,
+          "micro_precision": 0.19591890729900452,
+          "micro_recall": 0.36590487955528106,
+          "mean_token_char_ratio": 0.3969063289590944,
+          "num_samples": 7924,
+          "score_seconds": 3.94
+        }
+      }
+    },
+    "gemma3-1b__tam_Taml__stem_eq_lemma-False__fw2-100m_50klines_scriptfilt_base-tur-fin-hun-arb-hin_softem_seed-baselogscores_em10.json": {
+      "family": "gemma3-1b",
+      "lang": "tam",
+      "stem_eq_lemma": false,
+      "protocol_tag": "fw2-100m_50klines_scriptfilt_base-tur-fin-hun-arb-hin_softem_seed-baselogscores_em10",
+      "harness_sha256": "bd82ce343b437fb293ebc350394563022930750be3ac2fd8f38a04b5e1f13de3",
+      "gold_sha256": "31448fcaf1c3e3f65b85386250382fb63b6ede33910c30be7298d4c38b24179d",
+      "arm_sha256": {
+        "Original(BPE)": "daab2354f8a74e70d70b4d1f804939b68a8c9624dd06cb7858e52dd8970e9726",
+        "base_tokenizer.json": "f73529fd3995c46b9db445bb1a0186dc191fdd916b8f76b28d3f1d9bea332746",
+        "LangMAP(langspec)": "d5cd4f6bf78484bf1bc6185e06e3591fd0481eb21dade08458d3cc3b493bbaa4"
+      },
+      "metrics": {
+        "Original(BPE)": {
+          "micro_f1": 0.15240549828178696,
+          "macro_f1": 0.16890464382648906,
+          "morphscore_recall": 0.40481006967857525,
+          "morphscore_precision": 0.160452589667022,
+          "micro_precision": 0.120614631493065,
+          "micro_recall": 0.2069528698086794,
+          "mean_token_char_ratio": 0.3781514453567733,
+          "num_samples": 2136,
+          "score_seconds": 1.92
+        },
+        "base_tokenizer.json": {
+          "micro_f1": 0.1602732527588019,
+          "macro_f1": 0.17602402088441052,
+          "morphscore_recall": 0.4027871431782388,
+          "morphscore_precision": 0.1651767652441988,
+          "micro_precision": 0.12829500841278743,
+          "micro_recall": 0.2134857676154923,
+          "mean_token_char_ratio": 0.3679035757026504,
+          "num_samples": 2136,
+          "score_seconds": 358.14
+        },
+        "LangMAP(langspec)": {
+          "micro_f1": 0.18928820655966505,
+          "macro_f1": 0.20836371130227047,
+          "morphscore_recall": 0.4898853674983095,
+          "morphscore_precision": 0.19228317760010522,
+          "micro_precision": 0.15115631095012538,
+          "micro_recall": 0.25314979001399907,
+          "mean_token_char_ratio": 0.3699592066185754,
+          "num_samples": 2136,
+          "score_seconds": 1.9
+        }
+      }
+    },
+    "gemma3-1b__tur_Latn__stem_eq_lemma-False__fw2-100m_50klines_scriptfilt_base-tur-fin-hun-arb-hin_softem_seed-baselogscores_em10.json": {
+      "family": "gemma3-1b",
+      "lang": "tur",
+      "stem_eq_lemma": false,
+      "protocol_tag": "fw2-100m_50klines_scriptfilt_base-tur-fin-hun-arb-hin_softem_seed-baselogscores_em10",
+      "harness_sha256": "bd82ce343b437fb293ebc350394563022930750be3ac2fd8f38a04b5e1f13de3",
+      "gold_sha256": "5bff599769937acadb0d4444785968ca1bc5eacc3714de596e79806ab186c188",
+      "arm_sha256": {
+        "Original(BPE)": "daab2354f8a74e70d70b4d1f804939b68a8c9624dd06cb7858e52dd8970e9726",
+        "base_tokenizer.json": "f73529fd3995c46b9db445bb1a0186dc191fdd916b8f76b28d3f1d9bea332746",
+        "LangMAP(langspec)": "8c9bc7fd6709937c65aa70d4446d3b357d097bff871a124f00048281b37341a2"
+      },
+      "metrics": {
+        "Original(BPE)": {
+          "micro_f1": 0.18112842507663082,
+          "macro_f1": 0.20334424633637366,
+          "morphscore_recall": 0.5065123714206264,
+          "morphscore_precision": 0.2010658849305613,
+          "micro_precision": 0.14597011280490668,
+          "micro_recall": 0.23859676057419207,
+          "mean_token_char_ratio": 0.3760886973352672,
+          "num_samples": 32560,
+          "score_seconds": 12.74
+        },
+        "base_tokenizer.json": {
+          "micro_f1": 0.24570004105114734,
+          "macro_f1": 0.27003376977733395,
+          "morphscore_recall": 0.6420280789546841,
+          "morphscore_precision": 0.2488034837232061,
+          "micro_precision": 0.20057699032521273,
+          "micro_recall": 0.31701850003838183,
+          "mean_token_char_ratio": 0.3645018180910824,
+          "num_samples": 32560,
+          "score_seconds": 12.51
+        },
+        "LangMAP(langspec)": {
+          "micro_f1": 0.25572286843457764,
+          "macro_f1": 0.28184438195469147,
+          "morphscore_recall": 0.6739227133722544,
+          "morphscore_precision": 0.2599539298621843,
+          "micro_precision": 0.20783161452631982,
+          "micro_recall": 0.3322944653412144,
+          "mean_token_char_ratio": 0.3687765902806449,
+          "num_samples": 32560,
+          "score_seconds": 12.41
+        }
+      }
+    },
+    "granite3.0-8b__arb_Arab__stem_eq_lemma-False__fw2-100m_50klines_scriptfilt_base-tur-fin-hun-arb-hin_softem_seed-baselogscores_em10.json": {
+      "family": "granite3.0-8b",
+      "lang": "arb",
+      "stem_eq_lemma": false,
+      "protocol_tag": "fw2-100m_50klines_scriptfilt_base-tur-fin-hun-arb-hin_softem_seed-baselogscores_em10",
+      "harness_sha256": "bd82ce343b437fb293ebc350394563022930750be3ac2fd8f38a04b5e1f13de3",
+      "gold_sha256": "896f572adc9652c138ea02326e9a701648a1336dc559da06c5a68aecb8cbf10f",
+      "arm_sha256": {
+        "Original(BPE)": "04796d82b14504bff1391856b7a0e888c7bd3dd7d3a06374febba4c630ec3531",
+        "base_tokenizer.json": "d00a1b38d1207fa085343817d1eb121a7ff48862c87aadf7e6cb9a401d1bfdd7",
+        "LangMAP(langspec)": "118488cfafbfaa5a835d7e47bad419be989c24c288ed1760603ba7fc57b3a375"
+      },
+      "metrics": {
+        "Original(BPE)": {
+          "micro_f1": 0.25700160578588677,
+          "macro_f1": 0.2652061164275947,
+          "morphscore_recall": 0.9242768815293864,
+          "morphscore_precision": 0.23685179926647545,
+          "micro_precision": 0.18032932325490614,
+          "micro_recall": 0.447098675817166,
+          "mean_token_char_ratio": 0.867673838344283,
+          "num_samples": 10411,
+          "score_seconds": 2.48
+        },
+        "base_tokenizer.json": {
+          "micro_f1": 0.25717862155293403,
+          "macro_f1": 0.2654313319170864,
+          "morphscore_recall": 0.9250870584890909,
+          "morphscore_precision": 0.2370699785003608,
+          "micro_precision": 0.18045352922389013,
+          "micro_recall": 0.4474066253134486,
+          "mean_token_char_ratio": 0.867673838344283,
+          "num_samples": 10411,
+          "score_seconds": 2.43
+        },
+        "LangMAP(langspec)": {
+          "micro_f1": 0.2564380113278792,
+          "macro_f1": 0.2647241649883241,
+          "morphscore_recall": 0.9267621849814507,
+          "morphscore_precision": 0.2361887299524578,
+          "micro_precision": 0.1796015514809591,
+          "micro_recall": 0.44817421909370875,
+          "mean_token_char_ratio": 0.8731230779573719,
+          "num_samples": 10410,
+          "score_seconds": 2.44
+        }
+      }
+    },
+    "granite3.0-8b__deu_Latn__stem_eq_lemma-False__fw2-100m_50klines_scriptfilt_base-tur-fin-hun-arb-hin_softem_seed-baselogscores_em10.json": {
+      "family": "granite3.0-8b",
+      "lang": "deu",
+      "stem_eq_lemma": false,
+      "protocol_tag": "fw2-100m_50klines_scriptfilt_base-tur-fin-hun-arb-hin_softem_seed-baselogscores_em10",
+      "harness_sha256": "bd82ce343b437fb293ebc350394563022930750be3ac2fd8f38a04b5e1f13de3",
+      "gold_sha256": "47945ff9cb6abe9c2f0ac86aa970297fc9502bee921758b67bfc42ef9bd0c570",
+      "arm_sha256": {
+        "Original(BPE)": "04796d82b14504bff1391856b7a0e888c7bd3dd7d3a06374febba4c630ec3531",
+        "base_tokenizer.json": "d00a1b38d1207fa085343817d1eb121a7ff48862c87aadf7e6cb9a401d1bfdd7",
+        "LangMAP(langspec)": "bf9bee77cbf0445b93540d9508fdc553e3e2fa3104c2547a2a1b77fac889e53b"
+      },
+      "metrics": {
+        "Original(BPE)": {
+          "micro_f1": 0.0910227541334395,
+          "macro_f1": 0.1057405342192044,
+          "morphscore_recall": 0.5111605728073,
+          "morphscore_precision": 0.3836645068436323,
+          "micro_precision": 0.06562265961692834,
+          "micro_recall": 0.1485025929346337,
+          "mean_token_char_ratio": 0.3868119658956773,
+          "num_samples": 47723,
+          "score_seconds": 11.9
+        },
+        "base_tokenizer.json": {
+          "micro_f1": 0.11574219028517047,
+          "macro_f1": 0.13330898952268047,
+          "morphscore_recall": 0.44463447407451745,
+          "morphscore_precision": 0.2962468548393843,
+          "micro_precision": 0.08332366252756179,
+          "micro_recall": 0.1894516780498696,
+          "mean_token_char_ratio": 0.38941692649816406,
+          "num_samples": 47723,
+          "score_seconds": 10.26
+        },
+        "LangMAP(langspec)": {
+          "micro_f1": 0.14551849758181018,
+          "macro_f1": 0.16343910637843406,
+          "morphscore_recall": 0.6450457197909337,
+          "morphscore_precision": 0.4272981840035577,
+          "micro_precision": 0.10536512599882665,
+          "micro_recall": 0.23511980271370145,
+          "mean_token_char_ratio": 0.38303163161297593,
+          "num_samples": 47723,
+          "score_seconds": 9.7
+        }
+      }
+    },
+    "granite3.0-8b__fin_Latn__stem_eq_lemma-False__fw2-100m_50klines_scriptfilt_base-tur-fin-hun-arb-hin_softem_seed-baselogscores_em10.json": {
+      "family": "granite3.0-8b",
+      "lang": "fin",
+      "stem_eq_lemma": false,
+      "protocol_tag": "fw2-100m_50klines_scriptfilt_base-tur-fin-hun-arb-hin_softem_seed-baselogscores_em10",
+      "harness_sha256": "bd82ce343b437fb293ebc350394563022930750be3ac2fd8f38a04b5e1f13de3",
+      "gold_sha256": "5120f4b2b23112565f83c524bbc711761cc8864b96c348c761946aa47381b9cb",
+      "arm_sha256": {
+        "Original(BPE)": "04796d82b14504bff1391856b7a0e888c7bd3dd7d3a06374febba4c630ec3531",
+        "base_tokenizer.json": "d00a1b38d1207fa085343817d1eb121a7ff48862c87aadf7e6cb9a401d1bfdd7",
+        "LangMAP(langspec)": "a481810b8d1d8c041796f2f85eda84a14550f0c1abf61d22ac3763094794bce2"
+      },
+      "metrics": {
+        "Original(BPE)": {
+          "micro_f1": 0.05746724211672305,
+          "macro_f1": 0.07263587354800351,
+          "morphscore_recall": 0.4264987099711677,
+          "morphscore_precision": 0.1754434431770246,
+          "micro_precision": 0.04113117043453622,
+          "micro_recall": 0.09532911941646242,
+          "mean_token_char_ratio": 0.4547911741556861,
+          "num_samples": 40776,
+          "score_seconds": 6.95
+        },
+        "base_tokenizer.json": {
+          "micro_f1": 0.07889168802690107,
+          "macro_f1": 0.0957908189275316,
+          "morphscore_recall": 0.4892750543835724,
+          "morphscore_precision": 0.19585244549303757,
+          "micro_precision": 0.05739209304807128,
+          "micro_recall": 0.12614778417553035,
+          "mean_token_char_ratio": 0.43262341837713064,
+          "num_samples": 40776,
+          "score_seconds": 6.5
+        },
+        "LangMAP(langspec)": {
+          "micro_f1": 0.08080419069218454,
+          "macro_f1": 0.09900129183561439,
+          "morphscore_recall": 0.5335205139879622,
+          "morphscore_precision": 0.20323761910559052,
+          "micro_precision": 0.05805552424189631,
+          "micro_recall": 0.1328673788889801,
+          "mean_token_char_ratio": 0.45097373591110684,
+          "num_samples": 40776,
+          "score_seconds": 7.38
+        }
+      }
+    },
+    "granite3.0-8b__hin_Deva__stem_eq_lemma-False__fw2-100m_50klines_scriptfilt_base-tur-fin-hun-arb-hin_softem_seed-baselogscores_em10.json": {
+      "family": "granite3.0-8b",
+      "lang": "hin",
+      "stem_eq_lemma": false,
+      "protocol_tag": "fw2-100m_50klines_scriptfilt_base-tur-fin-hun-arb-hin_softem_seed-baselogscores_em10",
+      "harness_sha256": "bd82ce343b437fb293ebc350394563022930750be3ac2fd8f38a04b5e1f13de3",
+      "gold_sha256": "0ce256a9b55eddf21061d093949b7c36ccf88b6f0855c6d7d49665911b8ef2a1",
+      "arm_sha256": {
+        "Original(BPE)": "04796d82b14504bff1391856b7a0e888c7bd3dd7d3a06374febba4c630ec3531",
+        "base_tokenizer.json": "d00a1b38d1207fa085343817d1eb121a7ff48862c87aadf7e6cb9a401d1bfdd7",
+        "LangMAP(langspec)": "77b923ffcbf474354c6d2999f99e396c39df76cdda1ab3d75ea93bc286ef7c89"
+      },
+      "metrics": {
+        "Original(BPE)": {
+          "micro_f1": 0.06273399158115266,
+          "macro_f1": 0.08644151763594067,
+          "morphscore_recall": 1.0,
+          "morphscore_precision": 0.25003490931821015,
+          "micro_precision": 0.038439594922265015,
+          "micro_recall": 0.17047970479704797,
+          "mean_token_char_ratio": 1.4509063699056974,
+          "num_samples": 4723,
+          "score_seconds": 1.26
+        },
+        "base_tokenizer.json": {
+          "micro_f1": 0.06273399158115266,
+          "macro_f1": 0.08644151763594067,
+          "morphscore_recall": 1.0,
+          "morphscore_precision": 0.25003490931821015,
+          "micro_precision": 0.038439594922265015,
+          "micro_recall": 0.17047970479704797,
+          "mean_token_char_ratio": 1.4509063699056974,
+          "num_samples": 4723,
+          "score_seconds": 1.34
+        },
+        "LangMAP(langspec)": {
+          "micro_f1": 0.06273399158115266,
+          "macro_f1": 0.08644151763594067,
+          "morphscore_recall": 1.0,
+          "morphscore_precision": 0.25003490931821015,
+          "micro_precision": 0.038439594922265015,
+          "micro_recall": 0.17047970479704797,
+          "mean_token_char_ratio": 1.4509063699056974,
+          "num_samples": 4723,
+          "score_seconds": 1.17
+        }
+      }
+    },
+    "granite3.0-8b__hun_Latn__stem_eq_lemma-False__fw2-100m_50klines_scriptfilt_base-tur-fin-hun-arb-hin_softem_seed-baselogscores_em10.json": {
+      "family": "granite3.0-8b",
+      "lang": "hun",
+      "stem_eq_lemma": false,
+      "protocol_tag": "fw2-100m_50klines_scriptfilt_base-tur-fin-hun-arb-hin_softem_seed-baselogscores_em10",
+      "harness_sha256": "bd82ce343b437fb293ebc350394563022930750be3ac2fd8f38a04b5e1f13de3",
+      "gold_sha256": "f0dfe8467291a60da39c13366562bc14af7b0142cf70110b7a867665dbfd3faf",
+      "arm_sha256": {
+        "Original(BPE)": "04796d82b14504bff1391856b7a0e888c7bd3dd7d3a06374febba4c630ec3531",
+        "base_tokenizer.json": "d00a1b38d1207fa085343817d1eb121a7ff48862c87aadf7e6cb9a401d1bfdd7",
+        "LangMAP(langspec)": "b881bd41785d13fdbc948606ca92509d93735ca5627d82e4eed0ab78a46c1a6b"
+      },
+      "metrics": {
+        "Original(BPE)": {
+          "micro_f1": 0.13171753986332574,
+          "macro_f1": 0.1543029655071288,
+          "morphscore_recall": 0.6099513161151907,
+          "morphscore_precision": 0.16134389123084514,
+          "micro_precision": 0.09342122269613545,
+          "micro_recall": 0.22322421247683755,
+          "mean_token_char_ratio": 0.502548287554654,
+          "num_samples": 7924,
+          "score_seconds": 1.77
+        },
+        "base_tokenizer.json": {
+          "micro_f1": 0.16802289690779504,
+          "macro_f1": 0.19294522848966897,
+          "morphscore_recall": 0.7167258024589483,
+          "morphscore_precision": 0.19325620103324473,
+          "micro_precision": 0.12050876110231572,
+          "micro_recall": 0.27739345274861027,
+          "mean_token_char_ratio": 0.4851164868874962,
+          "num_samples": 7924,
+          "score_seconds": 1.76
+        },
+        "LangMAP(langspec)": {
+          "micro_f1": 0.17321768408724933,
+          "macro_f1": 0.20135206806731476,
+          "morphscore_recall": 0.780716230712104,
+          "morphscore_precision": 0.20660183303965712,
+          "micro_precision": 0.12306932237765875,
+          "micro_recall": 0.2923409512044472,
+          "mean_token_char_ratio": 0.5001936331942833,
+          "num_samples": 7924,
+          "score_seconds": 1.8
+        }
+      }
+    },
+    "granite3.0-8b__tam_Taml__stem_eq_lemma-False__fw2-100m_50klines_scriptfilt_base-tur-fin-hun-arb-hin_softem_seed-baselogscores_em10.json": {
+      "family": "granite3.0-8b",
+      "lang": "tam",
+      "stem_eq_lemma": false,
+      "protocol_tag": "fw2-100m_50klines_scriptfilt_base-tur-fin-hun-arb-hin_softem_seed-baselogscores_em10",
+      "harness_sha256": "bd82ce343b437fb293ebc350394563022930750be3ac2fd8f38a04b5e1f13de3",
+      "gold_sha256": "31448fcaf1c3e3f65b85386250382fb63b6ede33910c30be7298d4c38b24179d",
+      "arm_sha256": {
+        "Original(BPE)": "04796d82b14504bff1391856b7a0e888c7bd3dd7d3a06374febba4c630ec3531",
+        "base_tokenizer.json": "d00a1b38d1207fa085343817d1eb121a7ff48862c87aadf7e6cb9a401d1bfdd7",
+        "LangMAP(langspec)": "0a75800bff4333ef020c6557d4836e889d4c8c53e745332304dfe9d023d5034e"
+      },
+      "metrics": {
+        "Original(BPE)": {
+          "micro_f1": 0.011578987996449111,
+          "macro_f1": 0.017181783841837488,
+          "morphscore_recall": 1.0,
+          "morphscore_precision": 0.12197741039821385,
+          "micro_precision": 0.006937057762567637,
+          "micro_recall": 0.03499766682221185,
+          "mean_token_char_ratio": 1.080397575222905,
+          "num_samples": 2136,
+          "score_seconds": 0.52
+        },
+        "base_tokenizer.json": {
+          "micro_f1": 0.011578987996449111,
+          "macro_f1": 0.017181783841837488,
+          "morphscore_recall": 1.0,
+          "morphscore_precision": 0.12197741039821385,
+          "micro_precision": 0.006937057762567637,
+          "micro_recall": 0.03499766682221185,
+          "mean_token_char_ratio": 1.080397575222905,
+          "num_samples": 2136,
+          "score_seconds": 0.5
+        },
+        "LangMAP(langspec)": {
+          "micro_f1": 0.011578987996449111,
+          "macro_f1": 0.017181783841837488,
+          "morphscore_recall": 1.0,
+          "morphscore_precision": 0.12197741039821385,
+          "micro_precision": 0.006937057762567637,
+          "micro_recall": 0.03499766682221185,
+          "mean_token_char_ratio": 1.080397575222905,
+          "num_samples": 2136,
+          "score_seconds": 0.6
+        }
+      }
+    },
+    "granite3.0-8b__tur_Latn__stem_eq_lemma-False__fw2-100m_50klines_scriptfilt_base-tur-fin-hun-arb-hin_softem_seed-baselogscores_em10.json": {
+      "family": "granite3.0-8b",
+      "lang": "tur",
+      "stem_eq_lemma": false,
+      "protocol_tag": "fw2-100m_50klines_scriptfilt_base-tur-fin-hun-arb-hin_softem_seed-baselogscores_em10",
+      "harness_sha256": "bd82ce343b437fb293ebc350394563022930750be3ac2fd8f38a04b5e1f13de3",
+      "gold_sha256": "5bff599769937acadb0d4444785968ca1bc5eacc3714de596e79806ab186c188",
+      "arm_sha256": {
+        "Original(BPE)": "04796d82b14504bff1391856b7a0e888c7bd3dd7d3a06374febba4c630ec3531",
+        "base_tokenizer.json": "d00a1b38d1207fa085343817d1eb121a7ff48862c87aadf7e6cb9a401d1bfdd7",
+        "LangMAP(langspec)": "15f655522505ec65b76d691ee3ea4f51504353ae052674c7145375e6ef3aaf8a"
+      },
+      "metrics": {
+        "Original(BPE)": {
+          "micro_f1": 0.1075429719033649,
+          "macro_f1": 0.1297626757173399,
+          "morphscore_recall": 0.5534959688629393,
+          "morphscore_precision": 0.16861142251780054,
+          "micro_precision": 0.07914737612392317,
+          "micro_recall": 0.1677132110232594,
+          "mean_token_char_ratio": 0.48153334828275024,
+          "num_samples": 32560,
+          "score_seconds": 150.57
+        },
+        "base_tokenizer.json": {
+          "micro_f1": 0.12985676301569601,
+          "macro_f1": 0.15444703462660564,
+          "morphscore_recall": 0.6422365860439234,
+          "morphscore_precision": 0.19687584872113398,
+          "micro_precision": 0.0967099528060841,
+          "micro_recall": 0.19757426882628387,
+          "mean_token_char_ratio": 0.46533452029511696,
+          "num_samples": 32560,
+          "score_seconds": 5.15
+        },
+        "LangMAP(langspec)": {
+          "micro_f1": 0.13049565393767595,
+          "macro_f1": 0.15624518692161782,
+          "morphscore_recall": 0.6715318320822888,
+          "morphscore_precision": 0.20129169289302457,
+          "micro_precision": 0.09626866761069182,
+          "micro_recall": 0.2024871420895064,
+          "mean_token_char_ratio": 0.47917675624952044,
+          "num_samples": 32560,
+          "score_seconds": 5.22
+        }
+      }
+    },
+    "llama3.2-1b__arb_Arab__stem_eq_lemma-False__fw2-100m_50klines_scriptfilt_base-tur-fin-hun-arb-hin_softem_seed-baselogscores_em10.json": {
+      "family": "llama3.2-1b",
+      "lang": "arb",
+      "stem_eq_lemma": false,
+      "protocol_tag": "fw2-100m_50klines_scriptfilt_base-tur-fin-hun-arb-hin_softem_seed-baselogscores_em10",
+      "harness_sha256": "bd82ce343b437fb293ebc350394563022930750be3ac2fd8f38a04b5e1f13de3",
+      "gold_sha256": "896f572adc9652c138ea02326e9a701648a1336dc559da06c5a68aecb8cbf10f",
+      "arm_sha256": {
+        "Original(BPE)": "6b9e4e7fb171f92fd137b777cc2714bf87d11576700a1dcd7a399e7bbe39537b",
+        "base_tokenizer.json": "629241a726ba71d8912c99b369a7110255f2d496667b87095aaa5e65be1c65c0",
+        "LangMAP(langspec)": "7725edd4b74d46ecea3f7346e01f10f0915dc3fa70b11354031fb065c4d74fae"
+      },
+      "metrics": {
+        "Original(BPE)": {
+          "micro_f1": 0.1928869852192536,
+          "macro_f1": 0.20350439783187238,
+          "morphscore_recall": 0.6252123236892353,
+          "morphscore_precision": 0.4561478014192161,
+          "micro_precision": 0.16143629525152797,
+          "micro_recall": 0.2395569896223947,
+          "mean_token_char_ratio": 0.5228391795378793,
+          "num_samples": 10614,
+          "score_seconds": 3.33
+        },
+        "base_tokenizer.json": {
+          "micro_f1": 0.19093421383196355,
+          "macro_f1": 0.20175333638070445,
+          "morphscore_recall": 0.6042614889404112,
+          "morphscore_precision": 0.4527851773598418,
+          "micro_precision": 0.16223469138814345,
+          "micro_recall": 0.23197000087206768,
+          "mean_token_char_ratio": 0.5045965884292622,
+          "num_samples": 10614,
+          "score_seconds": 3.28
+        },
+        "LangMAP(langspec)": {
+          "micro_f1": 0.20023799797524108,
+          "macro_f1": 0.21128950436798602,
+          "morphscore_recall": 0.6208759713960963,
+          "morphscore_precision": 0.4576305520093906,
+          "micro_precision": 0.1688735769922109,
+          "micro_recall": 0.24591022117523884,
+          "mean_token_char_ratio": 0.5136252570822974,
+          "num_samples": 10603,
+          "score_seconds": 3.36
+        }
+      }
+    },
+    "llama3.2-1b__deu_Latn__stem_eq_lemma-False__fw2-100m_50klines_scriptfilt_base-tur-fin-hun-arb-hin_softem_seed-baselogscores_em10.json": {
+      "family": "llama3.2-1b",
+      "lang": "deu",
+      "stem_eq_lemma": false,
+      "protocol_tag": "fw2-100m_50klines_scriptfilt_base-tur-fin-hun-arb-hin_softem_seed-baselogscores_em10",
+      "harness_sha256": "bd82ce343b437fb293ebc350394563022930750be3ac2fd8f38a04b5e1f13de3",
+      "gold_sha256": "47945ff9cb6abe9c2f0ac86aa970297fc9502bee921758b67bfc42ef9bd0c570",
+      "arm_sha256": {
+        "Original(BPE)": "6b9e4e7fb171f92fd137b777cc2714bf87d11576700a1dcd7a399e7bbe39537b",
+        "base_tokenizer.json": "629241a726ba71d8912c99b369a7110255f2d496667b87095aaa5e65be1c65c0",
+        "LangMAP(langspec)": "b666953e815df025b5b037d40f02ddb39644fdadd7b3aee1c42275056ad027ea"
+      },
+      "metrics": {
+        "Original(BPE)": {
+          "micro_f1": 0.08006521868807041,
+          "macro_f1": 0.09165529567759602,
+          "morphscore_recall": 0.44689458250057196,
+          "morphscore_precision": 0.36180846095301106,
+          "micro_precision": 0.059443845741251965,
+          "micro_recall": 0.12259354354201975,
+          "mean_token_char_ratio": 0.35374337949801826,
+          "num_samples": 47723,
+          "score_seconds": 10.3
+        },
+        "base_tokenizer.json": {
+          "micro_f1": 0.12393006591406974,
+          "macro_f1": 0.1405414980278077,
+          "morphscore_recall": 0.5486707667994983,
+          "morphscore_precision": 0.3984071661435971,
+          "micro_precision": 0.09084630957561539,
+          "micro_recall": 0.1949115560652344,
+          "mean_token_char_ratio": 0.3689001996440284,
+          "num_samples": 47723,
+          "score_seconds": 10.03
+        },
+        "LangMAP(langspec)": {
+          "micro_f1": 0.15430035427633554,
+          "macro_f1": 0.16958057333583473,
+          "morphscore_recall": 0.6262153562721153,
+          "morphscore_precision": 0.432855604716186,
+          "micro_precision": 0.11492876275288354,
+          "micro_recall": 0.2347037153556532,
+          "mean_token_char_ratio": 0.3515983096366117,
+          "num_samples": 47723,
+          "score_seconds": 10.26
+        }
+      }
+    },
+    "llama3.2-1b__fin_Latn__stem_eq_lemma-False__fw2-100m_50klines_scriptfilt_base-tur-fin-hun-arb-hin_softem_seed-baselogscores_em10.json": {
+      "family": "llama3.2-1b",
+      "lang": "fin",
+      "stem_eq_lemma": false,
+      "protocol_tag": "fw2-100m_50klines_scriptfilt_base-tur-fin-hun-arb-hin_softem_seed-baselogscores_em10",
+      "harness_sha256": "bd82ce343b437fb293ebc350394563022930750be3ac2fd8f38a04b5e1f13de3",
+      "gold_sha256": "5120f4b2b23112565f83c524bbc711761cc8864b96c348c761946aa47381b9cb",
+      "arm_sha256": {
+        "Original(BPE)": "6b9e4e7fb171f92fd137b777cc2714bf87d11576700a1dcd7a399e7bbe39537b",
+        "base_tokenizer.json": "629241a726ba71d8912c99b369a7110255f2d496667b87095aaa5e65be1c65c0",
+        "LangMAP(langspec)": "d1257e3599717050f5dca1f7cb23d3a2ff07059d67bf44b518b5b4e3b5151ef3"
+      },
+      "metrics": {
+        "Original(BPE)": {
+          "micro_f1": 0.05891930584556956,
+          "macro_f1": 0.0742069268507572,
+          "morphscore_recall": 0.39300854960287557,
+          "morphscore_precision": 0.1723192072144897,
+          "micro_precision": 0.043086520206129644,
+          "micro_recall": 0.09314788971890282,
+          "mean_token_char_ratio": 0.42491944189905567,
+          "num_samples": 40776,
+          "score_seconds": 7.85
+        },
+        "base_tokenizer.json": {
+          "micro_f1": 0.07904061883746744,
+          "macro_f1": 0.09672247382552222,
+          "morphscore_recall": 0.46920119390904336,
+          "morphscore_precision": 0.1970108365615057,
+          "micro_precision": 0.058571137843704775,
+          "micro_recall": 0.12150387578717765,
+          "mean_token_char_ratio": 0.4087896674370833,
+          "num_samples": 40776,
+          "score_seconds": 6.95
+        },
+        "LangMAP(langspec)": {
+          "micro_f1": 0.08146353663134241,
+          "macro_f1": 0.09993979862728054,
+          "morphscore_recall": 0.5081347700713336,
+          "morphscore_precision": 0.20421188956740852,
+          "micro_precision": 0.059750528402308545,
+          "micro_recall": 0.12796547559016336,
+          "mean_token_char_ratio": 0.4224026860762403,
+          "num_samples": 40776,
+          "score_seconds": 7.32
+        }
+      }
+    },
+    "llama3.2-1b__hin_Deva__stem_eq_lemma-False__fw2-100m_50klines_scriptfilt_base-tur-fin-hun-arb-hin_softem_seed-baselogscores_em10.json": {
+      "family": "llama3.2-1b",
+      "lang": "hin",
+      "stem_eq_lemma": false,
+      "protocol_tag": "fw2-100m_50klines_scriptfilt_base-tur-fin-hun-arb-hin_softem_seed-baselogscores_em10",
+      "harness_sha256": "bd82ce343b437fb293ebc350394563022930750be3ac2fd8f38a04b5e1f13de3",
+      "gold_sha256": "0ce256a9b55eddf21061d093949b7c36ccf88b6f0855c6d7d49665911b8ef2a1",
+      "arm_sha256": {
+        "Original(BPE)": "6b9e4e7fb171f92fd137b777cc2714bf87d11576700a1dcd7a399e7bbe39537b",
+        "base_tokenizer.json": "629241a726ba71d8912c99b369a7110255f2d496667b87095aaa5e65be1c65c0",
+        "LangMAP(langspec)": "8332bb22313185db7d745e1d6e5cade7064da911e211a8f678b2ca5e895d5bf4"
+      },
+      "metrics": {
+        "Original(BPE)": {
+          "micro_f1": 0.19952937919579208,
+          "macro_f1": 0.22124284779701625,
+          "morphscore_recall": 0.8307289492204752,
+          "morphscore_precision": 0.3107103805581768,
+          "micro_precision": 0.148508731262556,
+          "micro_recall": 0.3039536109646811,
+          "mean_token_char_ratio": 0.6926781688819152,
+          "num_samples": 4723,
+          "score_seconds": 1.71
+        },
+        "base_tokenizer.json": {
+          "micro_f1": 0.19993081978554134,
+          "macro_f1": 0.2215968883786383,
+          "morphscore_recall": 0.830722984982049,
+          "morphscore_precision": 0.31069828167451186,
+          "micro_precision": 0.14877734877734877,
+          "micro_recall": 0.3046916183447549,
+          "mean_token_char_ratio": 0.6933540315893256,
+          "num_samples": 4723,
+          "score_seconds": 1.62
+        },
+        "LangMAP(langspec)": {
+          "micro_f1": 0.19865725598209677,
+          "macro_f1": 0.22069941533568835,
+          "morphscore_recall": 0.8317607624682416,
+          "morphscore_precision": 0.3106685551528311,
+          "micro_precision": 0.14749488752556236,
+          "micro_recall": 0.30416447021613074,
+          "mean_token_char_ratio": 0.6970977573979467,
+          "num_samples": 4723,
+          "score_seconds": 1.37
+        }
+      }
+    },
+    "llama3.2-1b__hun_Latn__stem_eq_lemma-False__fw2-100m_50klines_scriptfilt_base-tur-fin-hun-arb-hin_softem_seed-baselogscores_em10.json": {
+      "family": "llama3.2-1b",
+      "lang": "hun",
+      "stem_eq_lemma": false,
+      "protocol_tag": "fw2-100m_50klines_scriptfilt_base-tur-fin-hun-arb-hin_softem_seed-baselogscores_em10",
+      "harness_sha256": "bd82ce343b437fb293ebc350394563022930750be3ac2fd8f38a04b5e1f13de3",
+      "gold_sha256": "f0dfe8467291a60da39c13366562bc14af7b0142cf70110b7a867665dbfd3faf",
+      "arm_sha256": {
+        "Original(BPE)": "6b9e4e7fb171f92fd137b777cc2714bf87d11576700a1dcd7a399e7bbe39537b",
+        "base_tokenizer.json": "629241a726ba71d8912c99b369a7110255f2d496667b87095aaa5e65be1c65c0",
+        "LangMAP(langspec)": "90965056bacb62e3dfd24768d9f01b7a9d1d4cc4fb8f806a259ac700ba9bd961"
+      },
+      "metrics": {
+        "Original(BPE)": {
+          "micro_f1": 0.146998203649428,
+          "macro_f1": 0.16907407763092508,
+          "morphscore_recall": 0.642874824655499,
+          "morphscore_precision": 0.18256514254327613,
+          "micro_precision": 0.10592723804333015,
+          "micro_recall": 0.2400864731315627,
+          "mean_token_char_ratio": 0.4754018996423451,
+          "num_samples": 7924,
+          "score_seconds": 2.0
+        },
+        "base_tokenizer.json": {
+          "micro_f1": 0.18299342041792888,
+          "macro_f1": 0.20794752216419696,
+          "morphscore_recall": 0.7409439722749396,
+          "morphscore_precision": 0.21132056188166395,
+          "micro_precision": 0.13306395038864102,
+          "micro_recall": 0.2928968499073502,
+          "mean_token_char_ratio": 0.46230978022602487,
+          "num_samples": 7924,
+          "score_seconds": 1.9
+        },
+        "LangMAP(langspec)": {
+          "micro_f1": 0.188259603644219,
+          "macro_f1": 0.2164217062234751,
+          "morphscore_recall": 0.8087713507715153,
+          "morphscore_precision": 0.2265957130353943,
+          "micro_precision": 0.13526791739775948,
+          "micro_recall": 0.30951204447189623,
+          "mean_token_char_ratio": 0.48083362691251985,
+          "num_samples": 7924,
+          "score_seconds": 1.86
+        }
+      }
+    },
+    "llama3.2-1b__tam_Taml__stem_eq_lemma-False__fw2-100m_50klines_scriptfilt_base-tur-fin-hun-arb-hin_softem_seed-baselogscores_em10.json": {
+      "family": "llama3.2-1b",
+      "lang": "tam",
+      "stem_eq_lemma": false,
+      "protocol_tag": "fw2-100m_50klines_scriptfilt_base-tur-fin-hun-arb-hin_softem_seed-baselogscores_em10",
+      "harness_sha256": "bd82ce343b437fb293ebc350394563022930750be3ac2fd8f38a04b5e1f13de3",
+      "gold_sha256": "31448fcaf1c3e3f65b85386250382fb63b6ede33910c30be7298d4c38b24179d",
+      "arm_sha256": {
+        "Original(BPE)": "6b9e4e7fb171f92fd137b777cc2714bf87d11576700a1dcd7a399e7bbe39537b",
+        "base_tokenizer.json": "629241a726ba71d8912c99b369a7110255f2d496667b87095aaa5e65be1c65c0",
+        "LangMAP(langspec)": "9d34874e86feb7aaef53cb0a6ffc5b65e482bbdb6157b2a04434461a585776d0"
+      },
+      "metrics": {
+        "Original(BPE)": {
+          "micro_f1": 0.010211822372643987,
+          "macro_f1": 0.014907233965388011,
+          "morphscore_recall": 0.6790289952798306,
+          "morphscore_precision": 0.058328527385814934,
+          "micro_precision": 0.005835667600373483,
+          "micro_recall": 0.0408306112925805,
+          "mean_token_char_ratio": 1.508313168169577,
+          "num_samples": 2136,
+          "score_seconds": 221.8
+        },
+        "base_tokenizer.json": {
+          "micro_f1": 0.010211822372643987,
+          "macro_f1": 0.014907233965388011,
+          "morphscore_recall": 0.6790289952798306,
+          "morphscore_precision": 0.058328527385814934,
+          "micro_precision": 0.005835667600373483,
+          "micro_recall": 0.0408306112925805,
+          "mean_token_char_ratio": 1.508313168169577,
+          "num_samples": 2136,
+          "score_seconds": 1.13
+        },
+        "LangMAP(langspec)": {
+          "micro_f1": 0.010211822372643987,
+          "macro_f1": 0.014907233965388011,
+          "morphscore_recall": 0.6790289952798306,
+          "morphscore_precision": 0.058328527385814934,
+          "micro_precision": 0.005835667600373483,
+          "micro_recall": 0.0408306112925805,
+          "mean_token_char_ratio": 1.508313168169577,
+          "num_samples": 2136,
+          "score_seconds": 0.92
+        }
+      }
+    },
+    "llama3.2-1b__tur_Latn__stem_eq_lemma-False__fw2-100m_50klines_scriptfilt_base-tur-fin-hun-arb-hin_softem_seed-baselogscores_em10.json": {
+      "family": "llama3.2-1b",
+      "lang": "tur",
+      "stem_eq_lemma": false,
+      "protocol_tag": "fw2-100m_50klines_scriptfilt_base-tur-fin-hun-arb-hin_softem_seed-baselogscores_em10",
+      "harness_sha256": "bd82ce343b437fb293ebc350394563022930750be3ac2fd8f38a04b5e1f13de3",
+      "gold_sha256": "5bff599769937acadb0d4444785968ca1bc5eacc3714de596e79806ab186c188",
+      "arm_sha256": {
+        "Original(BPE)": "6b9e4e7fb171f92fd137b777cc2714bf87d11576700a1dcd7a399e7bbe39537b",
+        "base_tokenizer.json": "629241a726ba71d8912c99b369a7110255f2d496667b87095aaa5e65be1c65c0",
+        "LangMAP(langspec)": "cdc3a662783cb8df52d4e959824e24a00c50e442c2f4fe2156b26014a768c567"
+      },
+      "metrics": {
+        "Original(BPE)": {
+          "micro_f1": 0.15964755743921483,
+          "macro_f1": 0.18329128707695558,
+          "morphscore_recall": 0.4777175423964393,
+          "morphscore_precision": 0.18053785451720986,
+          "micro_precision": 0.1253579717125717,
+          "micro_recall": 0.21975896215552315,
+          "mean_token_char_ratio": 0.4013080127986545,
+          "num_samples": 32560,
+          "score_seconds": 5.59
+        },
+        "base_tokenizer.json": {
+          "micro_f1": 0.2351029252437703,
+          "macro_f1": 0.2579785466261879,
+          "morphscore_recall": 0.6371907144842904,
+          "morphscore_precision": 0.24294863775368078,
+          "micro_precision": 0.1906835916979474,
+          "micro_recall": 0.30650188070929607,
+          "mean_token_char_ratio": 0.3716178559114986,
+          "num_samples": 32560,
+          "score_seconds": 5.66
+        },
+        "LangMAP(langspec)": {
+          "micro_f1": 0.248032120959161,
+          "macro_f1": 0.2723504380856338,
+          "morphscore_recall": 0.6714206283013608,
+          "morphscore_precision": 0.2548700140328553,
+          "micro_precision": 0.2009678771481919,
+          "micro_recall": 0.3238811698779458,
+          "mean_token_char_ratio": 0.3726152866390429,
+          "num_samples": 32560,
+          "score_seconds": 5.58
+        }
+      }
+    },
+    "mistral-7b-v0.3__arb_Arab__stem_eq_lemma-False__fw2-100m_50klines_scriptfilt_base-tur-fin-hun-arb-hin_softem_seed-baselogscores_em10.json": {
+      "family": "mistral-7b-v0.3",
+      "lang": "arb",
+      "stem_eq_lemma": false,
+      "protocol_tag": "fw2-100m_50klines_scriptfilt_base-tur-fin-hun-arb-hin_softem_seed-baselogscores_em10",
+      "harness_sha256": "bd82ce343b437fb293ebc350394563022930750be3ac2fd8f38a04b5e1f13de3",
+      "gold_sha256": "896f572adc9652c138ea02326e9a701648a1336dc559da06c5a68aecb8cbf10f",
+      "arm_sha256": {
+        "Original(BPE)": "3e01771050ce4fba855c59ddb474c72ca1a3f2113a04727990155e3e47390764",
+        "base_tokenizer.json": "65780bb7887e3395f8e473e6dfc79fe3bb86b437c1a07b6f5c86e354cfe3173b",
+        "LangMAP(langspec)": "3fbc940b3961aa1936e6177ced8a85ed54a4ae9f1ddeb4d7c4b8809d57801155"
+      },
+      "metrics": {
+        "Original(BPE)": {
+          "micro_f1": 0.22153199652857075,
+          "macro_f1": 0.23071348925554025,
+          "morphscore_recall": 1.0,
+          "morphscore_precision": 0.2066914675805124,
+          "micro_precision": 0.14958055761164568,
+          "micro_recall": 0.4268614680513994,
+          "mean_token_char_ratio": 1.0030415980170881,
+          "num_samples": 10404,
+          "score_seconds": 3.08
+        },
+        "base_tokenizer.json": {
+          "micro_f1": 0.22153199652857075,
+          "macro_f1": 0.23071348925554025,
+          "morphscore_recall": 1.0,
+          "morphscore_precision": 0.2066914675805124,
+          "micro_precision": 0.14958055761164568,
+          "micro_recall": 0.4268614680513994,
+          "mean_token_char_ratio": 1.0030415980170881,
+          "num_samples": 10404,
+          "score_seconds": 2.99
+        },
+        "LangMAP(langspec)": {
+          "micro_f1": 0.22153199652857075,
+          "macro_f1": 0.23071348925554025,
+          "morphscore_recall": 1.0,
+          "morphscore_precision": 0.2066914675805124,
+          "micro_precision": 0.14958055761164568,
+          "micro_recall": 0.4268614680513994,
+          "mean_token_char_ratio": 1.0030415980170881,
+          "num_samples": 10404,
+          "score_seconds": 3.04
+        }
+      }
+    },
+    "mistral-7b-v0.3__deu_Latn__stem_eq_lemma-False__fw2-100m_50klines_scriptfilt_base-tur-fin-hun-arb-hin_softem_seed-baselogscores_em10.json": {
+      "family": "mistral-7b-v0.3",
+      "lang": "deu",
+      "stem_eq_lemma": false,
+      "protocol_tag": "fw2-100m_50klines_scriptfilt_base-tur-fin-hun-arb-hin_softem_seed-baselogscores_em10",
+      "harness_sha256": "bd82ce343b437fb293ebc350394563022930750be3ac2fd8f38a04b5e1f13de3",
+      "gold_sha256": "47945ff9cb6abe9c2f0ac86aa970297fc9502bee921758b67bfc42ef9bd0c570",
+      "arm_sha256": {
+        "Original(BPE)": "3e01771050ce4fba855c59ddb474c72ca1a3f2113a04727990155e3e47390764",
+        "base_tokenizer.json": "65780bb7887e3395f8e473e6dfc79fe3bb86b437c1a07b6f5c86e354cfe3173b",
+        "LangMAP(langspec)": "ec3614011f56ed24595494e4b9baae233cb1e4f18674df7b456646802d602269"
+      },
+      "metrics": {
+        "Original(BPE)": {
+          "micro_f1": 0.08574682561178969,
+          "macro_f1": 0.09898579475003155,
+          "morphscore_recall": 0.5816760613372151,
+          "morphscore_precision": 0.49953025626688746,
+          "micro_precision": 0.06319384319384319,
+          "micro_recall": 0.133330627074094,
+          "mean_token_char_ratio": 0.3617969808638486,
+          "num_samples": 47723,
+          "score_seconds": 10.73
+        },
+        "base_tokenizer.json": {
+          "micro_f1": 0.12006839616006201,
+          "macro_f1": 0.13745824892605646,
+          "morphscore_recall": 0.5491096894688234,
+          "morphscore_precision": 0.3978117322702764,
+          "micro_precision": 0.08675755768779024,
+          "micro_recall": 0.19490140759308686,
+          "mean_token_char_ratio": 0.38895823127800516,
+          "num_samples": 47723,
+          "score_seconds": 11.67
+        },
+        "LangMAP(langspec)": {
+          "micro_f1": 0.15037381859218507,
+          "macro_f1": 0.16752430721348655,
+          "morphscore_recall": 0.6715590786743936,
+          "morphscore_precision": 0.5315786674661542,
+          "micro_precision": 0.11110087740559407,
+          "micro_recall": 0.23259283314896942,
+          "mean_token_char_ratio": 0.36080945465910313,
+          "num_samples": 47723,
+          "score_seconds": 11.08
+        }
+      }
+    },
+    "mistral-7b-v0.3__fin_Latn__stem_eq_lemma-False__fw2-100m_50klines_scriptfilt_base-tur-fin-hun-arb-hin_softem_seed-baselogscores_em10.json": {
+      "family": "mistral-7b-v0.3",
+      "lang": "fin",
+      "stem_eq_lemma": false,
+      "protocol_tag": "fw2-100m_50klines_scriptfilt_base-tur-fin-hun-arb-hin_softem_seed-baselogscores_em10",
+      "harness_sha256": "bd82ce343b437fb293ebc350394563022930750be3ac2fd8f38a04b5e1f13de3",
+      "gold_sha256": "5120f4b2b23112565f83c524bbc711761cc8864b96c348c761946aa47381b9cb",
+      "arm_sha256": {
+        "Original(BPE)": "3e01771050ce4fba855c59ddb474c72ca1a3f2113a04727990155e3e47390764",
+        "base_tokenizer.json": "65780bb7887e3395f8e473e6dfc79fe3bb86b437c1a07b6f5c86e354cfe3173b",
+        "LangMAP(langspec)": "cf95d7467a439a011a01da4d8c6ccc14b98685a468e347a5e1f3b527c632f5aa"
+      },
+      "metrics": {
+        "Original(BPE)": {
+          "micro_f1": 0.05607581489441521,
+          "macro_f1": 0.07184535074993477,
+          "morphscore_recall": 0.41371477715384325,
+          "morphscore_precision": 0.15106351263649068,
+          "micro_precision": 0.03999539880368896,
+          "micro_recall": 0.09378114995367819,
+          "mean_token_char_ratio": 0.46108081622793273,
+          "num_samples": 40776,
+          "score_seconds": 8.33
+        },
+        "base_tokenizer.json": {
+          "micro_f1": 0.07567372855916911,
+          "macro_f1": 0.09446449890941006,
+          "morphscore_recall": 0.47766479486012237,
+          "morphscore_precision": 0.16838350942231903,
+          "micro_precision": 0.05414118954974986,
+          "micro_recall": 0.125643521395987,
+          "mean_token_char_ratio": 0.4590433134051753,
+          "num_samples": 40776,
+          "score_seconds": 8.74
+        },
+        "LangMAP(langspec)": {
+          "micro_f1": 0.07742221222389382,
+          "macro_f1": 0.09709551345989599,
+          "morphscore_recall": 0.5306268022461709,
+          "morphscore_precision": 0.18674320866365718,
+          "micro_precision": 0.05528087180439617,
+          "micro_recall": 0.129149906770021,
+          "mean_token_char_ratio": 0.4611289230243947,
+          "num_samples": 40776,
+          "score_seconds": 8.36
+        }
+      }
+    },
+    "mistral-7b-v0.3__hin_Deva__stem_eq_lemma-False__fw2-100m_50klines_scriptfilt_base-tur-fin-hun-arb-hin_softem_seed-baselogscores_em10.json": {
+      "family": "mistral-7b-v0.3",
+      "lang": "hin",
+      "stem_eq_lemma": false,
+      "protocol_tag": "fw2-100m_50klines_scriptfilt_base-tur-fin-hun-arb-hin_softem_seed-baselogscores_em10",
+      "harness_sha256": "bd82ce343b437fb293ebc350394563022930750be3ac2fd8f38a04b5e1f13de3",
+      "gold_sha256": "0ce256a9b55eddf21061d093949b7c36ccf88b6f0855c6d7d49665911b8ef2a1",
+      "arm_sha256": {
+        "Original(BPE)": "3e01771050ce4fba855c59ddb474c72ca1a3f2113a04727990155e3e47390764",
+        "base_tokenizer.json": "65780bb7887e3395f8e473e6dfc79fe3bb86b437c1a07b6f5c86e354cfe3173b",
+        "LangMAP(langspec)": "73d204b963971b7d1fbd17813901ddc47561a7b1d0e5aae0822cb4ed1d03ee88"
+      },
+      "metrics": {
+        "Original(BPE)": {
+          "micro_f1": 0.07040076626684373,
+          "macro_f1": 0.08889797867896371,
+          "morphscore_recall": 1.0,
+          "morphscore_precision": 0.22373675177330837,
+          "micro_precision": 0.044359705914627456,
+          "micro_recall": 0.17047970479704797,
+          "mean_token_char_ratio": 1.2815146394887584,
+          "num_samples": 4723,
+          "score_seconds": 1.64
+        },
+        "base_tokenizer.json": {
+          "micro_f1": 0.07864122847836202,
+          "macro_f1": 0.09758111954044052,
+          "morphscore_recall": 0.9999880715231473,
+          "morphscore_precision": 0.22641105683250662,
+          "micro_precision": 0.05045529183460218,
+          "micro_recall": 0.17817606747496045,
+          "mean_token_char_ratio": 1.1724431795068604,
+          "num_samples": 4723,
+          "score_seconds": 1.5
+        },
+        "LangMAP(langspec)": {
+          "micro_f1": 0.07864122847836202,
+          "macro_f1": 0.09758111954044052,
+          "morphscore_recall": 0.9999880715231473,
+          "morphscore_precision": 0.22641105683250662,
+          "micro_precision": 0.05045529183460218,
+          "micro_recall": 0.17817606747496045,
+          "mean_token_char_ratio": 1.1724431795068604,
+          "num_samples": 4723,
+          "score_seconds": 1.9
+        }
+      }
+    },
+    "mistral-7b-v0.3__hun_Latn__stem_eq_lemma-False__fw2-100m_50klines_scriptfilt_base-tur-fin-hun-arb-hin_softem_seed-baselogscores_em10.json": {
+      "family": "mistral-7b-v0.3",
+      "lang": "hun",
+      "stem_eq_lemma": false,
+      "protocol_tag": "fw2-100m_50klines_scriptfilt_base-tur-fin-hun-arb-hin_softem_seed-baselogscores_em10",
+      "harness_sha256": "bd82ce343b437fb293ebc350394563022930750be3ac2fd8f38a04b5e1f13de3",
+      "gold_sha256": "f0dfe8467291a60da39c13366562bc14af7b0142cf70110b7a867665dbfd3faf",
+      "arm_sha256": {
+        "Original(BPE)": "3e01771050ce4fba855c59ddb474c72ca1a3f2113a04727990155e3e47390764",
+        "base_tokenizer.json": "65780bb7887e3395f8e473e6dfc79fe3bb86b437c1a07b6f5c86e354cfe3173b",
+        "LangMAP(langspec)": "0b92d128beebdb394daac441e45175f3e02dbcdaf686dedfa19ea8ad14c11025"
+      },
+      "metrics": {
+        "Original(BPE)": {
+          "micro_f1": 0.16362511018999568,
+          "macro_f1": 0.19011971445042064,
+          "morphscore_recall": 0.6763759386087955,
+          "morphscore_precision": 0.18824179506166425,
+          "micro_precision": 0.11748862014167587,
+          "micro_recall": 0.2694255713403335,
+          "mean_token_char_ratio": 0.48248092094982187,
+          "num_samples": 7924,
+          "score_seconds": 1.91
+        },
+        "base_tokenizer.json": {
+          "micro_f1": 0.19106444307185508,
+          "macro_f1": 0.2206393738236295,
+          "morphscore_recall": 0.7750226916412235,
+          "morphscore_precision": 0.21506003233868523,
+          "micro_precision": 0.13706797002980906,
+          "micro_recall": 0.3152563310685608,
+          "mean_token_char_ratio": 0.48770082965724776,
+          "num_samples": 7924,
+          "score_seconds": 226.6
+        },
+        "LangMAP(langspec)": {
+          "micro_f1": 0.1995670510954354,
+          "macro_f1": 0.23161254741299708,
+          "morphscore_recall": 0.8277910718706151,
+          "morphscore_precision": 0.22948512202539598,
+          "micro_precision": 0.1429832067600813,
+          "micro_recall": 0.33026559604694256,
+          "mean_token_char_ratio": 0.487387374258389,
+          "num_samples": 7924,
+          "score_seconds": 1.91
+        }
+      }
+    },
+    "mistral-7b-v0.3__tam_Taml__stem_eq_lemma-False__fw2-100m_50klines_scriptfilt_base-tur-fin-hun-arb-hin_softem_seed-baselogscores_em10.json": {
+      "family": "mistral-7b-v0.3",
+      "lang": "tam",
+      "stem_eq_lemma": false,
+      "protocol_tag": "fw2-100m_50klines_scriptfilt_base-tur-fin-hun-arb-hin_softem_seed-baselogscores_em10",
+      "harness_sha256": "bd82ce343b437fb293ebc350394563022930750be3ac2fd8f38a04b5e1f13de3",
+      "gold_sha256": "31448fcaf1c3e3f65b85386250382fb63b6ede33910c30be7298d4c38b24179d",
+      "arm_sha256": {
+        "Original(BPE)": "3e01771050ce4fba855c59ddb474c72ca1a3f2113a04727990155e3e47390764",
+        "base_tokenizer.json": "65780bb7887e3395f8e473e6dfc79fe3bb86b437c1a07b6f5c86e354cfe3173b",
+        "LangMAP(langspec)": "155257e14337d74cd39b9da60fe7ecc4708a0b76d9b0906e6faa6f43f5f807da"
+      },
+      "metrics": {
+        "Original(BPE)": {
+          "micro_f1": 0.010306799051774488,
+          "macro_f1": 0.014298972681432633,
+          "morphscore_recall": 1.0,
+          "morphscore_precision": 0.1027565554912091,
+          "micro_precision": 0.006043269811852867,
+          "micro_recall": 0.03499766682221185,
+          "mean_token_char_ratio": 1.2583708378621763,
+          "num_samples": 2136,
+          "score_seconds": 0.92
+        },
+        "base_tokenizer.json": {
+          "micro_f1": 0.011470399577406332,
+          "macro_f1": 0.016830088148972765,
+          "morphscore_recall": 1.0,
+          "morphscore_precision": 0.11670301408954147,
+          "micro_precision": 0.00684160777782779,
+          "micro_recall": 0.03546430237984134,
+          "mean_token_char_ratio": 1.1148309319069527,
+          "num_samples": 2136,
+          "score_seconds": 0.74
+        },
+        "LangMAP(langspec)": {
+          "micro_f1": 0.011469966797464533,
+          "macro_f1": 0.016830088148972765,
+          "morphscore_recall": 1.0,
+          "morphscore_precision": 0.116701311289457,
+          "micro_precision": 0.006841299846970924,
+          "micro_recall": 0.03546430237984134,
+          "mean_token_char_ratio": 1.1148734923427717,
+          "num_samples": 2136,
+          "score_seconds": 0.75
+        }
+      }
+    },
+    "mistral-7b-v0.3__tur_Latn__stem_eq_lemma-False__fw2-100m_50klines_scriptfilt_base-tur-fin-hun-arb-hin_softem_seed-baselogscores_em10.json": {
+      "family": "mistral-7b-v0.3",
+      "lang": "tur",
+      "stem_eq_lemma": false,
+      "protocol_tag": "fw2-100m_50klines_scriptfilt_base-tur-fin-hun-arb-hin_softem_seed-baselogscores_em10",
+      "harness_sha256": "bd82ce343b437fb293ebc350394563022930750be3ac2fd8f38a04b5e1f13de3",
+      "gold_sha256": "5bff599769937acadb0d4444785968ca1bc5eacc3714de596e79806ab186c188",
+      "arm_sha256": {
+        "Original(BPE)": "3e01771050ce4fba855c59ddb474c72ca1a3f2113a04727990155e3e47390764",
+        "base_tokenizer.json": "65780bb7887e3395f8e473e6dfc79fe3bb86b437c1a07b6f5c86e354cfe3173b",
+        "LangMAP(langspec)": "562f084b68a74e36c065004b54397e4cf56e66c653c84c98dc5df8255af314ad"
+      },
+      "metrics": {
+        "Original(BPE)": {
+          "micro_f1": 0.06582125867649821,
+          "macro_f1": 0.08525171172370287,
+          "morphscore_recall": 0.5758687795385017,
+          "morphscore_precision": 0.14566528878559543,
+          "micro_precision": 0.04599848584755904,
+          "micro_recall": 0.11566745989099562,
+          "mean_token_char_ratio": 0.569466616853772,
+          "num_samples": 32560,
+          "score_seconds": 6.71
+        },
+        "base_tokenizer.json": {
+          "micro_f1": 0.08794392482952162,
+          "macro_f1": 0.11151032909072238,
+          "morphscore_recall": 0.6699193772588262,
+          "morphscore_precision": 0.16317367763364263,
+          "micro_precision": 0.061212573588721814,
+          "micro_recall": 0.1561219006678437,
+          "mean_token_char_ratio": 0.5798795902187402,
+          "num_samples": 32560,
+          "score_seconds": 8.82
+        },
+        "LangMAP(langspec)": {
+          "micro_f1": 0.08426939787353585,
+          "macro_f1": 0.10854366512120336,
+          "morphscore_recall": 0.7070822907978868,
+          "morphscore_precision": 0.17478668279022558,
+          "micro_precision": 0.05846853388246777,
+          "micro_recall": 0.15082520918093192,
+          "mean_token_char_ratio": 0.5852013899428056,
+          "num_samples": 32560,
+          "score_seconds": 6.45
+        }
+      }
+    },
+    "mistral-nemo-12b__arb_Arab__stem_eq_lemma-False__fw2-100m_50klines_scriptfilt_base-tur-fin-hun-arb-hin_softem_seed-baselogscores_em10.json": {
+      "family": "mistral-nemo-12b",
+      "lang": "arb",
+      "stem_eq_lemma": false,
+      "protocol_tag": "fw2-100m_50klines_scriptfilt_base-tur-fin-hun-arb-hin_softem_seed-baselogscores_em10",
+      "harness_sha256": "bd82ce343b437fb293ebc350394563022930750be3ac2fd8f38a04b5e1f13de3",
+      "gold_sha256": "896f572adc9652c138ea02326e9a701648a1336dc559da06c5a68aecb8cbf10f",
+      "arm_sha256": {
+        "Original(BPE)": "b0240ce510f08e6c2041724e9043e33be9d251d1e4a4d94eb68cd47b954b61d2",
+        "base_tokenizer.json": "7cfa6a7fd35f4bf3d84dc16e5b9be815280c624677a0be564a76285d28329921",
+        "LangMAP(langspec)": "87f7e18d5f1887de753a95bbbb16e324156da59902122cd107e98ab238e515fa"
+      },
+      "metrics": {
+        "Original(BPE)": {
+          "micro_f1": 0.22562762482501167,
+          "macro_f1": 0.24855202538630766,
+          "morphscore_recall": 0.6500008238861159,
+          "morphscore_precision": 0.5288019009014228,
+          "micro_precision": 0.19894012705309239,
+          "micro_recall": 0.2605846339570579,
+          "mean_token_char_ratio": 0.4600877322460916,
+          "num_samples": 10874,
+          "score_seconds": 3.19
+        },
+        "base_tokenizer.json": {
+          "micro_f1": 0.2427474809043982,
+          "macro_f1": 0.2675875489681885,
+          "morphscore_recall": 0.6549400210914941,
+          "morphscore_precision": 0.5359090170803487,
+          "micro_precision": 0.21743729738952397,
+          "micro_recall": 0.2747262222988704,
+          "mean_token_char_ratio": 0.4443321443643312,
+          "num_samples": 10874,
+          "score_seconds": 3.51
+        },
+        "LangMAP(langspec)": {
+          "micro_f1": 0.24702809116377683,
+          "macro_f1": 0.27254961449615395,
+          "morphscore_recall": 0.6547470935741514,
+          "morphscore_precision": 0.5357096363745635,
+          "micro_precision": 0.22014912783832113,
+          "micro_recall": 0.28138341455000215,
+          "mean_token_char_ratio": 0.4494146334748046,
+          "num_samples": 10869,
+          "score_seconds": 3.41
+        }
+      }
+    },
+    "mistral-nemo-12b__deu_Latn__stem_eq_lemma-False__fw2-100m_50klines_scriptfilt_base-tur-fin-hun-arb-hin_softem_seed-baselogscores_em10.json": {
+      "family": "mistral-nemo-12b",
+      "lang": "deu",
+      "stem_eq_lemma": false,
+      "protocol_tag": "fw2-100m_50klines_scriptfilt_base-tur-fin-hun-arb-hin_softem_seed-baselogscores_em10",
+      "harness_sha256": "bd82ce343b437fb293ebc350394563022930750be3ac2fd8f38a04b5e1f13de3",
+      "gold_sha256": "47945ff9cb6abe9c2f0ac86aa970297fc9502bee921758b67bfc42ef9bd0c570",
+      "arm_sha256": {
+        "Original(BPE)": "b0240ce510f08e6c2041724e9043e33be9d251d1e4a4d94eb68cd47b954b61d2",
+        "base_tokenizer.json": "7cfa6a7fd35f4bf3d84dc16e5b9be815280c624677a0be564a76285d28329921",
+        "LangMAP(langspec)": "93b3b4e27b484537d306c7fab8afe4da9b976097f735b060a9feb6afd8a302bd"
+      },
+      "metrics": {
+        "Original(BPE)": {
+          "micro_f1": 0.07778314142518421,
+          "macro_f1": 0.08753565430335433,
+          "morphscore_recall": 0.45819670918918487,
+          "morphscore_precision": 0.3966692617110881,
+          "micro_precision": 0.059810584350009556,
+          "micro_recall": 0.11119680932035682,
+          "mean_token_char_ratio": 0.3211728984570422,
+          "num_samples": 47723,
+          "score_seconds": 11.38
+        },
+        "base_tokenizer.json": {
+          "micro_f1": 0.139711016258345,
+          "macro_f1": 0.15291473924512453,
+          "morphscore_recall": 0.44135232549787345,
+          "morphscore_precision": 0.3135093935918081,
+          "micro_precision": 0.10566787717344932,
+          "micro_recall": 0.20611546931609445,
+          "mean_token_char_ratio": 0.3387743656611699,
+          "num_samples": 47723,
+          "score_seconds": 233.22
+        },
+        "LangMAP(langspec)": {
+          "micro_f1": 0.15410915765417216,
+          "macro_f1": 0.1654883851326057,
+          "morphscore_recall": 0.5649404839875195,
+          "morphscore_precision": 0.43853789313317476,
+          "micro_precision": 0.11939682575090063,
+          "micro_recall": 0.21727878867836448,
+          "mean_token_char_ratio": 0.3155968899280246,
+          "num_samples": 47723,
+          "score_seconds": 11.6
+        }
+      }
+    },
+    "mistral-nemo-12b__fin_Latn__stem_eq_lemma-False__fw2-100m_50klines_scriptfilt_base-tur-fin-hun-arb-hin_softem_seed-baselogscores_em10.json": {
+      "family": "mistral-nemo-12b",
+      "lang": "fin",
+      "stem_eq_lemma": false,
+      "protocol_tag": "fw2-100m_50klines_scriptfilt_base-tur-fin-hun-arb-hin_softem_seed-baselogscores_em10",
+      "harness_sha256": "bd82ce343b437fb293ebc350394563022930750be3ac2fd8f38a04b5e1f13de3",
+      "gold_sha256": "5120f4b2b23112565f83c524bbc711761cc8864b96c348c761946aa47381b9cb",
+      "arm_sha256": {
+        "Original(BPE)": "b0240ce510f08e6c2041724e9043e33be9d251d1e4a4d94eb68cd47b954b61d2",
+        "base_tokenizer.json": "7cfa6a7fd35f4bf3d84dc16e5b9be815280c624677a0be564a76285d28329921",
+        "LangMAP(langspec)": "5a681b40dd9f94706ca9684aac28b7908a3d35f97e20eef4fc05a473b4f49753"
+      },
+      "metrics": {
+        "Original(BPE)": {
+          "micro_f1": 0.07038266340660596,
+          "macro_f1": 0.08560517319149401,
+          "morphscore_recall": 0.3658977083017174,
+          "morphscore_precision": 0.17487585246577758,
+          "micro_precision": 0.052978483788749926,
+          "micro_recall": 0.10481629589670823,
+          "mean_token_char_ratio": 0.38972868025677965,
+          "num_samples": 40776,
+          "score_seconds": 8.58
+        },
+        "base_tokenizer.json": {
+          "micro_f1": 0.08922226927187306,
+          "macro_f1": 0.10630427987391605,
+          "morphscore_recall": 0.4350381949714196,
+          "morphscore_precision": 0.19678249410606596,
+          "micro_precision": 0.06799350920758243,
+          "micro_recall": 0.12972453179787272,
+          "mean_token_char_ratio": 0.376789719849552,
+          "num_samples": 40776,
+          "score_seconds": 8.3
+        },
+        "LangMAP(langspec)": {
+          "micro_f1": 0.09403666983999268,
+          "macro_f1": 0.11216717710503839,
+          "morphscore_recall": 0.4650629837608167,
+          "morphscore_precision": 0.2033529649442558,
+          "micro_precision": 0.07120365790394383,
+          "micro_recall": 0.13842599650534168,
+          "mean_token_char_ratio": 0.38431203019923704,
+          "num_samples": 40776,
+          "score_seconds": 8.08
+        }
+      }
+    },
+    "mistral-nemo-12b__hin_Deva__stem_eq_lemma-False__fw2-100m_50klines_scriptfilt_base-tur-fin-hun-arb-hin_softem_seed-baselogscores_em10.json": {
+      "family": "mistral-nemo-12b",
+      "lang": "hin",
+      "stem_eq_lemma": false,
+      "protocol_tag": "fw2-100m_50klines_scriptfilt_base-tur-fin-hun-arb-hin_softem_seed-baselogscores_em10",
+      "harness_sha256": "bd82ce343b437fb293ebc350394563022930750be3ac2fd8f38a04b5e1f13de3",
+      "gold_sha256": "0ce256a9b55eddf21061d093949b7c36ccf88b6f0855c6d7d49665911b8ef2a1",
+      "arm_sha256": {
+        "Original(BPE)": "b0240ce510f08e6c2041724e9043e33be9d251d1e4a4d94eb68cd47b954b61d2",
+        "base_tokenizer.json": "7cfa6a7fd35f4bf3d84dc16e5b9be815280c624677a0be564a76285d28329921",
+        "LangMAP(langspec)": "792c7717eb92020b87c1fcd4861b705d293b15d7fe60cc6a9fa7dc3d732d132e"
+      },
+      "metrics": {
+        "Original(BPE)": {
+          "micro_f1": 0.16199330046294555,
+          "macro_f1": 0.16999545828169121,
+          "morphscore_recall": 0.5939665764078654,
+          "morphscore_precision": 0.3696874217516553,
+          "micro_precision": 0.12596581596815734,
+          "micro_recall": 0.2268845545598313,
+          "mean_token_char_ratio": 0.6109488971282323,
+          "num_samples": 4723,
+          "score_seconds": 1.83
+        },
+        "base_tokenizer.json": {
+          "micro_f1": 0.17418351477449454,
+          "macro_f1": 0.18398021103021217,
+          "morphscore_recall": 0.6146147698400457,
+          "morphscore_precision": 0.3789559760713826,
+          "micro_precision": 0.1360350752458822,
+          "micro_recall": 0.24206642066420664,
+          "mean_token_char_ratio": 0.6041059920506248,
+          "num_samples": 4723,
+          "score_seconds": 1.64
+        },
+        "LangMAP(langspec)": {
+          "micro_f1": 0.177313816710163,
+          "macro_f1": 0.18728077617178834,
+          "morphscore_recall": 0.6252728639080144,
+          "morphscore_precision": 0.3824335672915694,
+          "micro_precision": 0.1382564586528253,
+          "micro_recall": 0.2471270426989984,
+          "mean_token_char_ratio": 0.6066751563655014,
+          "num_samples": 4723,
+          "score_seconds": 1.57
+        }
+      }
+    },
+    "mistral-nemo-12b__hun_Latn__stem_eq_lemma-False__fw2-100m_50klines_scriptfilt_base-tur-fin-hun-arb-hin_softem_seed-baselogscores_em10.json": {
+      "family": "mistral-nemo-12b",
+      "lang": "hun",
+      "stem_eq_lemma": false,
+      "protocol_tag": "fw2-100m_50klines_scriptfilt_base-tur-fin-hun-arb-hin_softem_seed-baselogscores_em10",
+      "harness_sha256": "bd82ce343b437fb293ebc350394563022930750be3ac2fd8f38a04b5e1f13de3",
+      "gold_sha256": "f0dfe8467291a60da39c13366562bc14af7b0142cf70110b7a867665dbfd3faf",
+      "arm_sha256": {
+        "Original(BPE)": "b0240ce510f08e6c2041724e9043e33be9d251d1e4a4d94eb68cd47b954b61d2",
+        "base_tokenizer.json": "7cfa6a7fd35f4bf3d84dc16e5b9be815280c624677a0be564a76285d28329921",
+        "LangMAP(langspec)": "2f807d9af69378673830cc7968e4796d73a00838dec4e50f38dea31369aef104"
+      },
+      "metrics": {
+        "Original(BPE)": {
+          "micro_f1": 0.1933306446477468,
+          "macro_f1": 0.2173532950923782,
+          "morphscore_recall": 0.5751712187474226,
+          "morphscore_precision": 0.19439662917053802,
+          "micro_precision": 0.1472785485592316,
+          "micro_recall": 0.2812847436689314,
+          "mean_token_char_ratio": 0.4045265610182699,
+          "num_samples": 7924,
+          "score_seconds": 171.22
+        },
+        "base_tokenizer.json": {
+          "micro_f1": 0.23961176827418862,
+          "macro_f1": 0.2650764688468828,
+          "morphscore_recall": 0.6900321808730104,
+          "morphscore_precision": 0.23360921701543869,
+          "micro_precision": 0.1845301655098772,
+          "micro_recall": 0.34156886967263744,
+          "mean_token_char_ratio": 0.3930295863131406,
+          "num_samples": 7924,
+          "score_seconds": 2.97
+        },
+        "LangMAP(langspec)": {
+          "micro_f1": 0.2463109128345916,
+          "macro_f1": 0.27323385274896644,
+          "morphscore_recall": 0.7174684379899345,
+          "morphscore_precision": 0.2404190758861111,
+          "micro_precision": 0.18867056581454952,
+          "micro_recall": 0.3546633724521309,
+          "mean_token_char_ratio": 0.39951262196034365,
+          "num_samples": 7924,
+          "score_seconds": 2.18
+        }
+      }
+    },
+    "mistral-nemo-12b__tam_Taml__stem_eq_lemma-False__fw2-100m_50klines_scriptfilt_base-tur-fin-hun-arb-hin_softem_seed-baselogscores_em10.json": {
+      "family": "mistral-nemo-12b",
+      "lang": "tam",
+      "stem_eq_lemma": false,
+      "protocol_tag": "fw2-100m_50klines_scriptfilt_base-tur-fin-hun-arb-hin_softem_seed-baselogscores_em10",
+      "harness_sha256": "bd82ce343b437fb293ebc350394563022930750be3ac2fd8f38a04b5e1f13de3",
+      "gold_sha256": "31448fcaf1c3e3f65b85386250382fb63b6ede33910c30be7298d4c38b24179d",
+      "arm_sha256": {
+        "Original(BPE)": "b0240ce510f08e6c2041724e9043e33be9d251d1e4a4d94eb68cd47b954b61d2",
+        "base_tokenizer.json": "7cfa6a7fd35f4bf3d84dc16e5b9be815280c624677a0be564a76285d28329921",
+        "LangMAP(langspec)": "49b6eae827ae07043b36b5dcf7d57587a2274d830cc447cdf800594a860fa426"
+      },
+      "metrics": {
+        "Original(BPE)": {
+          "micro_f1": 0.08186485361454142,
+          "macro_f1": 0.09210133417839636,
+          "morphscore_recall": 0.33546864463923803,
+          "morphscore_precision": 0.0861845180118942,
+          "micro_precision": 0.05825434439178515,
+          "micro_recall": 0.13765748950069995,
+          "mean_token_char_ratio": 0.5236780065512738,
+          "num_samples": 2136,
+          "score_seconds": 111.77
+        },
+        "base_tokenizer.json": {
+          "micro_f1": 0.08798103736754043,
+          "macro_f1": 0.09843269781508847,
+          "morphscore_recall": 0.3857046527309451,
+          "morphscore_precision": 0.098372025816395,
+          "micro_precision": 0.06273613044342811,
+          "micro_recall": 0.14722351843210452,
+          "mean_token_char_ratio": 0.5205614193292254,
+          "num_samples": 2136,
+          "score_seconds": 1.4
+        },
+        "LangMAP(langspec)": {
+          "micro_f1": 0.08741039738325564,
+          "macro_f1": 0.09775410929928605,
+          "morphscore_recall": 0.3875028096201331,
+          "morphscore_precision": 0.09825865987362899,
+          "micro_precision": 0.0622830506793613,
+          "micro_recall": 0.14652356509566028,
+          "mean_token_char_ratio": 0.5217448843709845,
+          "num_samples": 2136,
+          "score_seconds": 0.8
+        }
+      }
+    },
+    "mistral-nemo-12b__tur_Latn__stem_eq_lemma-False__fw2-100m_50klines_scriptfilt_base-tur-fin-hun-arb-hin_softem_seed-baselogscores_em10.json": {
+      "family": "mistral-nemo-12b",
+      "lang": "tur",
+      "stem_eq_lemma": false,
+      "protocol_tag": "fw2-100m_50klines_scriptfilt_base-tur-fin-hun-arb-hin_softem_seed-baselogscores_em10",
+      "harness_sha256": "bd82ce343b437fb293ebc350394563022930750be3ac2fd8f38a04b5e1f13de3",
+      "gold_sha256": "5bff599769937acadb0d4444785968ca1bc5eacc3714de596e79806ab186c188",
+      "arm_sha256": {
+        "Original(BPE)": "b0240ce510f08e6c2041724e9043e33be9d251d1e4a4d94eb68cd47b954b61d2",
+        "base_tokenizer.json": "7cfa6a7fd35f4bf3d84dc16e5b9be815280c624677a0be564a76285d28329921",
+        "LangMAP(langspec)": "bbabea5e77bbc1d7350488aa69478c4dca79877aebd13c3c4663cee4dd400efb"
+      },
+      "metrics": {
+        "Original(BPE)": {
+          "micro_f1": 0.1480709868126834,
+          "macro_f1": 0.1694124942334266,
+          "morphscore_recall": 0.5192452043369455,
+          "morphscore_precision": 0.18364451085781133,
+          "micro_precision": 0.11482537238946736,
+          "micro_recall": 0.2084132954632686,
+          "mean_token_char_ratio": 0.4150902932174921,
+          "num_samples": 32560,
+          "score_seconds": 6.73
+        },
+        "base_tokenizer.json": {
+          "micro_f1": 0.19752049455718318,
+          "macro_f1": 0.22209125044820896,
+          "morphscore_recall": 0.6268001112037805,
+          "morphscore_precision": 0.22379394093843408,
+          "micro_precision": 0.15546192562296715,
+          "micro_recall": 0.2707760804482997,
+          "mean_token_char_ratio": 0.3996222317873915,
+          "num_samples": 32560,
+          "score_seconds": 6.76
+        },
+        "LangMAP(langspec)": {
+          "micro_f1": 0.20282213268334742,
+          "macro_f1": 0.228983839724619,
+          "morphscore_recall": 0.6686891854323047,
+          "morphscore_precision": 0.23475861167374712,
+          "micro_precision": 0.15845654276633964,
+          "micro_recall": 0.2816918707300223,
+          "mean_token_char_ratio": 0.4078199622333101,
+          "num_samples": 32560,
+          "score_seconds": 6.52
+        }
+      }
+    },
+    "olmo3-7b__deu_Latn__stem_eq_lemma-False__fw2-100m_50klines_scriptfilt_base-tur-fin-hun-arb-hin_softem_seed-baselogscores_em10.json": {
+      "family": "olmo3-7b",
+      "lang": "deu",
+      "stem_eq_lemma": false,
+      "protocol_tag": "fw2-100m_50klines_scriptfilt_base-tur-fin-hun-arb-hin_softem_seed-baselogscores_em10",
+      "harness_sha256": "bd82ce343b437fb293ebc350394563022930750be3ac2fd8f38a04b5e1f13de3",
+      "gold_sha256": "47945ff9cb6abe9c2f0ac86aa970297fc9502bee921758b67bfc42ef9bd0c570",
+      "arm_sha256": {
+        "Original(BPE)": "18e309ad7f9c60037eaf26aca401a96128187cad2bdfa01a508dca7526bf6300",
+        "base_tokenizer.json": "4944bfb4cd18177665960d152577471350d5802d89f538e1bb7e8686112502bd",
+        "LangMAP(langspec)": "12d6b5402be40a1d8b8d754743f2ac2f4bf66aeea22d84cc42044c51b7c7f4bf"
+      },
+      "metrics": {
+        "Original(BPE)": {
+          "micro_f1": 0.07984946791272313,
+          "macro_f1": 0.0914531031494134,
+          "morphscore_recall": 0.4472727637655989,
+          "morphscore_precision": 0.36177270736354206,
+          "micro_precision": 0.059222886631315086,
+          "micro_recall": 0.12252250423698711,
+          "mean_token_char_ratio": 0.3549724294600286,
+          "num_samples": 47723,
+          "score_seconds": 11.93
+        },
+        "base_tokenizer.json": {
+          "micro_f1": 0.11970185998274742,
+          "macro_f1": 0.13614130274861577,
+          "morphscore_recall": 0.44426527197360466,
+          "morphscore_precision": 0.3007282551161928,
+          "micro_precision": 0.0878036988937445,
+          "micro_recall": 0.18800044653277448,
+          "mean_token_char_ratio": 0.36823661110705025,
+          "num_samples": 47723,
+          "score_seconds": 10.7
+        },
+        "LangMAP(langspec)": {
+          "micro_f1": 0.15423567535915572,
+          "macro_f1": 0.16949896259744557,
+          "morphscore_recall": 0.623859117971438,
+          "morphscore_precision": 0.4320806745946201,
+          "micro_precision": 0.1147310534626217,
+          "micro_recall": 0.23523143590732415,
+          "mean_token_char_ratio": 0.353009117439906,
+          "num_samples": 47723,
+          "score_seconds": 10.75
+        }
+      }
+    },
+    "olmo3-7b__fin_Latn__stem_eq_lemma-False__fw2-100m_50klines_scriptfilt_base-tur-fin-hun-arb-hin_softem_seed-baselogscores_em10.json": {
+      "family": "olmo3-7b",
+      "lang": "fin",
+      "stem_eq_lemma": false,
+      "protocol_tag": "fw2-100m_50klines_scriptfilt_base-tur-fin-hun-arb-hin_softem_seed-baselogscores_em10",
+      "harness_sha256": "bd82ce343b437fb293ebc350394563022930750be3ac2fd8f38a04b5e1f13de3",
+      "gold_sha256": "5120f4b2b23112565f83c524bbc711761cc8864b96c348c761946aa47381b9cb",
+      "arm_sha256": {
+        "Original(BPE)": "18e309ad7f9c60037eaf26aca401a96128187cad2bdfa01a508dca7526bf6300",
+        "base_tokenizer.json": "4944bfb4cd18177665960d152577471350d5802d89f538e1bb7e8686112502bd",
+        "LangMAP(langspec)": "64549c570458f1795b59402fb5b906a60f4c26c93dbf33e55f9fc92d69fa8951"
+      },
+      "metrics": {
+        "Original(BPE)": {
+          "micro_f1": 0.05858972797626296,
+          "macro_f1": 0.07378392131366236,
+          "morphscore_recall": 0.3884200940962228,
+          "morphscore_precision": 0.16569071055867457,
+          "micro_precision": 0.04274728588661037,
+          "micro_recall": 0.09308925451197918,
+          "mean_token_char_ratio": 0.4281481688066283,
+          "num_samples": 40776,
+          "score_seconds": 6.55
+        },
+        "base_tokenizer.json": {
+          "micro_f1": 0.07901934268305653,
+          "macro_f1": 0.0964787441998021,
+          "morphscore_recall": 0.4676835129255858,
+          "morphscore_precision": 0.19123800825235263,
+          "micro_precision": 0.05843947881491637,
+          "micro_recall": 0.12197295744256681,
+          "mean_token_char_ratio": 0.4113042934722165,
+          "num_samples": 40776,
+          "score_seconds": 6.58
+        },
+        "LangMAP(langspec)": {
+          "micro_f1": 0.08178341864063803,
+          "macro_f1": 0.10035376318069399,
+          "morphscore_recall": 0.5151262204684596,
+          "morphscore_precision": 0.20211232920117947,
+          "micro_precision": 0.05988810137340038,
+          "micro_recall": 0.12891536594232642,
+          "mean_token_char_ratio": 0.42460822463071346,
+          "num_samples": 40776,
+          "score_seconds": 8.49
+        }
+      }
+    },
+    "olmo3-7b__hun_Latn__stem_eq_lemma-False__fw2-100m_50klines_scriptfilt_base-tur-fin-hun-arb-hin_softem_seed-baselogscores_em10.json": {
+      "family": "olmo3-7b",
+      "lang": "hun",
+      "stem_eq_lemma": false,
+      "protocol_tag": "fw2-100m_50klines_scriptfilt_base-tur-fin-hun-arb-hin_softem_seed-baselogscores_em10",
+      "harness_sha256": "bd82ce343b437fb293ebc350394563022930750be3ac2fd8f38a04b5e1f13de3",
+      "gold_sha256": "f0dfe8467291a60da39c13366562bc14af7b0142cf70110b7a867665dbfd3faf",
+      "arm_sha256": {
+        "Original(BPE)": "18e309ad7f9c60037eaf26aca401a96128187cad2bdfa01a508dca7526bf6300",
+        "base_tokenizer.json": "4944bfb4cd18177665960d152577471350d5802d89f538e1bb7e8686112502bd",
+        "LangMAP(langspec)": "44dd2be5c2545d23f93f8c18f622b307e233b28a01a77aaa2160a471fd9aa108"
+      },
+      "metrics": {
+        "Original(BPE)": {
+          "micro_f1": 0.14096965210954848,
+          "macro_f1": 0.16301043984657718,
+          "morphscore_recall": 0.6501774073768457,
+          "morphscore_precision": 0.1799813562128935,
+          "micro_precision": 0.10063408190224571,
+          "micro_recall": 0.2352686843730698,
+          "mean_token_char_ratio": 0.49077532949402936,
+          "num_samples": 7924,
+          "score_seconds": 1.59
+        },
+        "base_tokenizer.json": {
+          "micro_f1": 0.17038715769593954,
+          "macro_f1": 0.19441349383270787,
+          "morphscore_recall": 0.7435019391038857,
+          "morphscore_precision": 0.20729998059810734,
+          "micro_precision": 0.12271490750816104,
+          "micro_recall": 0.27862878319950585,
+          "mean_token_char_ratio": 0.4772154627568933,
+          "num_samples": 7924,
+          "score_seconds": 1.62
+        },
+        "LangMAP(langspec)": {
+          "micro_f1": 0.17428256070640177,
+          "macro_f1": 0.2009042114317606,
+          "morphscore_recall": 0.801592540638666,
+          "morphscore_precision": 0.2175416199582795,
+          "micro_precision": 0.12410269845428347,
+          "micro_recall": 0.2925880172946263,
+          "mean_token_char_ratio": 0.49551872915767003,
+          "num_samples": 7924,
+          "score_seconds": 1.5
+        }
+      }
+    },
+    "olmo3-7b__tur_Latn__stem_eq_lemma-False__fw2-100m_50klines_scriptfilt_base-tur-fin-hun-arb-hin_softem_seed-baselogscores_em10.json": {
+      "family": "olmo3-7b",
+      "lang": "tur",
+      "stem_eq_lemma": false,
+      "protocol_tag": "fw2-100m_50klines_scriptfilt_base-tur-fin-hun-arb-hin_softem_seed-baselogscores_em10",
+      "harness_sha256": "bd82ce343b437fb293ebc350394563022930750be3ac2fd8f38a04b5e1f13de3",
+      "gold_sha256": "5bff599769937acadb0d4444785968ca1bc5eacc3714de596e79806ab186c188",
+      "arm_sha256": {
+        "Original(BPE)": "18e309ad7f9c60037eaf26aca401a96128187cad2bdfa01a508dca7526bf6300",
+        "base_tokenizer.json": "4944bfb4cd18177665960d152577471350d5802d89f538e1bb7e8686112502bd",
+        "LangMAP(langspec)": "412416ff25708706b051d17e034720437add4086245866199af8ef8f20209a1b"
+      },
+      "metrics": {
+        "Original(BPE)": {
+          "micro_f1": 0.09966777408637874,
+          "macro_f1": 0.11991848846876753,
+          "morphscore_recall": 0.5174172921879329,
+          "morphscore_precision": 0.16097567577759198,
+          "micro_precision": 0.0737127849749509,
+          "micro_recall": 0.1538343440546557,
+          "mean_token_char_ratio": 0.4745569176522772,
+          "num_samples": 32560,
+          "score_seconds": 5.99
+        },
+        "base_tokenizer.json": {
+          "micro_f1": 0.1341428070228961,
+          "macro_f1": 0.15873556461591323,
+          "morphscore_recall": 0.6603141506811215,
+          "morphscore_precision": 0.2057728512336495,
+          "micro_precision": 0.10028433280622795,
+          "micro_recall": 0.20251784754740154,
+          "mean_token_char_ratio": 0.4603206203085706,
+          "num_samples": 32560,
+          "score_seconds": 5.77
+        },
+        "LangMAP(langspec)": {
+          "micro_f1": 0.13485612785087392,
+          "macro_f1": 0.16071256940109083,
+          "morphscore_recall": 0.6921253822629959,
+          "morphscore_precision": 0.20954391807185574,
+          "micro_precision": 0.09989208048135062,
+          "micro_recall": 0.2074767789974668,
+          "mean_token_char_ratio": 0.4735518455047286,
+          "num_samples": 32560,
+          "score_seconds": 5.57
+        }
+      }
+    },
+    "phi-4__arb_Arab__stem_eq_lemma-False__fw2-100m_50klines_scriptfilt_base-tur-fin-hun-arb-hin_softem_seed-baselogscores_em10.json": {
+      "family": "phi-4",
+      "lang": "arb",
+      "stem_eq_lemma": false,
+      "protocol_tag": "fw2-100m_50klines_scriptfilt_base-tur-fin-hun-arb-hin_softem_seed-baselogscores_em10",
+      "harness_sha256": "bd82ce343b437fb293ebc350394563022930750be3ac2fd8f38a04b5e1f13de3",
+      "gold_sha256": "896f572adc9652c138ea02326e9a701648a1336dc559da06c5a68aecb8cbf10f",
+      "arm_sha256": {
+        "Original(BPE)": "589dc0f70c1b6b229e5047f26e9ed3aa175800d3508b3a1709957cf0f60602b1",
+        "base_tokenizer.json": "13159621c8b2c3e25a944b354131998997c1d4e7d3ee6830abf34c5acff4e20d",
+        "LangMAP(langspec)": "8ba2d3b3722cc26910e225fe2e8f4cee2f8a3ebda29658764a5b4c70ba82dd08"
+      },
+      "metrics": {
+        "Original(BPE)": {
+          "micro_f1": 0.23788771454496657,
+          "macro_f1": 0.24871347133825597,
+          "morphscore_recall": 0.9229915418551715,
+          "morphscore_precision": 0.24835604803818634,
+          "micro_precision": 0.16765744343565356,
+          "micro_recall": 0.409368814603035,
+          "mean_token_char_ratio": 0.852668023820208,
+          "num_samples": 10415,
+          "score_seconds": 2.74
+        },
+        "base_tokenizer.json": {
+          "micro_f1": 0.23781462117629013,
+          "macro_f1": 0.2485807007285596,
+          "morphscore_recall": 0.9222960631691345,
+          "morphscore_precision": 0.24824329340288828,
+          "micro_precision": 0.16762172487115723,
+          "micro_recall": 0.4091488893776116,
+          "mean_token_char_ratio": 0.8524384217159061,
+          "num_samples": 10415,
+          "score_seconds": 2.68
+        },
+        "LangMAP(langspec)": {
+          "micro_f1": 0.23661355746856047,
+          "macro_f1": 0.2473836591700782,
+          "morphscore_recall": 0.9238394312370032,
+          "morphscore_precision": 0.2473236879620571,
+          "micro_precision": 0.1664132787207784,
+          "micro_recall": 0.40925486056127386,
+          "mean_token_char_ratio": 0.8584406079484819,
+          "num_samples": 10414,
+          "score_seconds": 2.82
+        }
+      }
+    },
+    "phi-4__deu_Latn__stem_eq_lemma-False__fw2-100m_50klines_scriptfilt_base-tur-fin-hun-arb-hin_softem_seed-baselogscores_em10.json": {
+      "family": "phi-4",
+      "lang": "deu",
+      "stem_eq_lemma": false,
+      "protocol_tag": "fw2-100m_50klines_scriptfilt_base-tur-fin-hun-arb-hin_softem_seed-baselogscores_em10",
+      "harness_sha256": "bd82ce343b437fb293ebc350394563022930750be3ac2fd8f38a04b5e1f13de3",
+      "gold_sha256": "47945ff9cb6abe9c2f0ac86aa970297fc9502bee921758b67bfc42ef9bd0c570",
+      "arm_sha256": {
+        "Original(BPE)": "589dc0f70c1b6b229e5047f26e9ed3aa175800d3508b3a1709957cf0f60602b1",
+        "base_tokenizer.json": "13159621c8b2c3e25a944b354131998997c1d4e7d3ee6830abf34c5acff4e20d",
+        "LangMAP(langspec)": "8096195a72ad41f89c2acfe6b39ca14e21d51ce4d954f4f63a83e4108807ee31"
+      },
+      "metrics": {
+        "Original(BPE)": {
+          "micro_f1": 0.07984946791272313,
+          "macro_f1": 0.0914531031494134,
+          "morphscore_recall": 0.4472727637655989,
+          "morphscore_precision": 0.36177270736354206,
+          "micro_precision": 0.059222886631315086,
+          "micro_recall": 0.12252250423698711,
+          "mean_token_char_ratio": 0.3549724294600286,
+          "num_samples": 47723,
+          "score_seconds": 202.02
+        },
+        "base_tokenizer.json": {
+          "micro_f1": 0.11969799275673686,
+          "macro_f1": 0.1361335089584743,
+          "morphscore_recall": 0.44412107716166005,
+          "morphscore_precision": 0.300624572179985,
+          "micro_precision": 0.08779953742321983,
+          "micro_recall": 0.18800044653277448,
+          "mean_token_char_ratio": 0.36825858850916937,
+          "num_samples": 47723,
+          "score_seconds": 10.67
+        },
+        "LangMAP(langspec)": {
+          "micro_f1": 0.15423567535915572,
+          "macro_f1": 0.16949896259744557,
+          "morphscore_recall": 0.623859117971438,
+          "morphscore_precision": 0.4320806745946201,
+          "micro_precision": 0.1147310534626217,
+          "micro_recall": 0.23523143590732415,
+          "mean_token_char_ratio": 0.353009117439906,
+          "num_samples": 47723,
+          "score_seconds": 9.93
+        }
+      }
+    },
+    "phi-4__fin_Latn__stem_eq_lemma-False__fw2-100m_50klines_scriptfilt_base-tur-fin-hun-arb-hin_softem_seed-baselogscores_em10.json": {
+      "family": "phi-4",
+      "lang": "fin",
+      "stem_eq_lemma": false,
+      "protocol_tag": "fw2-100m_50klines_scriptfilt_base-tur-fin-hun-arb-hin_softem_seed-baselogscores_em10",
+      "harness_sha256": "bd82ce343b437fb293ebc350394563022930750be3ac2fd8f38a04b5e1f13de3",
+      "gold_sha256": "5120f4b2b23112565f83c524bbc711761cc8864b96c348c761946aa47381b9cb",
+      "arm_sha256": {
+        "Original(BPE)": "589dc0f70c1b6b229e5047f26e9ed3aa175800d3508b3a1709957cf0f60602b1",
+        "base_tokenizer.json": "13159621c8b2c3e25a944b354131998997c1d4e7d3ee6830abf34c5acff4e20d",
+        "LangMAP(langspec)": "3220f74e7bc600f76404d6fb70113a26094f50f5ac404e5927c06a3d19c8caf4"
+      },
+      "metrics": {
+        "Original(BPE)": {
+          "micro_f1": 0.05858972797626296,
+          "macro_f1": 0.07378392131366236,
+          "morphscore_recall": 0.3884200940962228,
+          "morphscore_precision": 0.16569071055867457,
+          "micro_precision": 0.04274728588661037,
+          "micro_recall": 0.09308925451197918,
+          "mean_token_char_ratio": 0.4281481688066283,
+          "num_samples": 40776,
+          "score_seconds": 7.06
+        },
+        "base_tokenizer.json": {
+          "micro_f1": 0.0790129459673008,
+          "macro_f1": 0.09647342262514383,
+          "morphscore_recall": 0.4676430414326936,
+          "morphscore_precision": 0.1912387550477572,
+          "micro_precision": 0.05843517347942127,
+          "micro_recall": 0.12196123040118209,
+          "mean_token_char_ratio": 0.41129566752553876,
+          "num_samples": 40776,
+          "score_seconds": 7.2
+        },
+        "LangMAP(langspec)": {
+          "micro_f1": 0.08178341864063803,
+          "macro_f1": 0.10035376318069399,
+          "morphscore_recall": 0.5152273992006903,
+          "morphscore_precision": 0.20213412277889958,
+          "micro_precision": 0.05988810137340038,
+          "micro_recall": 0.12891536594232642,
+          "mean_token_char_ratio": 0.42460822463071346,
+          "num_samples": 40776,
+          "score_seconds": 20.12
+        }
+      }
+    },
+    "phi-4__hin_Deva__stem_eq_lemma-False__fw2-100m_50klines_scriptfilt_base-tur-fin-hun-arb-hin_softem_seed-baselogscores_em10.json": {
+      "family": "phi-4",
+      "lang": "hin",
+      "stem_eq_lemma": false,
+      "protocol_tag": "fw2-100m_50klines_scriptfilt_base-tur-fin-hun-arb-hin_softem_seed-baselogscores_em10",
+      "harness_sha256": "bd82ce343b437fb293ebc350394563022930750be3ac2fd8f38a04b5e1f13de3",
+      "gold_sha256": "0ce256a9b55eddf21061d093949b7c36ccf88b6f0855c6d7d49665911b8ef2a1",
+      "arm_sha256": {
+        "Original(BPE)": "589dc0f70c1b6b229e5047f26e9ed3aa175800d3508b3a1709957cf0f60602b1",
+        "base_tokenizer.json": "13159621c8b2c3e25a944b354131998997c1d4e7d3ee6830abf34c5acff4e20d",
+        "LangMAP(langspec)": "607704af96ec2b779ec0ed6dc83e66eddc45b37480732b04b5bf1660c56efa09"
+      },
+      "metrics": {
+        "Original(BPE)": {
+          "micro_f1": 0.08189053182291782,
+          "macro_f1": 0.10336607494289038,
+          "morphscore_recall": 0.899180513640215,
+          "morphscore_precision": 0.25247133848942843,
+          "micro_precision": 0.051847069391421516,
+          "micro_recall": 0.19472851871375857,
+          "mean_token_char_ratio": 1.2463272271286245,
+          "num_samples": 4723,
+          "score_seconds": 1.52
+        },
+        "base_tokenizer.json": {
+          "micro_f1": 0.07249107716863598,
+          "macro_f1": 0.09324386770359658,
+          "morphscore_recall": 0.9396955852707183,
+          "morphscore_precision": 0.26105584686280275,
+          "micro_precision": 0.045896025151583204,
+          "micro_recall": 0.1723774380600949,
+          "mean_token_char_ratio": 1.2463272271286245,
+          "num_samples": 4723,
+          "score_seconds": 1.46
+        },
+        "LangMAP(langspec)": {
+          "micro_f1": 0.07186976087531986,
+          "macro_f1": 0.09274774191493582,
+          "morphscore_recall": 0.9404947932198552,
+          "morphscore_precision": 0.26072925563659555,
+          "micro_precision": 0.04544313331659553,
+          "micro_recall": 0.17174486030574593,
+          "mean_token_char_ratio": 1.2538182105141666,
+          "num_samples": 4723,
+          "score_seconds": 1.37
+        }
+      }
+    },
+    "phi-4__hun_Latn__stem_eq_lemma-False__fw2-100m_50klines_scriptfilt_base-tur-fin-hun-arb-hin_softem_seed-baselogscores_em10.json": {
+      "family": "phi-4",
+      "lang": "hun",
+      "stem_eq_lemma": false,
+      "protocol_tag": "fw2-100m_50klines_scriptfilt_base-tur-fin-hun-arb-hin_softem_seed-baselogscores_em10",
+      "harness_sha256": "bd82ce343b437fb293ebc350394563022930750be3ac2fd8f38a04b5e1f13de3",
+      "gold_sha256": "f0dfe8467291a60da39c13366562bc14af7b0142cf70110b7a867665dbfd3faf",
+      "arm_sha256": {
+        "Original(BPE)": "589dc0f70c1b6b229e5047f26e9ed3aa175800d3508b3a1709957cf0f60602b1",
+        "base_tokenizer.json": "13159621c8b2c3e25a944b354131998997c1d4e7d3ee6830abf34c5acff4e20d",
+        "LangMAP(langspec)": "aedac06fa44b7171e0687d64928906019b160307c3816c164ee1e70b3654ce6c"
+      },
+      "metrics": {
+        "Original(BPE)": {
+          "micro_f1": 0.14096965210954848,
+          "macro_f1": 0.16301043984657718,
+          "morphscore_recall": 0.6501774073768457,
+          "morphscore_precision": 0.1799813562128935,
+          "micro_precision": 0.10063408190224571,
+          "micro_recall": 0.2352686843730698,
+          "mean_token_char_ratio": 0.49077532949402936,
+          "num_samples": 7924,
+          "score_seconds": 1.86
+        },
+        "base_tokenizer.json": {
+          "micro_f1": 0.17040324865426387,
+          "macro_f1": 0.1944170088027688,
+          "morphscore_recall": 0.7435019391038857,
+          "morphscore_precision": 0.2073046957443358,
+          "micro_precision": 0.12273160114270168,
+          "micro_recall": 0.27862878319950585,
+          "mean_token_char_ratio": 0.47716406759728264,
+          "num_samples": 7924,
+          "score_seconds": 1.7
+        },
+        "LangMAP(langspec)": {
+          "micro_f1": 0.17428256070640177,
+          "macro_f1": 0.2009042114317606,
+          "morphscore_recall": 0.801592540638666,
+          "morphscore_precision": 0.2175416199582795,
+          "micro_precision": 0.12410269845428347,
+          "micro_recall": 0.2925880172946263,
+          "mean_token_char_ratio": 0.49551872915767003,
+          "num_samples": 7924,
+          "score_seconds": 1.72
+        }
+      }
+    },
+    "phi-4__tam_Taml__stem_eq_lemma-False__fw2-100m_50klines_scriptfilt_base-tur-fin-hun-arb-hin_softem_seed-baselogscores_em10.json": {
+      "family": "phi-4",
+      "lang": "tam",
+      "stem_eq_lemma": false,
+      "protocol_tag": "fw2-100m_50klines_scriptfilt_base-tur-fin-hun-arb-hin_softem_seed-baselogscores_em10",
+      "harness_sha256": "bd82ce343b437fb293ebc350394563022930750be3ac2fd8f38a04b5e1f13de3",
+      "gold_sha256": "31448fcaf1c3e3f65b85386250382fb63b6ede33910c30be7298d4c38b24179d",
+      "arm_sha256": {
+        "Original(BPE)": "589dc0f70c1b6b229e5047f26e9ed3aa175800d3508b3a1709957cf0f60602b1",
+        "base_tokenizer.json": "13159621c8b2c3e25a944b354131998997c1d4e7d3ee6830abf34c5acff4e20d",
+        "LangMAP(langspec)": "438782b9725271c5fb3c977ab3cda61d3359a028f2c033ea039a45700810a58c"
+      },
+      "metrics": {
+        "Original(BPE)": {
+          "micro_f1": 0.010211822372643987,
+          "macro_f1": 0.014907233965388011,
+          "morphscore_recall": 0.6790289952798306,
+          "morphscore_precision": 0.058328527385814934,
+          "micro_precision": 0.005835667600373483,
+          "micro_recall": 0.0408306112925805,
+          "mean_token_char_ratio": 1.508313168169577,
+          "num_samples": 2136,
+          "score_seconds": 0.73
+        },
+        "base_tokenizer.json": {
+          "micro_f1": 0.010211822372643987,
+          "macro_f1": 0.014907233965388011,
+          "morphscore_recall": 0.6790289952798306,
+          "morphscore_precision": 0.058328527385814934,
+          "micro_precision": 0.005835667600373483,
+          "micro_recall": 0.0408306112925805,
+          "mean_token_char_ratio": 1.508313168169577,
+          "num_samples": 2136,
+          "score_seconds": 0.71
+        },
+        "LangMAP(langspec)": {
+          "micro_f1": 0.010211822372643987,
+          "macro_f1": 0.014907233965388011,
+          "morphscore_recall": 0.6790289952798306,
+          "morphscore_precision": 0.058328527385814934,
+          "micro_precision": 0.005835667600373483,
+          "micro_recall": 0.0408306112925805,
+          "mean_token_char_ratio": 1.508313168169577,
+          "num_samples": 2136,
+          "score_seconds": 0.71
+        }
+      }
+    },
+    "phi-4__tur_Latn__stem_eq_lemma-False__fw2-100m_50klines_scriptfilt_base-tur-fin-hun-arb-hin_softem_seed-baselogscores_em10.json": {
+      "family": "phi-4",
+      "lang": "tur",
+      "stem_eq_lemma": false,
+      "protocol_tag": "fw2-100m_50klines_scriptfilt_base-tur-fin-hun-arb-hin_softem_seed-baselogscores_em10",
+      "harness_sha256": "bd82ce343b437fb293ebc350394563022930750be3ac2fd8f38a04b5e1f13de3",
+      "gold_sha256": "5bff599769937acadb0d4444785968ca1bc5eacc3714de596e79806ab186c188",
+      "arm_sha256": {
+        "Original(BPE)": "589dc0f70c1b6b229e5047f26e9ed3aa175800d3508b3a1709957cf0f60602b1",
+        "base_tokenizer.json": "13159621c8b2c3e25a944b354131998997c1d4e7d3ee6830abf34c5acff4e20d",
+        "LangMAP(langspec)": "a26240acc0751400c73950ba28a3acde2354ff8041e92d9cc5ea76876009e353"
+      },
+      "metrics": {
+        "Original(BPE)": {
+          "micro_f1": 0.09966777408637874,
+          "macro_f1": 0.11991848846876753,
+          "morphscore_recall": 0.5174172921879329,
+          "morphscore_precision": 0.16097567577759198,
+          "micro_precision": 0.0737127849749509,
+          "micro_recall": 0.1538343440546557,
+          "mean_token_char_ratio": 0.4745569176522772,
+          "num_samples": 32560,
+          "score_seconds": 5.91
+        },
+        "base_tokenizer.json": {
+          "micro_f1": 0.1341326377554393,
+          "macro_f1": 0.15872630372867108,
+          "morphscore_recall": 0.6603002502085054,
+          "morphscore_precision": 0.20577007113912632,
+          "micro_precision": 0.100276730324778,
+          "micro_recall": 0.20250249481845398,
+          "mean_token_char_ratio": 0.4603206203085706,
+          "num_samples": 32560,
+          "score_seconds": 6.29
+        },
+        "LangMAP(langspec)": {
+          "micro_f1": 0.13484614885665677,
+          "macro_f1": 0.16070027626741634,
+          "morphscore_recall": 0.6920836808451476,
+          "morphscore_precision": 0.20953001759923967,
+          "micro_precision": 0.09988468873349793,
+          "micro_recall": 0.20746142626851924,
+          "mean_token_char_ratio": 0.4735518455047286,
+          "num_samples": 32560,
+          "score_seconds": 6.0
+        }
+      }
+    },
+    "qwen2_5-0_5b__arb_Arab__stem_eq_lemma-False__fw2-100m_50klines_scriptfilt_base-tur-fin-hun-arb-hin_softem_seed-baselogscores_em10.json": {
+      "family": "qwen2_5-0_5b",
+      "lang": "arb",
+      "stem_eq_lemma": false,
+      "protocol_tag": "fw2-100m_50klines_scriptfilt_base-tur-fin-hun-arb-hin_softem_seed-baselogscores_em10",
+      "harness_sha256": "bd82ce343b437fb293ebc350394563022930750be3ac2fd8f38a04b5e1f13de3",
+      "gold_sha256": "896f572adc9652c138ea02326e9a701648a1336dc559da06c5a68aecb8cbf10f",
+      "arm_sha256": {
+        "Original(BPE)": "9c5ae00e602b8860cbd784ba82a8aa14e8feecec692e7076590d014d7b7fdafa",
+        "base_tokenizer.json": "7a74f4d0c41b726425fceebab6007686bec2168ccb8840b5666c24af7a8e6801",
+        "LangMAP(langspec)": "967a5c29a705bb26c159276e9737287ddd4fb3c24a6f3b5a02235809b9462124"
+      },
+      "metrics": {
+        "Original(BPE)": {
+          "micro_f1": 0.31224659620049217,
+          "macro_f1": 0.3582545882628527,
+          "morphscore_recall": 0.7992131941292211,
+          "morphscore_precision": 0.6019906685309196,
+          "micro_precision": 0.268056906614786,
+          "micro_recall": 0.3738817044731821,
+          "mean_token_char_ratio": 0.4798992852588058,
+          "num_samples": 11265,
+          "score_seconds": 2.7
+        },
+        "base_tokenizer.json": {
+          "micro_f1": 0.38435163231807407,
+          "macro_f1": 0.43209989546557726,
+          "morphscore_recall": 0.8587361630962822,
+          "morphscore_precision": 0.6358823858443652,
+          "micro_precision": 0.33722716507712985,
+          "micro_recall": 0.4467859565807327,
+          "mean_token_char_ratio": 0.4574648858184902,
+          "num_samples": 11264,
+          "score_seconds": 2.68
+        },
+        "LangMAP(langspec)": {
+          "micro_f1": 0.3865792713840806,
+          "macro_f1": 0.4357072531271587,
+          "morphscore_recall": 0.8655266288250756,
+          "morphscore_precision": 0.6369453444843298,
+          "micro_precision": 0.337261468469607,
+          "micro_recall": 0.45279097387173395,
+          "mean_token_char_ratio": 0.46356071892452494,
+          "num_samples": 11256,
+          "score_seconds": 2.81
+        }
+      }
+    },
+    "qwen2_5-0_5b__deu_Latn__stem_eq_lemma-False__fw2-100m_50klines_scriptfilt_base-tur-fin-hun-arb-hin_softem_seed-baselogscores_em10.json": {
+      "family": "qwen2_5-0_5b",
+      "lang": "deu",
+      "stem_eq_lemma": false,
+      "protocol_tag": "fw2-100m_50klines_scriptfilt_base-tur-fin-hun-arb-hin_softem_seed-baselogscores_em10",
+      "harness_sha256": "bd82ce343b437fb293ebc350394563022930750be3ac2fd8f38a04b5e1f13de3",
+      "gold_sha256": "47945ff9cb6abe9c2f0ac86aa970297fc9502bee921758b67bfc42ef9bd0c570",
+      "arm_sha256": {
+        "Original(BPE)": "9c5ae00e602b8860cbd784ba82a8aa14e8feecec692e7076590d014d7b7fdafa",
+        "base_tokenizer.json": "7a74f4d0c41b726425fceebab6007686bec2168ccb8840b5666c24af7a8e6801",
+        "LangMAP(langspec)": "21e1d675a7a87ccb2d279f7143a259d1391c2b3bec22d4410f1b670ef817fd09"
+      },
+      "metrics": {
+        "Original(BPE)": {
+          "micro_f1": 0.08018797180422936,
+          "macro_f1": 0.09174248763108833,
+          "morphscore_recall": 0.44599349697244917,
+          "morphscore_precision": 0.3631954357959921,
+          "micro_precision": 0.05969986303273319,
+          "micro_recall": 0.12208611993464384,
+          "mean_token_char_ratio": 0.3507350793755736,
+          "num_samples": 47723,
+          "score_seconds": 9.8
+        },
+        "base_tokenizer.json": {
+          "micro_f1": 0.12686338740874367,
+          "macro_f1": 0.14346958638749852,
+          "morphscore_recall": 0.4458614504413569,
+          "morphscore_precision": 0.3030798350250985,
+          "micro_precision": 0.09340013904538154,
+          "micro_recall": 0.19769223743365436,
+          "mean_token_char_ratio": 0.3642498570557865,
+          "num_samples": 47723,
+          "score_seconds": 9.93
+        },
+        "LangMAP(langspec)": {
+          "micro_f1": 0.15680662114405106,
+          "macro_f1": 0.17198559003785102,
+          "morphscore_recall": 0.6245616055168081,
+          "morphscore_precision": 0.435237517807298,
+          "micro_precision": 0.11747569869415252,
+          "micro_recall": 0.23572871104255255,
+          "mean_token_char_ratio": 0.34598554532611764,
+          "num_samples": 47723,
+          "score_seconds": 9.83
+        }
+      }
+    },
+    "qwen2_5-0_5b__fin_Latn__stem_eq_lemma-False__fw2-100m_50klines_scriptfilt_base-tur-fin-hun-arb-hin_softem_seed-baselogscores_em10.json": {
+      "family": "qwen2_5-0_5b",
+      "lang": "fin",
+      "stem_eq_lemma": false,
+      "protocol_tag": "fw2-100m_50klines_scriptfilt_base-tur-fin-hun-arb-hin_softem_seed-baselogscores_em10",
+      "harness_sha256": "bd82ce343b437fb293ebc350394563022930750be3ac2fd8f38a04b5e1f13de3",
+      "gold_sha256": "5120f4b2b23112565f83c524bbc711761cc8864b96c348c761946aa47381b9cb",
+      "arm_sha256": {
+        "Original(BPE)": "9c5ae00e602b8860cbd784ba82a8aa14e8feecec692e7076590d014d7b7fdafa",
+        "base_tokenizer.json": "7a74f4d0c41b726425fceebab6007686bec2168ccb8840b5666c24af7a8e6801",
+        "LangMAP(langspec)": "67d4a667bf260d6cd1a56b701fb16d61571f7ebecf1aef628ae93bbb28c80d6f"
+      },
+      "metrics": {
+        "Original(BPE)": {
+          "micro_f1": 0.0591591269591839,
+          "macro_f1": 0.07434578258105973,
+          "morphscore_recall": 0.3882683259978771,
+          "morphscore_precision": 0.16584388212025405,
+          "micro_precision": 0.04320027648176948,
+          "micro_recall": 0.09381633107783237,
+          "mean_token_char_ratio": 0.4268240005316817,
+          "num_samples": 40776,
+          "score_seconds": 8.53
+        },
+        "base_tokenizer.json": {
+          "micro_f1": 0.08162985842202561,
+          "macro_f1": 0.09926997737129256,
+          "morphscore_recall": 0.4720898467142235,
+          "morphscore_precision": 0.19294523015976395,
+          "micro_precision": 0.06040952364866767,
+          "micro_recall": 0.12583115405814266,
+          "mean_token_char_ratio": 0.41041506651367865,
+          "num_samples": 40776,
+          "score_seconds": 6.73
+        },
+        "LangMAP(langspec)": {
+          "micro_f1": 0.08368637746882271,
+          "macro_f1": 0.10229605738900466,
+          "morphscore_recall": 0.5215004805989804,
+          "morphscore_precision": 0.20496380033842995,
+          "micro_precision": 0.06135472546221107,
+          "micro_recall": 0.1315774043366599,
+          "mean_token_char_ratio": 0.42295029238136694,
+          "num_samples": 40776,
+          "score_seconds": 6.61
+        }
+      }
+    },
+    "qwen2_5-0_5b__hin_Deva__stem_eq_lemma-False__fw2-100m_50klines_scriptfilt_base-tur-fin-hun-arb-hin_softem_seed-baselogscores_em10.json": {
+      "family": "qwen2_5-0_5b",
+      "lang": "hin",
+      "stem_eq_lemma": false,
+      "protocol_tag": "fw2-100m_50klines_scriptfilt_base-tur-fin-hun-arb-hin_softem_seed-baselogscores_em10",
+      "harness_sha256": "bd82ce343b437fb293ebc350394563022930750be3ac2fd8f38a04b5e1f13de3",
+      "gold_sha256": "0ce256a9b55eddf21061d093949b7c36ccf88b6f0855c6d7d49665911b8ef2a1",
+      "arm_sha256": {
+        "Original(BPE)": "9c5ae00e602b8860cbd784ba82a8aa14e8feecec692e7076590d014d7b7fdafa",
+        "base_tokenizer.json": "7a74f4d0c41b726425fceebab6007686bec2168ccb8840b5666c24af7a8e6801",
+        "LangMAP(langspec)": "300c2f6e3c12b65308a0497497d4ab3402b724ae66c3120c291373e43609ef84"
+      },
+      "metrics": {
+        "Original(BPE)": {
+          "micro_f1": 0.09251189581768095,
+          "macro_f1": 0.11791667110532489,
+          "morphscore_recall": 0.899180513640215,
+          "morphscore_precision": 0.2767076015971191,
+          "micro_precision": 0.06066677615371982,
+          "micro_recall": 0.19472851871375857,
+          "mean_token_char_ratio": 1.0538559089878665,
+          "num_samples": 4723,
+          "score_seconds": 1.49
+        },
+        "base_tokenizer.json": {
+          "micro_f1": 0.08104182319058353,
+          "macro_f1": 0.105605055313588,
+          "morphscore_recall": 0.9998091443703553,
+          "morphscore_precision": 0.2984015536979512,
+          "micro_precision": 0.05314501560190508,
+          "micro_recall": 0.1705851344227728,
+          "mean_token_char_ratio": 1.0538559089878665,
+          "num_samples": 4723,
+          "score_seconds": 1.48
+        },
+        "LangMAP(langspec)": {
+          "micro_f1": 0.08092225361974544,
+          "macro_f1": 0.10555373758060897,
+          "morphscore_recall": 1.0,
+          "morphscore_precision": 0.2984128312326981,
+          "micro_precision": 0.0530422239706268,
+          "micro_recall": 0.1705851344227728,
+          "mean_token_char_ratio": 1.0555563188187018,
+          "num_samples": 4723,
+          "score_seconds": 1.52
+        }
+      }
+    },
+    "qwen2_5-0_5b__hun_Latn__stem_eq_lemma-False__fw2-100m_50klines_scriptfilt_base-tur-fin-hun-arb-hin_softem_seed-baselogscores_em10.json": {
+      "family": "qwen2_5-0_5b",
+      "lang": "hun",
+      "stem_eq_lemma": false,
+      "protocol_tag": "fw2-100m_50klines_scriptfilt_base-tur-fin-hun-arb-hin_softem_seed-baselogscores_em10",
+      "harness_sha256": "bd82ce343b437fb293ebc350394563022930750be3ac2fd8f38a04b5e1f13de3",
+      "gold_sha256": "f0dfe8467291a60da39c13366562bc14af7b0142cf70110b7a867665dbfd3faf",
+      "arm_sha256": {
+        "Original(BPE)": "9c5ae00e602b8860cbd784ba82a8aa14e8feecec692e7076590d014d7b7fdafa",
+        "base_tokenizer.json": "7a74f4d0c41b726425fceebab6007686bec2168ccb8840b5666c24af7a8e6801",
+        "LangMAP(langspec)": "4977d689260eae40f686fe3178b53783b87cd441e49b9eaa637f885756fa2c51"
+      },
+      "metrics": {
+        "Original(BPE)": {
+          "micro_f1": 0.1415381171774449,
+          "macro_f1": 0.16340991521328652,
+          "morphscore_recall": 0.6472481227824071,
+          "morphscore_precision": 0.18089439692707293,
+          "micro_precision": 0.10138692178188717,
+          "micro_recall": 0.23434218653489808,
+          "mean_token_char_ratio": 0.4848232275822172,
+          "num_samples": 7924,
+          "score_seconds": 2.1
+        },
+        "base_tokenizer.json": {
+          "micro_f1": 0.1711776780962518,
+          "macro_f1": 0.19517937470043661,
+          "morphscore_recall": 0.725472398712764,
+          "morphscore_precision": 0.202772508501116,
+          "micro_precision": 0.12363406732194827,
+          "micro_recall": 0.27813465101914764,
+          "mean_token_char_ratio": 0.47250443429343664,
+          "num_samples": 7924,
+          "score_seconds": 1.71
+        },
+        "LangMAP(langspec)": {
+          "micro_f1": 0.17655550209127588,
+          "macro_f1": 0.20388223977040443,
+          "morphscore_recall": 0.8002722996946938,
+          "morphscore_precision": 0.21942649393862346,
+          "micro_precision": 0.1260437585878871,
+          "micro_recall": 0.29462631253860405,
+          "mean_token_char_ratio": 0.4914721629050477,
+          "num_samples": 7924,
+          "score_seconds": 1.75
+        }
+      }
+    },
+    "qwen2_5-0_5b__tam_Taml__stem_eq_lemma-False__fw2-100m_50klines_scriptfilt_base-tur-fin-hun-arb-hin_softem_seed-baselogscores_em10.json": {
+      "family": "qwen2_5-0_5b",
+      "lang": "tam",
+      "stem_eq_lemma": false,
+      "protocol_tag": "fw2-100m_50klines_scriptfilt_base-tur-fin-hun-arb-hin_softem_seed-baselogscores_em10",
+      "harness_sha256": "bd82ce343b437fb293ebc350394563022930750be3ac2fd8f38a04b5e1f13de3",
+      "gold_sha256": "31448fcaf1c3e3f65b85386250382fb63b6ede33910c30be7298d4c38b24179d",
+      "arm_sha256": {
+        "Original(BPE)": "9c5ae00e602b8860cbd784ba82a8aa14e8feecec692e7076590d014d7b7fdafa",
+        "base_tokenizer.json": "7a74f4d0c41b726425fceebab6007686bec2168ccb8840b5666c24af7a8e6801",
+        "LangMAP(langspec)": "bff9c6eb21ca84ee46b36c9fb4ff14ac76f72ac95c710fc97002dcfdd45b88d2"
+      },
+      "metrics": {
+        "Original(BPE)": {
+          "micro_f1": 0.012991351471734533,
+          "macro_f1": 0.019352703425955763,
+          "morphscore_recall": 0.6790289952798306,
+          "morphscore_precision": 0.07988800991239847,
+          "micro_precision": 0.007724564113882146,
+          "micro_recall": 0.0408306112925805,
+          "mean_token_char_ratio": 1.1301252771364327,
+          "num_samples": 2136,
+          "score_seconds": 193.58
+        },
+        "base_tokenizer.json": {
+          "micro_f1": 0.012991351471734533,
+          "macro_f1": 0.019352703425955763,
+          "morphscore_recall": 0.6790289952798306,
+          "morphscore_precision": 0.07988800991239847,
+          "micro_precision": 0.007724564113882146,
+          "micro_recall": 0.0408306112925805,
+          "mean_token_char_ratio": 1.1301252771364327,
+          "num_samples": 2136,
+          "score_seconds": 1.21
+        },
+        "LangMAP(langspec)": {
+          "micro_f1": 0.011116875416882827,
+          "macro_f1": 0.016914203208649642,
+          "morphscore_recall": 1.0,
+          "morphscore_precision": 0.11949089638648311,
+          "micro_precision": 0.006607929515418502,
+          "micro_recall": 0.03499766682221185,
+          "mean_token_char_ratio": 1.1322832481913212,
+          "num_samples": 2136,
+          "score_seconds": 1.23
+        }
+      }
+    },
+    "qwen2_5-0_5b__tur_Latn__stem_eq_lemma-False__fw2-100m_50klines_scriptfilt_base-tur-fin-hun-arb-hin_softem_seed-baselogscores_em10.json": {
+      "family": "qwen2_5-0_5b",
+      "lang": "tur",
+      "stem_eq_lemma": false,
+      "protocol_tag": "fw2-100m_50klines_scriptfilt_base-tur-fin-hun-arb-hin_softem_seed-baselogscores_em10",
+      "harness_sha256": "bd82ce343b437fb293ebc350394563022930750be3ac2fd8f38a04b5e1f13de3",
+      "gold_sha256": "5bff599769937acadb0d4444785968ca1bc5eacc3714de596e79806ab186c188",
+      "arm_sha256": {
+        "Original(BPE)": "9c5ae00e602b8860cbd784ba82a8aa14e8feecec692e7076590d014d7b7fdafa",
+        "base_tokenizer.json": "7a74f4d0c41b726425fceebab6007686bec2168ccb8840b5666c24af7a8e6801",
+        "LangMAP(langspec)": "9c00824d986a7658408e39610ac5b8cfb5ef98b916828bc27eb8ee813838fe22"
+      },
+      "metrics": {
+        "Original(BPE)": {
+          "micro_f1": 0.13088106312292358,
+          "macro_f1": 0.1530971386483199,
+          "morphscore_recall": 0.4897136502641075,
+          "morphscore_precision": 0.17122182947870795,
+          "micro_precision": 0.1000975689080413,
+          "micro_recall": 0.18900744607353956,
+          "mean_token_char_ratio": 0.43081220450068075,
+          "num_samples": 32560,
+          "score_seconds": 5.84
+        },
+        "base_tokenizer.json": {
+          "micro_f1": 0.1955391860484466,
+          "macro_f1": 0.22078839534397832,
+          "morphscore_recall": 0.6704336947456204,
+          "morphscore_precision": 0.23628836420120564,
+          "micro_precision": 0.15307522623451966,
+          "micro_recall": 0.2706072004298764,
+          "mean_token_char_ratio": 0.40565471921944446,
+          "num_samples": 32560,
+          "score_seconds": 5.42
+        },
+        "LangMAP(langspec)": {
+          "micro_f1": 0.19963972645491926,
+          "macro_f1": 0.22635061273294055,
+          "morphscore_recall": 0.7005490686683343,
+          "morphscore_precision": 0.24153622286649562,
+          "micro_precision": 0.15515216503267973,
+          "micro_recall": 0.2798956014431565,
+          "mean_token_char_ratio": 0.4140506478797623,
+          "num_samples": 32560,
+          "score_seconds": 6.21
+        }
+      }
+    },
+    "xglm-2.9b__arb_Arab__stem_eq_lemma-False__fw2-100m_50klines_scriptfilt_base-tur-fin-hun-arb-hin_softem_seed-baselogscores_em10.json": {
+      "family": "xglm-2.9b",
+      "lang": "arb",
+      "stem_eq_lemma": false,
+      "protocol_tag": "fw2-100m_50klines_scriptfilt_base-tur-fin-hun-arb-hin_softem_seed-baselogscores_em10",
+      "harness_sha256": "bd82ce343b437fb293ebc350394563022930750be3ac2fd8f38a04b5e1f13de3",
+      "gold_sha256": "896f572adc9652c138ea02326e9a701648a1336dc559da06c5a68aecb8cbf10f",
+      "arm_sha256": {
+        "Original(BPE)": "a3db392e4dc3c9adf44d454b42e30c03a4a035fb62e623404a11affcfa623510",
+        "base_tokenizer.json": "bf5cee6f6a0f17d6c576e075bd129bbe5d269706f0a578af350f4c7e7b1bb873",
+        "LangMAP(langspec)": "4796b21f3f7eba35b6a638daf8ffdaf78a0c15853bcfcb01fdd84e5b9a45ed98"
+      },
+      "metrics": {
+        "Original(BPE)": {
+          "micro_f1": 0.295214206882713,
+          "macro_f1": 0.3366924661367376,
+          "morphscore_recall": 0.8348606630325959,
+          "morphscore_precision": 0.771550587291877,
+          "micro_precision": 0.28247763142736454,
+          "micro_recall": 0.3091535681264184,
+          "mean_token_char_ratio": 0.3834670928687836,
+          "num_samples": 11474,
+          "score_seconds": 3.18
+        },
+        "base_tokenizer.json": {
+          "micro_f1": 0.3046940653887711,
+          "macro_f1": 0.3455466115943847,
+          "morphscore_recall": 0.8411113583268439,
+          "morphscore_precision": 0.7740364959951066,
+          "micro_precision": 0.290788267644363,
+          "micro_recall": 0.3199966378078507,
+          "mean_token_char_ratio": 0.38561297586267085,
+          "num_samples": 11474,
+          "score_seconds": 3.03
+        },
+        "LangMAP(langspec)": {
+          "micro_f1": 0.3220935288769419,
+          "macro_f1": 0.36280320785343817,
+          "morphscore_recall": 0.8525554866880696,
+          "morphscore_precision": 0.7783606559279829,
+          "micro_precision": 0.30374650512581547,
+          "micro_recall": 0.3427994446548025,
+          "mean_token_char_ratio": 0.395252412352159,
+          "num_samples": 11449,
+          "score_seconds": 3.04
+        }
+      }
+    },
+    "xglm-2.9b__deu_Latn__stem_eq_lemma-False__fw2-100m_50klines_scriptfilt_base-tur-fin-hun-arb-hin_softem_seed-baselogscores_em10.json": {
+      "family": "xglm-2.9b",
+      "lang": "deu",
+      "stem_eq_lemma": false,
+      "protocol_tag": "fw2-100m_50klines_scriptfilt_base-tur-fin-hun-arb-hin_softem_seed-baselogscores_em10",
+      "harness_sha256": "bd82ce343b437fb293ebc350394563022930750be3ac2fd8f38a04b5e1f13de3",
+      "gold_sha256": "47945ff9cb6abe9c2f0ac86aa970297fc9502bee921758b67bfc42ef9bd0c570",
+      "arm_sha256": {
+        "Original(BPE)": "a3db392e4dc3c9adf44d454b42e30c03a4a035fb62e623404a11affcfa623510",
+        "base_tokenizer.json": "bf5cee6f6a0f17d6c576e075bd129bbe5d269706f0a578af350f4c7e7b1bb873",
+        "LangMAP(langspec)": "3ed117b695e85420f80a723583aa393e41493f1a3591b0ee995dac3859a2dd9a"
+      },
+      "metrics": {
+        "Original(BPE)": {
+          "micro_f1": 0.2183536495089572,
+          "macro_f1": 0.23302455645311299,
+          "morphscore_recall": 0.8115759383754723,
+          "morphscore_precision": 0.7267985082796785,
+          "micro_precision": 0.18356509172377072,
+          "micro_recall": 0.2694114901001654,
+          "mean_token_char_ratio": 0.25967049402609754,
+          "num_samples": 47723,
+          "score_seconds": 10.31
+        },
+        "base_tokenizer.json": {
+          "micro_f1": 0.2152422924979652,
+          "macro_f1": 0.23325647812544936,
+          "morphscore_recall": 0.7548751579276527,
+          "morphscore_precision": 0.6620219560604224,
+          "micro_precision": 0.176784409892518,
+          "micro_recall": 0.2750844860306281,
+          "mean_token_char_ratio": 0.2759447578234511,
+          "num_samples": 47723,
+          "score_seconds": 11.1
+        },
+        "LangMAP(langspec)": {
+          "micro_f1": 0.2328862362120208,
+          "macro_f1": 0.24877564824830722,
+          "morphscore_recall": 0.8230011324310541,
+          "morphscore_precision": 0.7300460448476418,
+          "micro_precision": 0.1942748609415276,
+          "micro_recall": 0.290652242304921,
+          "mean_token_char_ratio": 0.26508486910545126,
+          "num_samples": 47723,
+          "score_seconds": 12.21
+        }
+      }
+    },
+    "xglm-2.9b__fin_Latn__stem_eq_lemma-False__fw2-100m_50klines_scriptfilt_base-tur-fin-hun-arb-hin_softem_seed-baselogscores_em10.json": {
+      "family": "xglm-2.9b",
+      "lang": "fin",
+      "stem_eq_lemma": false,
+      "protocol_tag": "fw2-100m_50klines_scriptfilt_base-tur-fin-hun-arb-hin_softem_seed-baselogscores_em10",
+      "harness_sha256": "bd82ce343b437fb293ebc350394563022930750be3ac2fd8f38a04b5e1f13de3",
+      "gold_sha256": "5120f4b2b23112565f83c524bbc711761cc8864b96c348c761946aa47381b9cb",
+      "arm_sha256": {
+        "Original(BPE)": "a3db392e4dc3c9adf44d454b42e30c03a4a035fb62e623404a11affcfa623510",
+        "base_tokenizer.json": "bf5cee6f6a0f17d6c576e075bd129bbe5d269706f0a578af350f4c7e7b1bb873",
+        "LangMAP(langspec)": "bc9b8005e21e715996a461865fe4df367f4c6c50f6ad19f8df7541fd29b6172f"
+      },
+      "metrics": {
+        "Original(BPE)": {
+          "micro_f1": 0.277972527720523,
+          "macro_f1": 0.29951839920261736,
+          "morphscore_recall": 0.6227458000829338,
+          "morphscore_precision": 0.4246407383077831,
+          "micro_precision": 0.24283686451816414,
+          "micro_recall": 0.32499560246262094,
+          "mean_token_char_ratio": 0.2712930262448788,
+          "num_samples": 40778,
+          "score_seconds": 185.54
+        },
+        "base_tokenizer.json": {
+          "micro_f1": 0.29778973266195236,
+          "macro_f1": 0.3222266907392051,
+          "morphscore_recall": 0.6519555784810488,
+          "morphscore_precision": 0.4368023643556852,
+          "micro_precision": 0.2592000555999583,
+          "micro_recall": 0.34987980064497215,
+          "mean_token_char_ratio": 0.2737565231103447,
+          "num_samples": 40778,
+          "score_seconds": 9.92
+        },
+        "LangMAP(langspec)": {
+          "micro_f1": 0.30100078892136084,
+          "macro_f1": 0.32689104304303135,
+          "morphscore_recall": 0.6649067977465561,
+          "morphscore_precision": 0.4411358361497873,
+          "micro_precision": 0.26088452342043245,
+          "micro_recall": 0.35569627675168575,
+          "mean_token_char_ratio": 0.2765054487770858,
+          "num_samples": 40778,
+          "score_seconds": 8.44
+        }
+      }
+    },
+    "xglm-2.9b__hin_Deva__stem_eq_lemma-False__fw2-100m_50klines_scriptfilt_base-tur-fin-hun-arb-hin_softem_seed-baselogscores_em10.json": {
+      "family": "xglm-2.9b",
+      "lang": "hin",
+      "stem_eq_lemma": false,
+      "protocol_tag": "fw2-100m_50klines_scriptfilt_base-tur-fin-hun-arb-hin_softem_seed-baselogscores_em10",
+      "harness_sha256": "bd82ce343b437fb293ebc350394563022930750be3ac2fd8f38a04b5e1f13de3",
+      "gold_sha256": "0ce256a9b55eddf21061d093949b7c36ccf88b6f0855c6d7d49665911b8ef2a1",
+      "arm_sha256": {
+        "Original(BPE)": "a3db392e4dc3c9adf44d454b42e30c03a4a035fb62e623404a11affcfa623510",
+        "base_tokenizer.json": "bf5cee6f6a0f17d6c576e075bd129bbe5d269706f0a578af350f4c7e7b1bb873",
+        "LangMAP(langspec)": "1f135b9f71603352aa4e7465cb74b718bea3ba56d6292c095ca12f57c5abea02"
+      },
+      "metrics": {
+        "Original(BPE)": {
+          "micro_f1": 0.31257408589404584,
+          "macro_f1": 0.3348329181622679,
+          "morphscore_recall": 0.8776496129209369,
+          "morphscore_precision": 0.7899812959589709,
+          "micro_precision": 0.2753634830106836,
+          "micro_recall": 0.3614127569847127,
+          "mean_token_char_ratio": 0.44878422834467097,
+          "num_samples": 4723,
+          "score_seconds": 1.97
+        },
+        "base_tokenizer.json": {
+          "micro_f1": 0.32000729361352964,
+          "macro_f1": 0.3429738299059551,
+          "morphscore_recall": 0.8784488208700736,
+          "morphscore_precision": 0.7903031660260486,
+          "micro_precision": 0.2818824285255381,
+          "micro_recall": 0.37005798629414866,
+          "mean_token_char_ratio": 0.44885505701490686,
+          "num_samples": 4723,
+          "score_seconds": 2.25
+        },
+        "LangMAP(langspec)": {
+          "micro_f1": 0.32036759019152905,
+          "macro_f1": 0.3442109000394964,
+          "morphscore_recall": 0.8844249877733215,
+          "morphscore_precision": 0.7927687253892497,
+          "micro_precision": 0.281770166453265,
+          "micro_recall": 0.3712177121771218,
+          "mean_token_char_ratio": 0.450350603720066,
+          "num_samples": 4723,
+          "score_seconds": 1.91
+        }
+      }
+    },
+    "xglm-2.9b__hun_Latn__stem_eq_lemma-False__fw2-100m_50klines_scriptfilt_base-tur-fin-hun-arb-hin_softem_seed-baselogscores_em10.json": {
+      "family": "xglm-2.9b",
+      "lang": "hun",
+      "stem_eq_lemma": false,
+      "protocol_tag": "fw2-100m_50klines_scriptfilt_base-tur-fin-hun-arb-hin_softem_seed-baselogscores_em10",
+      "harness_sha256": "bd82ce343b437fb293ebc350394563022930750be3ac2fd8f38a04b5e1f13de3",
+      "gold_sha256": "f0dfe8467291a60da39c13366562bc14af7b0142cf70110b7a867665dbfd3faf",
+      "arm_sha256": {
+        "Original(BPE)": "a3db392e4dc3c9adf44d454b42e30c03a4a035fb62e623404a11affcfa623510",
+        "base_tokenizer.json": "bf5cee6f6a0f17d6c576e075bd129bbe5d269706f0a578af350f4c7e7b1bb873",
+        "LangMAP(langspec)": "fe0c8315d185c4ac31f0eeab218cbe38677159c9a337bf91dfc90acf4c705310"
+      },
+      "metrics": {
+        "Original(BPE)": {
+          "micro_f1": 0.4152978804141595,
+          "macro_f1": 0.4464116449918455,
+          "morphscore_recall": 0.7222955689413317,
+          "morphscore_precision": 0.42295929423786205,
+          "micro_precision": 0.37002511591962906,
+          "micro_recall": 0.4731933292155652,
+          "mean_token_char_ratio": 0.2771541517808378,
+          "num_samples": 7924,
+          "score_seconds": 3.31
+        },
+        "base_tokenizer.json": {
+          "micro_f1": 0.43880144951051975,
+          "macro_f1": 0.4716332801369193,
+          "morphscore_recall": 0.7592210578430554,
+          "morphscore_precision": 0.4374303399656117,
+          "micro_precision": 0.3902732345583991,
+          "micro_recall": 0.501111797405806,
+          "mean_token_char_ratio": 0.2784940608345612,
+          "num_samples": 7924,
+          "score_seconds": 2.99
+        },
+        "LangMAP(langspec)": {
+          "micro_f1": 0.44855179846423276,
+          "macro_f1": 0.4834450001761722,
+          "morphscore_recall": 0.7754765244657141,
+          "morphscore_precision": 0.4437483084710543,
+          "micro_precision": 0.3978016726403823,
+          "micro_recall": 0.5141445336627548,
+          "mean_token_char_ratio": 0.28018407024784986,
+          "num_samples": 7924,
+          "score_seconds": 3.06
+        }
+      }
+    },
+    "xglm-2.9b__tam_Taml__stem_eq_lemma-False__fw2-100m_50klines_scriptfilt_base-tur-fin-hun-arb-hin_softem_seed-baselogscores_em10.json": {
+      "family": "xglm-2.9b",
+      "lang": "tam",
+      "stem_eq_lemma": false,
+      "protocol_tag": "fw2-100m_50klines_scriptfilt_base-tur-fin-hun-arb-hin_softem_seed-baselogscores_em10",
+      "harness_sha256": "bd82ce343b437fb293ebc350394563022930750be3ac2fd8f38a04b5e1f13de3",
+      "gold_sha256": "31448fcaf1c3e3f65b85386250382fb63b6ede33910c30be7298d4c38b24179d",
+      "arm_sha256": {
+        "Original(BPE)": "a3db392e4dc3c9adf44d454b42e30c03a4a035fb62e623404a11affcfa623510",
+        "base_tokenizer.json": "bf5cee6f6a0f17d6c576e075bd129bbe5d269706f0a578af350f4c7e7b1bb873",
+        "LangMAP(langspec)": "ca73ca01559afeb69078a89c42c5fe18cf483c164129a8b880ba7fce614c629a"
+      },
+      "metrics": {
+        "Original(BPE)": {
+          "micro_f1": 0.3087753134040501,
+          "macro_f1": 0.3398209539217839,
+          "morphscore_recall": 0.6511575634974176,
+          "morphscore_precision": 0.37727980605594796,
+          "micro_precision": 0.26314924391847466,
+          "micro_recall": 0.37354176388240784,
+          "mean_token_char_ratio": 0.3122781040927934,
+          "num_samples": 2136,
+          "score_seconds": 0.94
+        },
+        "base_tokenizer.json": {
+          "micro_f1": 0.25728061716489875,
+          "macro_f1": 0.28583075841533195,
+          "morphscore_recall": 0.5657451112609637,
+          "morphscore_precision": 0.3460705455479696,
+          "micro_precision": 0.21926364234056542,
+          "micro_recall": 0.3112459169388707,
+          "mean_token_char_ratio": 0.3122781040927934,
+          "num_samples": 2136,
+          "score_seconds": 0.77
+        },
+        "LangMAP(langspec)": {
+          "micro_f1": 0.30347349177330896,
+          "macro_f1": 0.3350878818710613,
+          "morphscore_recall": 0.6495841762193778,
+          "morphscore_precision": 0.3764791981076665,
+          "micro_precision": 0.2582282626494187,
+          "micro_recall": 0.36794213719085395,
+          "mean_token_char_ratio": 0.31330845852698136,
+          "num_samples": 2136,
+          "score_seconds": 0.89
+        }
+      }
+    },
+    "xglm-2.9b__tur_Latn__stem_eq_lemma-False__fw2-100m_50klines_scriptfilt_base-tur-fin-hun-arb-hin_softem_seed-baselogscores_em10.json": {
+      "family": "xglm-2.9b",
+      "lang": "tur",
+      "stem_eq_lemma": false,
+      "protocol_tag": "fw2-100m_50klines_scriptfilt_base-tur-fin-hun-arb-hin_softem_seed-baselogscores_em10",
+      "harness_sha256": "bd82ce343b437fb293ebc350394563022930750be3ac2fd8f38a04b5e1f13de3",
+      "gold_sha256": "5bff599769937acadb0d4444785968ca1bc5eacc3714de596e79806ab186c188",
+      "arm_sha256": {
+        "Original(BPE)": "a3db392e4dc3c9adf44d454b42e30c03a4a035fb62e623404a11affcfa623510",
+        "base_tokenizer.json": "bf5cee6f6a0f17d6c576e075bd129bbe5d269706f0a578af350f4c7e7b1bb873",
+        "LangMAP(langspec)": "b738ea67d39ddfa9f16eb4bd48f7910a5cfbdb80999e37f227bf05e7352f1292"
+      },
+      "metrics": {
+        "Original(BPE)": {
+          "micro_f1": 0.34953717728634415,
+          "macro_f1": 0.3713117728383647,
+          "morphscore_recall": 0.6317241666898321,
+          "morphscore_precision": 0.37702878376892845,
+          "micro_precision": 0.3112493855579134,
+          "micro_recall": 0.39856607713092607,
+          "mean_token_char_ratio": 0.2979918597304584,
+          "num_samples": 32561,
+          "score_seconds": 6.1
+        },
+        "base_tokenizer.json": {
+          "micro_f1": 0.38285392897316406,
+          "macro_f1": 0.40789059487965834,
+          "morphscore_recall": 0.6862820049484287,
+          "morphscore_precision": 0.39952377311881443,
+          "micro_precision": 0.3394841835280707,
+          "micro_recall": 0.438927781871776,
+          "mean_token_char_ratio": 0.301025212101976,
+          "num_samples": 32561,
+          "score_seconds": 6.86
+        },
+        "LangMAP(langspec)": {
+          "micro_f1": 0.4010059931506849,
+          "macro_f1": 0.42773773278879196,
+          "morphscore_recall": 0.7238956381529533,
+          "morphscore_precision": 0.41610879332689127,
+          "micro_precision": 0.35530058790062585,
+          "micro_recall": 0.46020633750921147,
+          "mean_token_char_ratio": 0.3014251657217139,
+          "num_samples": 32561,
+          "score_seconds": 6.31
+        }
+      }
+    },
+    "yi-1.5-6b__arb_Arab__stem_eq_lemma-False__fw2-100m_50klines_scriptfilt_base-tur-fin-hun-arb-hin_softem_seed-baselogscores_em10.json": {
+      "family": "yi-1.5-6b",
+      "lang": "arb",
+      "stem_eq_lemma": false,
+      "protocol_tag": "fw2-100m_50klines_scriptfilt_base-tur-fin-hun-arb-hin_softem_seed-baselogscores_em10",
+      "harness_sha256": "bd82ce343b437fb293ebc350394563022930750be3ac2fd8f38a04b5e1f13de3",
+      "gold_sha256": "896f572adc9652c138ea02326e9a701648a1336dc559da06c5a68aecb8cbf10f",
+      "arm_sha256": {
+        "Original(BPE)": "ebad02d0d5f5a616b483fc2d7d7784fcc2ba1a792c07c542efaed93dc3bd3697",
+        "base_tokenizer.json": "21e078158caa8fa69fdd7acbaa6344bd2dbc8ca3113bbfe87aea33a870df659c",
+        "LangMAP(langspec)": "022be9cad04be591a35da9283cf609ba02919072097e2f4d803bba0f7add2890"
+      },
+      "metrics": {
+        "Original(BPE)": {
+          "micro_f1": 0.18251608775825084,
+          "macro_f1": 0.19106325083059914,
+          "morphscore_recall": 1.0,
+          "morphscore_precision": 0.161856957837739,
+          "micro_precision": 0.11607313804327016,
+          "micro_recall": 0.4268614680513994,
+          "mean_token_char_ratio": 1.2995237133429174,
+          "num_samples": 10404,
+          "score_seconds": 2.77
+        },
+        "base_tokenizer.json": {
+          "micro_f1": 0.22428656884478695,
+          "macro_f1": 0.24144933900728136,
+          "morphscore_recall": 0.9832571964039939,
+          "morphscore_precision": 0.21368679780236446,
+          "micro_precision": 0.15289527129675531,
+          "micro_recall": 0.42074458722055974,
+          "mean_token_char_ratio": 0.9646686049223535,
+          "num_samples": 10404,
+          "score_seconds": 2.55
+        },
+        "LangMAP(langspec)": {
+          "micro_f1": 0.22428656884478695,
+          "macro_f1": 0.24144933900728136,
+          "morphscore_recall": 0.9832571964039939,
+          "morphscore_precision": 0.21368679780236446,
+          "micro_precision": 0.15289527129675531,
+          "micro_recall": 0.42074458722055974,
+          "mean_token_char_ratio": 0.9646686049223535,
+          "num_samples": 10404,
+          "score_seconds": 2.57
+        }
+      }
+    },
+    "yi-1.5-6b__deu_Latn__stem_eq_lemma-False__fw2-100m_50klines_scriptfilt_base-tur-fin-hun-arb-hin_softem_seed-baselogscores_em10.json": {
+      "family": "yi-1.5-6b",
+      "lang": "deu",
+      "stem_eq_lemma": false,
+      "protocol_tag": "fw2-100m_50klines_scriptfilt_base-tur-fin-hun-arb-hin_softem_seed-baselogscores_em10",
+      "harness_sha256": "bd82ce343b437fb293ebc350394563022930750be3ac2fd8f38a04b5e1f13de3",
+      "gold_sha256": "47945ff9cb6abe9c2f0ac86aa970297fc9502bee921758b67bfc42ef9bd0c570",
+      "arm_sha256": {
+        "Original(BPE)": "ebad02d0d5f5a616b483fc2d7d7784fcc2ba1a792c07c542efaed93dc3bd3697",
+        "base_tokenizer.json": "21e078158caa8fa69fdd7acbaa6344bd2dbc8ca3113bbfe87aea33a870df659c",
+        "LangMAP(langspec)": "a0331f47f4322aeaffa9987856609b8d66572216c1f69fa65aac5621096287cc"
+      },
+      "metrics": {
+        "Original(BPE)": {
+          "micro_f1": 0.08778505975504879,
+          "macro_f1": 0.103609735819773,
+          "morphscore_recall": 0.5115678043091646,
+          "morphscore_precision": 0.3755504699296265,
+          "micro_precision": 0.06201371751308275,
+          "micro_recall": 0.15020753625541675,
+          "mean_token_char_ratio": 0.41297949758901015,
+          "num_samples": 47723,
+          "score_seconds": 10.12
+        },
+        "base_tokenizer.json": {
+          "micro_f1": 0.1147801967610985,
+          "macro_f1": 0.13619329931550325,
+          "morphscore_recall": 0.5032626056900503,
+          "morphscore_precision": 0.3029229662773386,
+          "micro_precision": 0.08023250177728947,
+          "micro_recall": 0.20157910226615383,
+          "mean_token_char_ratio": 0.4316445914781915,
+          "num_samples": 47723,
+          "score_seconds": 10.38
+        },
+        "LangMAP(langspec)": {
+          "micro_f1": 0.15698561142573392,
+          "macro_f1": 0.18117695861390723,
+          "morphscore_recall": 0.6968718704972217,
+          "morphscore_precision": 0.442428809690428,
+          "micro_precision": 0.11074828910658209,
+          "micro_recall": 0.2695028263494931,
+          "mean_token_char_ratio": 0.41693866227642573,
+          "num_samples": 47723,
+          "score_seconds": 11.95
+        }
+      }
+    },
+    "yi-1.5-6b__fin_Latn__stem_eq_lemma-False__fw2-100m_50klines_scriptfilt_base-tur-fin-hun-arb-hin_softem_seed-baselogscores_em10.json": {
+      "family": "yi-1.5-6b",
+      "lang": "fin",
+      "stem_eq_lemma": false,
+      "protocol_tag": "fw2-100m_50klines_scriptfilt_base-tur-fin-hun-arb-hin_softem_seed-baselogscores_em10",
+      "harness_sha256": "bd82ce343b437fb293ebc350394563022930750be3ac2fd8f38a04b5e1f13de3",
+      "gold_sha256": "5120f4b2b23112565f83c524bbc711761cc8864b96c348c761946aa47381b9cb",
+      "arm_sha256": {
+        "Original(BPE)": "ebad02d0d5f5a616b483fc2d7d7784fcc2ba1a792c07c542efaed93dc3bd3697",
+        "base_tokenizer.json": "21e078158caa8fa69fdd7acbaa6344bd2dbc8ca3113bbfe87aea33a870df659c",
+        "LangMAP(langspec)": "1f1f17e0cd1ba5dd746eab4a6d8dc324bb594b11e0bc2d495cec6b5b7094fb88"
+      },
+      "metrics": {
+        "Original(BPE)": {
+          "micro_f1": 0.05424302991293743,
+          "macro_f1": 0.07086741101468375,
+          "morphscore_recall": 0.439712652400467,
+          "morphscore_precision": 0.15227161634503036,
+          "micro_precision": 0.038138883463464134,
+          "micro_recall": 0.09388669332614075,
+          "mean_token_char_ratio": 0.4847523336599636,
+          "num_samples": 40776,
+          "score_seconds": 6.9
+        },
+        "base_tokenizer.json": {
+          "micro_f1": 0.0702651688129814,
+          "macro_f1": 0.09007291007820879,
+          "morphscore_recall": 0.5086001922395935,
+          "morphscore_precision": 0.16468330033665873,
+          "micro_precision": 0.04937485143807939,
+          "micro_recall": 0.12179705182179588,
+          "mean_token_char_ratio": 0.489044410402753,
+          "num_samples": 40776,
+          "score_seconds": 6.9
+        },
+        "LangMAP(langspec)": {
+          "micro_f1": 0.07177517938715457,
+          "macro_f1": 0.09229483673967699,
+          "morphscore_recall": 0.5447614711387683,
+          "morphscore_precision": 0.17902779635425356,
+          "micro_precision": 0.05045753625534427,
+          "micro_recall": 0.12428318459535843,
+          "mean_token_char_ratio": 0.4862650269707953,
+          "num_samples": 40776,
+          "score_seconds": 6.84
+        }
+      }
+    },
+    "yi-1.5-6b__hin_Deva__stem_eq_lemma-False__fw2-100m_50klines_scriptfilt_base-tur-fin-hun-arb-hin_softem_seed-baselogscores_em10.json": {
+      "family": "yi-1.5-6b",
+      "lang": "hin",
+      "stem_eq_lemma": false,
+      "protocol_tag": "fw2-100m_50klines_scriptfilt_base-tur-fin-hun-arb-hin_softem_seed-baselogscores_em10",
+      "harness_sha256": "bd82ce343b437fb293ebc350394563022930750be3ac2fd8f38a04b5e1f13de3",
+      "gold_sha256": "0ce256a9b55eddf21061d093949b7c36ccf88b6f0855c6d7d49665911b8ef2a1",
+      "arm_sha256": {
+        "Original(BPE)": "ebad02d0d5f5a616b483fc2d7d7784fcc2ba1a792c07c542efaed93dc3bd3697",
+        "base_tokenizer.json": "21e078158caa8fa69fdd7acbaa6344bd2dbc8ca3113bbfe87aea33a870df659c",
+        "LangMAP(langspec)": "400dfc6c0206220545bd8d9f331afd8d564122dbd27e9688be2613e7f28469dd"
+      },
+      "metrics": {
+        "Original(BPE)": {
+          "micro_f1": 0.03573520149393916,
+          "macro_f1": 0.04672603002463016,
+          "morphscore_recall": 1.0,
+          "morphscore_precision": 0.09805488639937565,
+          "micro_precision": 0.019959513170563114,
+          "micro_recall": 0.17047970479704797,
+          "mean_token_char_ratio": 2.8326339309531696,
+          "num_samples": 4723,
+          "score_seconds": 1.54
+        },
+        "base_tokenizer.json": {
+          "micro_f1": 0.09873010194956179,
+          "macro_f1": 0.09763354538312069,
+          "morphscore_recall": 0.564628487588432,
+          "morphscore_precision": 0.22319007925780388,
+          "micro_precision": 0.07471575527883054,
+          "micro_recall": 0.14549288350026357,
+          "mean_token_char_ratio": 0.6510845910036044,
+          "num_samples": 4723,
+          "score_seconds": 1.27
+        },
+        "LangMAP(langspec)": {
+          "micro_f1": 0.09873010194956179,
+          "macro_f1": 0.09763354538312069,
+          "morphscore_recall": 0.564628487588432,
+          "morphscore_precision": 0.22319007925780388,
+          "micro_precision": 0.07471575527883054,
+          "micro_recall": 0.14549288350026357,
+          "mean_token_char_ratio": 0.6510845910036044,
+          "num_samples": 4723,
+          "score_seconds": 154.83
+        }
+      }
+    },
+    "yi-1.5-6b__hun_Latn__stem_eq_lemma-False__fw2-100m_50klines_scriptfilt_base-tur-fin-hun-arb-hin_softem_seed-baselogscores_em10.json": {
+      "family": "yi-1.5-6b",
+      "lang": "hun",
+      "stem_eq_lemma": false,
+      "protocol_tag": "fw2-100m_50klines_scriptfilt_base-tur-fin-hun-arb-hin_softem_seed-baselogscores_em10",
+      "harness_sha256": "bd82ce343b437fb293ebc350394563022930750be3ac2fd8f38a04b5e1f13de3",
+      "gold_sha256": "f0dfe8467291a60da39c13366562bc14af7b0142cf70110b7a867665dbfd3faf",
+      "arm_sha256": {
+        "Original(BPE)": "ebad02d0d5f5a616b483fc2d7d7784fcc2ba1a792c07c542efaed93dc3bd3697",
+        "base_tokenizer.json": "21e078158caa8fa69fdd7acbaa6344bd2dbc8ca3113bbfe87aea33a870df659c",
+        "LangMAP(langspec)": "69be5ba456ff111cdf48d405f40a2938bb2ad929d3f9dce4460d9f4c1b418400"
+      },
+      "metrics": {
+        "Original(BPE)": {
+          "micro_f1": 0.11082474226804126,
+          "macro_f1": 0.13463383552058458,
+          "morphscore_recall": 0.6809555243832003,
+          "morphscore_precision": 0.16307676329366885,
+          "micro_precision": 0.0756461725833371,
+          "micro_recall": 0.20716491661519457,
+          "mean_token_char_ratio": 0.5767296609029993,
+          "num_samples": 7924,
+          "score_seconds": 1.6
+        },
+        "base_tokenizer.json": {
+          "micro_f1": 0.12744388124547432,
+          "macro_f1": 0.15253444101130262,
+          "morphscore_recall": 0.7458948758148365,
+          "morphscore_precision": 0.17388612966145583,
+          "micro_precision": 0.08686678332660296,
+          "micro_recall": 0.23915997529339098,
+          "mean_token_char_ratio": 0.5841583921451047,
+          "num_samples": 7924,
+          "score_seconds": 1.62
+        },
+        "LangMAP(langspec)": {
+          "micro_f1": 0.13822091886608015,
+          "macro_f1": 0.1662759739195709,
+          "morphscore_recall": 0.8293588579915832,
+          "morphscore_precision": 0.1918342317141107,
+          "micro_precision": 0.09387032529320646,
+          "micro_recall": 0.2620135886349598,
+          "mean_token_char_ratio": 0.5897124105911777,
+          "num_samples": 7924,
+          "score_seconds": 1.65
+        }
+      }
+    },
+    "yi-1.5-6b__tam_Taml__stem_eq_lemma-False__fw2-100m_50klines_scriptfilt_base-tur-fin-hun-arb-hin_softem_seed-baselogscores_em10.json": {
+      "family": "yi-1.5-6b",
+      "lang": "tam",
+      "stem_eq_lemma": false,
+      "protocol_tag": "fw2-100m_50klines_scriptfilt_base-tur-fin-hun-arb-hin_softem_seed-baselogscores_em10",
+      "harness_sha256": "bd82ce343b437fb293ebc350394563022930750be3ac2fd8f38a04b5e1f13de3",
+      "gold_sha256": "31448fcaf1c3e3f65b85386250382fb63b6ede33910c30be7298d4c38b24179d",
+      "arm_sha256": {
+        "Original(BPE)": "ebad02d0d5f5a616b483fc2d7d7784fcc2ba1a792c07c542efaed93dc3bd3697",
+        "base_tokenizer.json": "21e078158caa8fa69fdd7acbaa6344bd2dbc8ca3113bbfe87aea33a870df659c",
+        "LangMAP(langspec)": "da1450194d3261246cfb4e6e470e6b243f694bb6287af48f4c8ec41579a70336"
+      },
+      "metrics": {
+        "Original(BPE)": {
+          "micro_f1": 0.004489203465665076,
+          "macro_f1": 0.00724964072203179,
+          "morphscore_recall": 1.0,
+          "morphscore_precision": 0.04243183228837765,
+          "micro_precision": 0.0023984266321293232,
+          "micro_recall": 0.03499766682221185,
+          "mean_token_char_ratio": 3.117489862273666,
+          "num_samples": 2136,
+          "score_seconds": 0.87
+        },
+        "base_tokenizer.json": {
+          "micro_f1": 0.00792910447761194,
+          "macro_f1": 0.007612766650382674,
+          "morphscore_recall": 0.01674533603056858,
+          "morphscore_precision": 0.00799805199670337,
+          "micro_precision": 0.007925407925407926,
+          "micro_recall": 0.007932804479701353,
+          "mean_token_char_ratio": 0.23751263675886247,
+          "num_samples": 2136,
+          "score_seconds": 0.53
+        },
+        "LangMAP(langspec)": {
+          "micro_f1": 0.007928180016322723,
+          "macro_f1": 0.007612766650382674,
+          "morphscore_recall": 0.01674533603056858,
+          "morphscore_precision": 0.00799805199670337,
+          "micro_precision": 0.007923560941505477,
+          "micro_recall": 0.007932804479701353,
+          "mean_token_char_ratio": 0.23755519719468135,
+          "num_samples": 2136,
+          "score_seconds": 0.53
+        }
+      }
+    },
+    "yi-1.5-6b__tur_Latn__stem_eq_lemma-False__fw2-100m_50klines_scriptfilt_base-tur-fin-hun-arb-hin_softem_seed-baselogscores_em10.json": {
+      "family": "yi-1.5-6b",
+      "lang": "tur",
+      "stem_eq_lemma": false,
+      "protocol_tag": "fw2-100m_50klines_scriptfilt_base-tur-fin-hun-arb-hin_softem_seed-baselogscores_em10",
+      "harness_sha256": "bd82ce343b437fb293ebc350394563022930750be3ac2fd8f38a04b5e1f13de3",
+      "gold_sha256": "5bff599769937acadb0d4444785968ca1bc5eacc3714de596e79806ab186c188",
+      "arm_sha256": {
+        "Original(BPE)": "ebad02d0d5f5a616b483fc2d7d7784fcc2ba1a792c07c542efaed93dc3bd3697",
+        "base_tokenizer.json": "21e078158caa8fa69fdd7acbaa6344bd2dbc8ca3113bbfe87aea33a870df659c",
+        "LangMAP(langspec)": "e4a209b305180bf9673f460991741b40110a355670f57d6424860d80b2f6477b"
+      },
+      "metrics": {
+        "Original(BPE)": {
+          "micro_f1": 0.06229959952097042,
+          "macro_f1": 0.08107928144392279,
+          "morphscore_recall": 0.57025298860161,
+          "morphscore_precision": 0.14285512702630931,
+          "micro_precision": 0.04323863771777211,
+          "micro_recall": 0.11141475397251861,
+          "mean_token_char_ratio": 0.5842079939237712,
+          "num_samples": 32560,
+          "score_seconds": 152.03
+        },
+        "base_tokenizer.json": {
+          "micro_f1": 0.08553112618816848,
+          "macro_f1": 0.10885704699217755,
+          "morphscore_recall": 0.6743814289685844,
+          "morphscore_precision": 0.16244646235054744,
+          "micro_precision": 0.059141333678226465,
+          "micro_recall": 0.15444845321255854,
+          "mean_token_char_ratio": 0.5942982206310731,
+          "num_samples": 32560,
+          "score_seconds": 5.93
+        },
+        "LangMAP(langspec)": {
+          "micro_f1": 0.08500437578478748,
+          "macro_f1": 0.10939111785847341,
+          "morphscore_recall": 0.7144912427022521,
+          "morphscore_precision": 0.1739079103679795,
+          "micro_precision": 0.058654328622938956,
+          "micro_recall": 0.15434098410992553,
+          "mean_token_char_ratio": 0.5978127332916859,
+          "num_samples": 32560,
+          "score_seconds": 5.5
+        }
+      }
+    }
+  },
+  "coverage": {
+    "fw2-100m_50klines_scriptfilt_base-tur-fin-hun-arb-hin_softem_seed-baselogscores_em10|stem_eq_lemma=False": {
+      "bloom-3b": [
+        "arb",
+        "deu",
+        "fin",
+        "hin",
+        "hun",
+        "tam",
+        "tur"
+      ],
+      "gemma3-1b": [
+        "arb",
+        "deu",
+        "fin",
+        "hin",
+        "hun",
+        "tam",
+        "tur"
+      ],
+      "granite3.0-8b": [
+        "arb",
+        "deu",
+        "fin",
+        "hin",
+        "hun",
+        "tam",
+        "tur"
+      ],
+      "llama3.2-1b": [
+        "arb",
+        "deu",
+        "fin",
+        "hin",
+        "hun",
+        "tam",
+        "tur"
+      ],
+      "mistral-7b-v0.3": [
+        "arb",
+        "deu",
+        "fin",
+        "hin",
+        "hun",
+        "tam",
+        "tur"
+      ],
+      "mistral-nemo-12b": [
+        "arb",
+        "deu",
+        "fin",
+        "hin",
+        "hun",
+        "tam",
+        "tur"
+      ],
+      "olmo3-7b": [
+        "deu",
+        "fin",
+        "hun",
+        "tur"
+      ],
+      "phi-4": [
+        "arb",
+        "deu",
+        "fin",
+        "hin",
+        "hun",
+        "tam",
+        "tur"
+      ],
+      "qwen2_5-0_5b": [
+        "arb",
+        "deu",
+        "fin",
+        "hin",
+        "hun",
+        "tam",
+        "tur"
+      ],
+      "xglm-2.9b": [
+        "arb",
+        "deu",
+        "fin",
+        "hin",
+        "hun",
+        "tam",
+        "tur"
+      ],
+      "yi-1.5-6b": [
+        "arb",
+        "deu",
+        "fin",
+        "hin",
+        "hun",
+        "tam",
+        "tur"
+      ]
+    }
+  },
+  "missing": {
+    "fw2-100m_50klines_scriptfilt_base-tur-fin-hun-arb-hin_softem_seed-baselogscores_em10|stem_eq_lemma=False": {}
+  },
+  "paper_grid": {
+    "families": [
+      "bloom-3b",
+      "gemma3-1b",
+      "granite3.0-8b",
+      "llama3.2-1b",
+      "mistral-7b-v0.3",
+      "mistral-nemo-12b",
+      "phi-4",
+      "qwen2_5-0_5b",
+      "xglm-2.9b",
+      "yi-1.5-6b"
+    ],
+    "langs": [
+      "arb",
+      "deu",
+      "fin",
+      "hin",
+      "hun",
+      "tam",
+      "tur"
+    ],
+    "n_cells": 70
+  }
+}
