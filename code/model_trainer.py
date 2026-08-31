@@ -30,8 +30,46 @@ logger = logging.getLogger(__name__)
 PACK_DATASET: bool = True  # set False → disable packing & use dynamic padding
 
 
+def _vocab_aware_scales(vocab_size: int) -> dict:
+    """Vocab-size-aware HP scales (shared by the 125M and 500M configs).
+    Mirrors the original 125M-only logic; factored so both target-param sizes
+    use the SAME scaling regime (so cross-set comparisons are not confounded
+    by HP-scaling differences). Returns a dict the callers compose into
+    GPT2Config + training_adjustments.
+    """
+    if vocab_size <= 32000:
+        s = dict(lr_scale=1.0, grad_clip_scale=1.0, warmup_scale=1.0,
+                 embedding_scale=1.0, batch_lg=False)
+    elif vocab_size <= 65000:
+        s = dict(lr_scale=0.7, grad_clip_scale=0.5, warmup_scale=1.5,
+                 embedding_scale=0.8, batch_lg=False)
+    else:
+        s = dict(lr_scale=0.5, grad_clip_scale=0.3, warmup_scale=2.0,
+                 embedding_scale=0.6, batch_lg=True)
+    return s
+
+
+def _training_adjustments(s: dict) -> dict:
+    """Compose the training kwargs from the scales dict (DRY)."""
+    return {
+        "learning_rate": 3e-4 * s["lr_scale"],
+        "max_grad_norm": 1.0 * s["grad_clip_scale"],
+        "warmup_steps": int(3_000 * s["warmup_scale"]),
+        "per_device_train_batch_size": 8 if s["batch_lg"] else 12,
+        "gradient_accumulation_steps": 3 if s["batch_lg"] else 2,
+        "weight_decay": 0.005 if s["batch_lg"] else 0.01,
+        "adam_epsilon": 1e-6 if s["batch_lg"] else 1e-8,
+        "lr_scheduler_type": "linear" if s["batch_lg"] else "cosine",
+        "optim": "adamw_torch" if s["batch_lg"] else "adamw_8bit",
+    }
+
+
 def get_vocab_aware_config(vocab_size: int, pad_id: int):
     """
+    GPT-2 125M (SET-A) config: n_embd=768, n_layer=12, n_head=12, n_ctx=512.
+    At vocab=50k the realized param count is ≈ 12·12·768² + 50000·768 ≈ 124M
+    (within ±10% of the 125M target).
+
     Adjust model configuration and training parameters based on vocabulary size.
 
     Args:
@@ -106,6 +144,57 @@ def get_vocab_aware_config(vocab_size: int, pad_id: int):
     }
 
     return model_config, training_adjustments
+
+
+def get_vocab_aware_config_500m(vocab_size: int, pad_id: int):
+    """
+    GPT-2-style ~500M config (SET-B): n_embd=1024, n_layer=32, n_head=16,
+    n_ctx=512. Head dim 64 (standard); architecture sits between GPT-2 medium
+    (350M, n_layer=24) and large (760M, n_layer=36). Same vocab-aware HP
+    scaling as `get_vocab_aware_config` so the cross-set comparison is not
+    confounded by HP-scaling differences — only model capacity differs.
+
+    Realized param count at vocab=100k (tied embedding):
+        12·32·1024² + 100000·1024 + 512·1024  ≈  402.7M + 102.4M + 0.5M
+                                              =  505.6M  (within ±10% of 500M)
+
+    Call `assert_param_count(model_config, 500_000_000)` after instantiation
+    to verify before any training submission.
+    """
+    s = _vocab_aware_scales(vocab_size)
+    model_config = GPT2Config(
+        vocab_size=vocab_size,
+        n_positions=512, n_ctx=512,
+        n_embd=1024, n_layer=32, n_head=16,    # ~500M target (head_dim=64)
+        resid_pdrop=0.1, embd_pdrop=0.1, attn_pdrop=0.1,
+        use_cache=False, pad_token_id=pad_id,
+        initializer_range=0.02 * s["embedding_scale"],
+    )
+    return model_config, _training_adjustments(s)
+
+
+def assert_param_count(model_config: GPT2Config,
+                        target_params: int,
+                        tolerance: float = 0.10) -> int:
+    """Instantiate a model from `model_config` and assert its realized
+    `sum(p.numel())` is within `tolerance` of `target_params`. Returns the
+    realized count. Hard-fail before any training launch so we cannot ship a
+    400M or 700M model named '500M' (no silent-fallback rule applied to model
+    sizing, not just data).
+    """
+    from transformers import GPT2LMHeadModel
+    model = GPT2LMHeadModel(model_config)
+    n = sum(p.numel() for p in model.parameters())
+    lo, hi = int(target_params * (1 - tolerance)), int(target_params * (1 + tolerance))
+    if not (lo <= n <= hi):
+        raise AssertionError(
+            f"Param-count check failed: realized={n:,} not in "
+            f"[{lo:,}, {hi:,}] (target {target_params:,} ±{tolerance*100:.0f}%)."
+        )
+    logger.info(
+        f"Param count OK: {n:,} ∈ [{lo:,}, {hi:,}] (target {target_params:,})"
+    )
+    return n
 
 
 ###################################################

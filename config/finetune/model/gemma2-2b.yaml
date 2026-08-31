@@ -1,0 +1,7 @@
+name: gemma2-2b
+model_name: google/gemma-2-2b
+model_tokenizer_path: google/gemma-2-2b
+
+# 256k-vocab tied embed at 2B params; bs=2 to avoid OOM. Eff batch 2×4×16=128.
+per_device_batch_size: 2
+gradient_accumulation_steps: 16
