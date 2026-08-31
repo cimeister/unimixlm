@@ -1,0 +1,5 @@
+#ifndef FIRE_ENGINE_BITSET_HPP
+#define FIRE_ENGINE_BITSET_HPP
+
+
+#endif

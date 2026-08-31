@@ -1,0 +1,71 @@
+{
+  "lang": "fin",
+  "lang_code": "fin_Latn",
+  "repo": "MultilingualUnigramLM/FineWeb2-fin_Latn-100M",
+  "revision": "911ce60ee131ec7dda94e237166ae521c8177720",
+  "source_note": "Reconstructed (and sha256-verified byte-identical) from the exact HF revision recorded in the existing F15 corpus provenance; read via hf_cache_pr21 in HF_HUB_OFFLINE=1 mode (read-only).",
+  "docs_scanned": 70013,
+  "docs_filtered_empty": 0,
+  "docs_filtered_script": 13,
+  "docs_collected": 70000,
+  "base_tokenizer_used_for_sizing": "<repo>/las_tokenizers/f15/qwen2_5-0_5b/base_tokenizer.json",
+  "prod_token_target": 25000000,
+  "points": {
+    "N125": {
+      "n_docs": 125,
+      "n_tokens": 122889,
+      "n_chars": 324195,
+      "tokens_per_char": 0.3790588997362698,
+      "path": "<scratch>/unimixlm_las_tokenizers_corpora/convergence_v2_corpora/fin_Latn_N125.txt",
+      "sha256": "308a5ccec6bc885f4c7f8aa2fdc30f9e97db05e74cf283f273b9af9f6661a220"
+    },
+    "N500": {
+      "n_docs": 500,
+      "n_tokens": 545489,
+      "n_chars": 1427915,
+      "tokens_per_char": 0.38201783719619165,
+      "path": "<scratch>/unimixlm_las_tokenizers_corpora/convergence_v2_corpora/fin_Latn_N500.txt",
+      "sha256": "db80c85ad51decaf052ea003a3ed11be6599fcbdf6e94ada60213456b14a22c1"
+    },
+    "N1000": {
+      "n_docs": 1000,
+      "n_tokens": 1079516,
+      "n_chars": 2833503,
+      "tokens_per_char": 0.38098283291035867,
+      "path": "<scratch>/unimixlm_las_tokenizers_corpora/convergence_v2_corpora/fin_Latn_N1000.txt",
+      "sha256": "a1beeaf0c2ba892a5f4f417d06c2e8b1374c618b6cd4368f6b71d949afb4c2de"
+    },
+    "N4000": {
+      "n_docs": 4000,
+      "n_tokens": 4697244,
+      "n_chars": 12342130,
+      "tokens_per_char": 0.38058617110660803,
+      "path": "<scratch>/unimixlm_las_tokenizers_corpora/convergence_v2_corpora/fin_Latn_N4000.txt",
+      "sha256": "2d17aa8dca50b32bd9ec8871e3b74f42b41f8020538cd1475a68d1e4b2e81f6c"
+    },
+    "N16000": {
+      "n_docs": 16000,
+      "n_tokens": 18381609,
+      "n_chars": 48038536,
+      "tokens_per_char": 0.3826429889537017,
+      "path": "<scratch>/unimixlm_las_tokenizers_corpora/convergence_v2_corpora/fin_Latn_N16000.txt",
+      "sha256": "ec1f9f215abe235f89c1980ef48018027bf6326d252e03650f391da4a510cc6d"
+    },
+    "N32000": {
+      "n_docs": 32000,
+      "n_tokens": 36537960,
+      "n_chars": 95473469,
+      "tokens_per_char": 0.3827027590251277,
+      "path": "<scratch>/unimixlm_las_tokenizers_corpora/convergence_v2_corpora/fin_Latn_N32000.txt",
+      "sha256": "2f1095ef012682914a8aee5294c1990ad3b6c8e65b8ec88f341cf860fc59c09f"
+    },
+    "prod25M": {
+      "n_docs": 21518,
+      "n_tokens": 25003767,
+      "n_chars": 65301253,
+      "tokens_per_char": 0.3828987324332046,
+      "path": "<scratch>/unimixlm_las_tokenizers_corpora/convergence_v2_corpora/fin_Latn_prod25M.txt",
+      "sha256": "0e38123322a3e74ea6cd36db37324998fae7e7549be4d865dd61b5463652588c"
+    }
+  }
+}
