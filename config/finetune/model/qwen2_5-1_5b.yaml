@@ -3,3 +3,8 @@ name: qwen2_5-1_5b
 # LangMAP initial-experiment model and third arm of the FT sweep.
 # Qwen2.5-1.5B base (not instruct) — open weights, no gating.
 model_name: Qwen/Qwen2.5-1.5B
+
+# Effective batch 128 (per_device x 4 GPUs x grad_accum), matching the
+# convention default.yaml documents for cross-model comparability.
+per_device_batch_size: 4
+gradient_accumulation_steps: 8
