@@ -290,15 +290,22 @@ MAX_SPM_SENTENCE_BYTES = 4192
 
 EVAL_PARQUET_ROOT = Path(os.environ.get(
     "CODE_AST_EVAL_PARQUET_ROOT", str(TOKEVAL_REPO / "starcoder")))
-FIT_PARQUET_ROOT = Path(os.environ.get(
-    "CODE_AST_FIT_PARQUET_ROOT",
-    "/path/to/store/datasets/tokenizer_training/"
-    "downstream_lm_training_data/starcoder_sample"))
+_CODE_AST_FIT_PARQUET_ROOT = os.environ.get("CODE_AST_FIT_PARQUET_ROOT")
+if not _CODE_AST_FIT_PARQUET_ROOT:
+    raise RuntimeError(
+        "CODE_AST_FIT_PARQUET_ROOT is not set. Point it at the "
+        "starcoder_sample fitting-corpus directory "
+        "(tokenizer_training/downstream_lm_training_data/starcoder_sample)."
+    )
+FIT_PARQUET_ROOT = Path(_CODE_AST_FIT_PARQUET_ROOT)
 
-CORPORA_ROOT = Path(os.environ.get(
-    "LAS_TOK_CORPORA_ROOT",
-    f"/path/to/scratch/{os.environ.get('USER', 'USER')}/"
-    f"unimixlm_las_tokenizers_corpora")) / "code_ast_v1_corpora"
+_LAS_TOK_CORPORA_ROOT = os.environ.get("LAS_TOK_CORPORA_ROOT")
+if not _LAS_TOK_CORPORA_ROOT:
+    raise RuntimeError(
+        "LAS_TOK_CORPORA_ROOT is not set. Point it at the scratch directory "
+        "holding the LAS tokenizer-training corpora."
+    )
+CORPORA_ROOT = Path(_LAS_TOK_CORPORA_ROOT) / "code_ast_v1_corpora"
 
 OUT_ROOT = REPO_ROOT / "eval_results" / "code_ast_v1"
 CELL_DIR = OUT_ROOT / "cells"

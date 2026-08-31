@@ -1,8 +1,8 @@
 {
-  "corpus_root": "/Users/ahmetcanyavuz/Developer/unimix_clean/unimixlm/dslml_corpus_all",
-  "results_dir": "/Users/ahmetcanyavuz/Developer/unimix_clean/unimixlm/dslml_unimixlm_10k",
-  "base_tokenizer": "/Users/ahmetcanyavuz/Developer/unimix_clean/unimixlm/dslml_unimixlm_10k/base_tokenizer_10k.json",
-  "per_label_dir": "/Users/ahmetcanyavuz/Developer/unimix_clean/unimixlm/dslml_unimixlm_10k/tokenizers",
+  "corpus_root": "dslml_corpus_all",
+  "results_dir": "dslml_unimixlm_10k",
+  "base_tokenizer": "dslml_unimixlm_10k/base_tokenizer_10k.json",
+  "per_label_dir": "dslml_unimixlm_10k/tokenizers",
   "label_tokenizers": {
     "EN-GB": "dslml_unimixlm_10k/tokenizers/langspec_soft_EN-GB.tokenizer.json",
     "EN-US": "dslml_unimixlm_10k/tokenizers/langspec_soft_EN-US.tokenizer.json",

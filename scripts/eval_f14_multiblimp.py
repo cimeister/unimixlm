@@ -2,7 +2,7 @@
 """MultiBLiMP + Belebele-eng eval for F14/F14b/F15 cells.
 
 F14/F14b: original PR#21 tab:extrinsic replication. F15: LangMAP downstream
-campaign (plan: `the-paper-has-not-stateful-bear.md`, "Evaluation suite" item
+campaign (per the F15 experiment plan, "Evaluation suite" item
 5) -- adds the base-Unigram (A5) and vocab-extension (A4) arms, the
 Llama-3.2-1B family, script-aware overlay filenames for arb/hin, and a
 5-shot English-retention task (belebele_eng) routed per the arm's OWN
@@ -154,8 +154,8 @@ def _verify_skip_provenance(out_path: Path, derived: Path) -> None:
     the 2026-08-18 incident (`eval_results/f15_bpb/
     qwen2_5-0_5b_tur_langspec_truetie_s42__bpb.json` was a stale F14c-era
     file whose `checkpoint` pointed at `pr21_rerun/`, silently accepted as
-    satisfying the f15_wave1 cell of the same tag; see EXPERIMENTS_RESULTS.md
-    provenance caveat). Copied verbatim into this script's sibling
+    satisfying the f15_wave1 cell of the same tag -- an earlier provenance
+    defect this check now guards against). Copied verbatim into this script's sibling
     `scripts/eval_f15_bpb.py` (same rationale as the other copied helpers in
     this file: no runtime dependency between the two driver scripts).
 

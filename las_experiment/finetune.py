@@ -319,9 +319,9 @@ def resolve_fineweb2_dataset(size: str) -> str:
 # project's LANG_SUFFIX conventions, e.g. slurm/submit_p4d_phase1.sh), not
 # just the two that need a non-default suffix.
 #
-# 'eng' is deliberately absent from this map — reviewed and signed off
-# 2026-08-27. eng falls back to cfg.dataset.lang_suffix (with a logged
-# warning) via resolve_lang_suffixes' unmapped-language path below, since it
+# 'eng' is deliberately absent from this map. eng falls back to
+# cfg.dataset.lang_suffix (with a logged warning) via resolve_lang_suffixes'
+# unmapped-language path below, since it
 # has its own hub repo/config and, in langspec/placebo/base modes, keeps the
 # model's own tokenizer regardless of script suffix; multi-language runs are
 # exempt from resolve_lang_suffixes' single-language mismatch guard (see that
@@ -362,7 +362,7 @@ def resolve_lang_suffixes(langs, cfg_lang_suffix):
     key cannot match every language by construction, so agreement is not
     required and is not checked; the per-language map is authoritative.
 
-    Reviewed and signed off 2026-08-27: 'eng' is deliberately absent from
+    'eng' is deliberately absent from
     FINEWEB2_LANG_SUFFIX (it takes the unmapped-language fallback above —
     ``cfg_lang_suffix``, with a logged warning — rather than a script-suffix
     entry of its own), and multi-language runs are deliberately exempt from
@@ -413,8 +413,8 @@ def resolve_fineweb2_lang(lang: str, size: str):
     repo ``FineWeb2-<lang><Script>-<size>`` with a single default ``train``
     split and no named config; English lives as the ``eng_Latn`` config of
     the multi-language ``FineWeb2-100M-olmo3-7b-toks`` repo. Ported verbatim
-    from the suchir-code-tok branch so reruns load the exact repos its runs
-    used, EXCEPT for the script suffix (see FINEWEB2_LANG_SUFFIX): the
+    from the code-tokenizer branch (PR #21) so reruns load the exact repos
+    its runs used, EXCEPT for the script suffix (see FINEWEB2_LANG_SUFFIX): the
     original port hardcoded "_Latn" for every language, which is wrong for
     arb (needs "_Arab") and hin (needs "_Deva") — F15 fix, 2026-08-17.
     Confirmed to exist on the hub: FineWeb2-arb_Arab-100M, FineWeb2-hin_Deva-100M.
@@ -439,9 +439,9 @@ def _resolve_dataset_revision(repo_id: str, ds) -> dict:
     run_metadata.json `data_sources[].revision` provenance.
 
     Tries the live hub commit SHA first (huggingface_hub.HfApi.dataset_info).
-    SLURM jobs in this project typically run with HF_HUB_OFFLINE=1 (see
-    the project notes), so the network call is expected to fail there; in
-    that case (or any other failure) fall back to the loaded dataset's own
+    SLURM jobs in this project typically run with HF_HUB_OFFLINE=1, so the
+    network call is expected to fail there; in that case (or any other
+    failure) fall back to the loaded dataset's own
     content fingerprint plus an explicit "offline-cache" marker, so a reader
     of run_metadata.json can tell a verified hub SHA apart from a local
     artifact fingerprint rather than assuming the two are equivalent.
@@ -569,7 +569,8 @@ def _compute_schedule_fingerprint(cfg, eval_token_budgets_raw):
     The HF Trainer rebuilds its cosine scheduler against `max_steps` on every
     resume, then fast-forwards by the saved optimizer step count. If any field
     below differs between submissions, the resumed run's remaining schedule
-    shape diverges from the original — silently. Bug 8 (2026-04-14).
+    shape diverges from the original — silently. Guarded against since
+    2026-04-14.
 
     This fingerprint is logged to `run_metadata.json` (`training.schedule_fingerprint`)
     and asserted against on `resume_policy=auto` before training starts.
@@ -589,7 +590,7 @@ def _compute_schedule_fingerprint(cfg, eval_token_budgets_raw):
 
 
 def _assert_schedule_fingerprint_matches(output_dir, cfg, eval_token_budgets_raw):
-    """Raise on bug-8 config drift when resuming.
+    """Raise on schedule-config drift when resuming.
 
     On resume, read the prior `run_metadata.json` from `output_dir` and assert
     that every schedule-affecting config field matches what we're about to
@@ -602,8 +603,8 @@ def _assert_schedule_fingerprint_matches(output_dir, cfg, eval_token_budgets_raw
     meta_path = Path(output_dir) / "run_metadata.json"
     if not meta_path.exists():
         logging.warning(
-            f"resume_policy='auto' resume but no {meta_path} to check bug-8 "
-            f"fingerprint against. Proceeding — first-time resume of a legacy run."
+            f"resume_policy='auto' resume but no {meta_path} to check the "
+            f"schedule fingerprint against. Proceeding — first-time resume of a legacy run."
         )
         return
 
@@ -612,7 +613,7 @@ def _assert_schedule_fingerprint_matches(output_dir, cfg, eval_token_budgets_raw
             prior_meta = json.load(f)
     except (json.JSONDecodeError, OSError) as e:
         logging.warning(
-            f"Could not read prior run_metadata.json for bug-8 fingerprint check: {e}. "
+            f"Could not read prior run_metadata.json for the schedule fingerprint check: {e}. "
             f"Proceeding — fingerprint verification skipped."
         )
         return
@@ -622,9 +623,9 @@ def _assert_schedule_fingerprint_matches(output_dir, cfg, eval_token_budgets_raw
     current_fp = _compute_schedule_fingerprint(cfg, eval_token_budgets_raw)
 
     if prior_fp is None:
-        # Legacy metadata predating bug-8 fix. We can reconstruct most of the
-        # fingerprint from the older top-level fields; world_size is not
-        # recorded and we can't verify it.
+        # Legacy metadata predating the schedule-fingerprint fix. We can
+        # reconstruct most of the fingerprint from the older top-level
+        # fields; world_size is not recorded and we can't verify it.
         prior_fp = {
             "per_device_batch_size": prior_training.get("per_device_batch_size"),
             "gradient_accumulation_steps": prior_training.get("gradient_accumulation_steps"),
@@ -639,7 +640,7 @@ def _assert_schedule_fingerprint_matches(output_dir, cfg, eval_token_budgets_raw
         current_for_compare["world_size"] = None  # opt out of comparison
         logging.warning(
             "Prior run_metadata.json has no schedule_fingerprint "
-            "(pre-bug-8-fix). world_size check skipped; other fields compared."
+            "(predates the schedule-fingerprint fix). world_size check skipped; other fields compared."
         )
     else:
         current_for_compare = current_fp
@@ -652,7 +653,8 @@ def _assert_schedule_fingerprint_matches(output_dir, cfg, eval_token_budgets_raw
     if mismatches:
         raise RuntimeError(
             f"resume_policy='auto' but schedule-affecting config has changed "
-            f"since the prior submission (bug 8: silent LR schedule drift).\n"
+            f"since the prior submission (guards against silent LR-schedule "
+            f"drift on resume, in place since 2026-04-14).\n"
             f"Mismatches: {json.dumps(mismatches, indent=2)}\n"
             f"HF Trainer rebuilds the cosine scheduler against the NEW max_steps "
             f"on resume, then fast-forwards by the saved optimizer step count — "
@@ -664,7 +666,7 @@ def _assert_schedule_fingerprint_matches(output_dir, cfg, eval_token_budgets_raw
             f"awareness that you are starting over."
         )
     logging.info(
-        f"bug-8 fingerprint OK: schedule-affecting config matches prior "
+        f"schedule fingerprint OK: schedule-affecting config matches prior "
         f"submission ({current_fp})."
     )
 

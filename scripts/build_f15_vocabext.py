@@ -1,9 +1,8 @@
 #!/usr/bin/env python3
 """Build the A4 (F15) vocabulary-extension tokenizers for Qwen2.5-0.5B.
 
-Wave-1 integration owner: see the F15 plan
-(the experiment plan, "Arms" A4 row and
-"Implementation work items" #3). This script is the driver for
+Wave-1 integration owner: see the F15 experiment plan
+("Arms" A4 row and "Implementation work items" #3). This script is the driver for
 ``las_experiment.vocab_extend.build_extended_tokenizer`` — it does not
 implement the extension logic itself (that lives in vocab_extend.py, owned by
 the same wave). It is scoped to the Qwen2.5-0.5B family only; Llama-3.2-1B A4
@@ -26,6 +25,7 @@ Do NOT commit any artifact under las_tokenizers/f15/. No HF Hub push.
 
 import hashlib
 import json
+import os
 import subprocess
 import sys
 import unicodedata
@@ -69,9 +69,13 @@ LANGS = ["tur", "fin", "hun", "arb", "hin"]
 FAMILY_DIR = REPO_ROOT / "las_tokenizers" / "f15" / FAMILY
 MODEL_TOKENIZER_JSON = FAMILY_DIR / "model_tokenizer" / "tokenizer.json"
 MANIFEST_PATH = FAMILY_DIR / "manifest.json"
-CORPORA_DIR = Path(
-    "/path/to/scratch/USER/unimixlm_las_tokenizers_corpora/f15_corpora"
-)
+_LAS_TOK_CORPORA_ROOT = os.environ.get("LAS_TOK_CORPORA_ROOT")
+if not _LAS_TOK_CORPORA_ROOT:
+    raise RuntimeError(
+        "LAS_TOK_CORPORA_ROOT is not set. Point it at the scratch directory "
+        "holding the LAS tokenizer-training corpora (parent of f15_corpora/)."
+    )
+CORPORA_DIR = Path(_LAS_TOK_CORPORA_ROOT) / "f15_corpora"
 
 
 def sha256(path: Path) -> str:

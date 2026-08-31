@@ -3,7 +3,7 @@
 # tab:extrinsic Qwen2.5-0.5B cells, plus placebo arm and seed replicates.
 #
 # Grid: {tur,fin,hun} x {original,langspec,placebo} x seeds {42,43,44} = 27 cells.
-# Protocol matches suchir-code-tok _run_cell4.sh except:
+# Protocol matches the code-tokenizer branch's (PR #21) _run_cell4.sh except:
 #   - finetune.py is the mainline tie-preserving version (bug-4 fixed):
 #     tied Qwen2.5 embeddings stay tied; modules_to_save=[embed_tokens] only.
 #   - checkpointing: final model per epoch only (no 10-step cadence).
@@ -15,11 +15,12 @@
 # Usage: bash scripts/launch_pr21_rerun.sh [--dry-run]
 set -euo pipefail
 
-REPO_DIR="/home/USER/unimixlm"
-PYTHON="/path/to/scratch/USER/unimixlm-venv-aug26/bin/python"
+REPO_DIR="$(cd "$(dirname "$0")/.." && pwd)"
+SCRATCH_DIR="${SCRATCH_DIR:?set SCRATCH_DIR to your cluster scratch root}"
+PYTHON="${VENV_DIR:?set VENV_DIR to the project virtualenv}/bin/python"
 TOK_ROOT="${REPO_DIR}/las_tokenizers/qwen2_5-0_5b_pr21"
-OUT_ROOT="/path/to/scratch/USER/pr21_rerun"
-HF_CACHE="/path/to/scratch/USER/hf_cache_pr21"
+OUT_ROOT="${SCRATCH_DIR}/pr21_rerun"
+HF_CACHE="${SCRATCH_DIR}/hf_cache_pr21"
 LOG_DIR="${REPO_DIR}/logs/pr21_rerun"
 JID_FILE="${REPO_DIR}/.pr21_rerun_jids"
 mkdir -p "${OUT_ROOT}" "${LOG_DIR}"
@@ -131,7 +132,7 @@ exit \$rc
   fi
   jid=$(sbatch --parsable \
     --job-name="${name}" \
-    --account=ACCOUNT --partition=normal \
+    --account="${SLURM_ACCOUNT:?set SLURM_ACCOUNT to your cluster account}" --partition=normal \
     --nodes=1 --ntasks=1 --cpus-per-task=288 --mem=450G \
     --time=08:00:00 \
     --output="${LOG_DIR}/${name}_%j.out" --error="${LOG_DIR}/${name}_%j.err" \
