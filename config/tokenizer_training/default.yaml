@@ -8,9 +8,8 @@ defaults:
 
 data:
   output_dir: ./las_tokenizers/olmo3-7b_v100k_fineweb2sample_10klines_afr-ind-ron-swh_softem
-  # 50k is the chosen default (2026-04-21). Earlier experiments (§2, §3, §10,
-  # §12, §13, P4b-code first-pass) trained with 10k lines/lang, which proved
-  # thin for code langs (Gemma3 JavaScript T4b routing at 72% in P4b code).
+  # 50k is the chosen default. 10k lines/lang proved thin for code langs
+  # (Gemma3 JavaScript T4b routing at 72% in P4b code).
   # Record the actual value used per run in this project's own experiment log
   # and keep it in the tokenizer-dir name suffix (e.g. "_50klines_").
   lines_per_lang: 50000

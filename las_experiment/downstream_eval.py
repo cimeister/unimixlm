@@ -46,13 +46,13 @@ def _assert_checkpoint_provenance(
     expected_las_mode: str,
     expected_las_dir: str | None = None,
 ) -> None:
-    """CRITICAL-2 + eos-bug guard (2026-05-17). Refuse to evaluate a checkpoint
+    """CRITICAL-2 + eos-bug guard. Refuse to evaluate a checkpoint
     whose run_metadata.json does not match the eval config. No silent trust of
     the Hydra YAML — a stale pairing produces plausible but meaningless numbers.
 
     Also auto-refuses eos-bugged checkpoints: `model_tokenizer_path != model.name`
     means eos/pad were resolved from a foreign tokenizer
-    (see memory project_qwen3_eos_model_tokenizer_bug). The invariant
+    (the Qwen3 eos / model_tokenizer_path mismatch). The invariant
     model.name == model_tokenizer_path holds for every clean cell and ONLY
     differs for the confounded ones.
     """
@@ -192,7 +192,7 @@ def _build_eval_lm_kwargs(
         # Two adapter shapes are produced by training:
         #   (A) Legacy bug-4 untied runs: both `embed_tokens` and `lm_head` are
         #       in `modules_to_save`. They were trained as independent copies.
-        #   (B) Tied-fix runs (post-2026-04-13 fix for tied-embedding models
+        #   (B) Tied-fix runs (for tied-embedding models
         #       like Qwen3/Gemma3): only `embed_tokens` is in `modules_to_save`.
         #       The trained input embedding should ALSO feed the output
         #       projection via the tie.

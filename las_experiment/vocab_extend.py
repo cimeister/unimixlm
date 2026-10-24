@@ -17,7 +17,7 @@ Two pieces live here:
    embedding rows of the piece's decomposition under the OLD tokenizer
    (FOCUS-style). Deterministic; no RNG.
 
-DECODING CAVEAT (measured 2026-08-16, tokenizers 0.22.1) — read before using the
+DECODING CAVEAT (measured with tokenizers 0.22.1) — read before using the
 emitted file directly. ``added_tokens`` are matched against RAW text, so their
 ``content`` must be the raw surface string (" arabalar"), not the byte-level
 form ("Ġarabalar"). But ``Tokenizer.decode`` sends every token, added ones
@@ -51,9 +51,9 @@ from tokenizers import Tokenizer
 # ---------------------------------------------------------------------------
 # Constants
 # ---------------------------------------------------------------------------
-# Default number of monolingual pieces appended to the base vocabulary. Chosen
-# in the F15 plan ("top-16k new per-language pieces from a monolingual 32k BPE
-# fit"); it is a designer degree of freedom recorded in EXPERIMENTAL_SETUP.
+# Default number of monolingual pieces appended to the base vocabulary: the
+# top-16k new per-language pieces from a monolingual 32k BPE fit. This is a
+# free design choice of the experiment.
 DEFAULT_TOP_K = 16000
 
 # Highest codepoint the GPT-2 byte<->char table maps (see _bytes_to_unicode:
@@ -202,8 +202,8 @@ def build_extended_tokenizer(
     if mono.get("model", {}).get("type") != "BPE":
         raise ValueError(
             f"{mono_bpe_json_path} is a {mono.get('model', {}).get('type')!r} "
-            f"tokenizer; the monolingual source must be BPE (F15 plan: BPE, not "
-            f"Unigram, so the known Unigram BpB cost does not bias A4 vs A2)."
+            f"tokenizer; the monolingual source must be BPE, not Unigram, so "
+            f"the known Unigram BpB cost does not bias A4 vs A2."
         )
 
     base_vocab: dict[str, int] = base["model"]["vocab"]
@@ -277,7 +277,7 @@ def build_extended_tokenizer(
         if not surface:
             n_skip_undecodable += 1
             continue
-        # A4 digit exclusion (user decision 2026-08-17): a piece whose surface
+        # A4 digit exclusion: a piece whose surface
         # is ALL digits (ignoring one leading space, since byte-level BPE marks
         # word-initial pieces that way) is excluded from the appended set. Pure
         # number strings are not a language-specific morphological unit and
@@ -293,7 +293,7 @@ def build_extended_tokenizer(
         # A raw UTF-8 surface can coincidentally be the IDENTICAL string to an
         # unrelated base-vocab BYTE-LEVEL piece (that piece's byte-level chars
         # happen to spell the same text as this surface's raw bytes, without
-        # representing the same underlying bytes at all — measured 2026-08-17
+        # representing the same underlying bytes at all), observed
         # on tur: surface "Çİ" collided with an existing Qwen2.5 BPE piece).
         # `tokenizers.Tokenizer`'s merged vocab (model.vocab ∪ added_tokens)
         # is a single string->id namespace, so appending this surface as an
@@ -405,7 +405,7 @@ def build_extended_tokenizer(
         "n_base_model_vocab": len(base_vocab),
         "n_base_added_tokens": len(base_added),
         "n_mono_vocab": len(mono_vocab),
-        # Top-level per user decision 2026-08-17 (digit exclusion), alongside
+        # Top-level (digit exclusion), alongside
         # the other top-level counters (n_appended,
         # n_appended_native_bytelevel_decode_wrong) that scripts read directly
         # without reaching into "selection".

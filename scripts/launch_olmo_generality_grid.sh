@@ -1,10 +1,10 @@
 #!/usr/bin/env bash
-# OLMo generality phase (user decisions 5(b) + 6(c)): 3 families x 4 languages
+# OLMo generality phase: 3 families x 4 languages
 # = 12 cells, into the SAME eval_results/intrinsic_sweep_v2/cells/ dir as the
 # completed 70-cell sweep (path is family+lang+protocol-encoded, so no
 # collision). Modeled directly on scripts/launch_intrinsic_sweep_v2.sh.
 #
-# Families: olmo3-7b (NEW, converted this session), bloom-3b, mistral-7b-v0.3
+# Families: olmo3-7b (newly converted), bloom-3b, mistral-7b-v0.3
 #   (both already converted + already have deu/fin/hun/tur cells from the
 #   70-cell sweep -- those 8 invocations below will idempotently reverify in
 #   seconds; only the 4 olmo3-7b cells do real work).
@@ -15,10 +15,10 @@
 #   full org catalog listing, not just per-name lookups), and none of the
 #   other Hub datasets on the org (FineWeb2-10K/5M/10M/100M-olmo3-7b-toks) is
 #   both compatible with this driver's fixed per-language-repo loading path
-#   AND large enough / language-complete for the 50k-line protocol. See the
-#   session report for the per-language gold verdicts (2 of 16 fail n<300:
-#   fil n=78, azj n=251; ita's existing gold splits validated separately and
-#   pass) and the corpus-availability evidence. No corpus was substituted.
+#   AND large enough / language-complete for the 50k-line protocol.
+#   Per-language gold verdicts: 2 of 16 fail n<300 (fil n=78, azj n=251);
+#   ita's existing gold splits were validated separately and pass. No corpus
+#   was substituted.
 set -u
 
 REPO="$(cd "$(dirname "$0")/.." && pwd)"

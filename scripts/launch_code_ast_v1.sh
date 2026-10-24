@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 # Launch the full 8-family x 9-programming-language AST-leaf-alignment grid
-# (72 cells) that replaces appendix.tex tab:code-overall-grid /
-# tab:code-overall-values.
+# (72 cells) that replaces the paper's tables of overall
+# code results (grid and values).
 #
 #   bash scripts/launch_code_ast_v1.sh
 #

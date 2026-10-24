@@ -115,7 +115,7 @@ def main():
     # For `tokenizer_mode=langspec` we build a single LAS routing tokenizer
     # loaded with EVERY langspec_*.json in `tok_dir`, then route every text
     # through `best_language_encode_batch`. Using the per-language tokenizer
-    # directly (as we did before 2026-05-14) bypasses routing — the file label
+    # directly bypasses routing — the file label
     # picks the language for free, which is an oracle eval, not LAS-at-inference.
     las_router = None
     if args.tokenizer_mode == "langspec":

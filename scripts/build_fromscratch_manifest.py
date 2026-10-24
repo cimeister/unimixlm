@@ -90,10 +90,10 @@ def build_manifest(track: str, set_name: str, out_dir: Path,
     for lang in track_langs(track):
         data_dir = lm_dir(track, set_name, lang)
         tgt_tok = token_budgets[lang]
-        # TOKEN-AWARE selection (2026-05-23 fix): measures real tokens/doc with
+        # TOKEN-AWARE selection: measures real tokens/doc with
         # the BPE tokenizer, then selects files by row count to cover
-        # tgt_tok × oversample docs. Replaces the file-byte selector that
-        # under-provisioned hun (sized by fat non-text parquet bytes + a wrong
+        # tgt_tok × oversample docs. A file-byte selector would
+        # under-provision hun (sized by fat non-text parquet bytes + a wrong
         # bytes/token constant).
         files, sizing = select_files_for_token_target(
             data_dir, tgt_tok, text_col(track, lang),

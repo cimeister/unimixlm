@@ -1,17 +1,17 @@
 #!/usr/bin/env python3
-"""Prepare langspec + placebo tokenizers for the PR #21 Qwen2.5-0.5B rerun.
+"""Prepare langspec + placebo tokenizers for the Qwen2.5-0.5B rerun.
 
-Replicates _prep_tok3.sh (the code-tokenizer branch, PR #21) exactly, with added
-verification, for the tie-preserving rerun of the writeup tab:extrinsic
-cells:
+Replicates the earlier code-tokenizer pipeline exactly, with added
+verification, for the tie-preserving rerun of the paper's extrinsic
+MultiBLiMP cells:
 
   1. Download langspec_<lang>_Latn.json from
      MultilingualUnigramLM/las-tokenizers-Qwen2.5-1.5B-<lang>
      (Qwen2.5 shares one tokenizer across 0.5B/1.5B, so these are the
-     exact files the branch's 0.5B Phase-4 runs used).
+     exact files the earlier pipeline's 0.5B Phase-4 runs used).
   2. If the model's eos does not resolve, merge the model tokenizer's
      added_tokens (native ids) into the LAS json — byte-identical to the
-     branch patch.
+     earlier pipeline's patch.
   3. Verify: eos/pad resolve; ACTUAL assigned ids recorded (HF tokenizers
      may reassign added-token ids sequentially from vocab length — record
      what really happens, don't trust the JSON's id field); every id the
@@ -42,8 +42,8 @@ PLACEBO_SEED = 1234  # make_placebo.py default; recorded in manifest
 # Compression-matched placebo: global score permutation changes compression
 # by 20-29% on the real corpora (confounds the control); rank-bucketed
 # permutation at bucket=500 keeps bytes/token within 0.23% of langspec on
-# tur/fin/hun while changing 7-8% of token boundaries (calibration
-# 2026-08-13, 2000 docs/lang).
+# tur/fin/hun while changing 7-8% of token boundaries (calibration on
+# 2000 docs/lang).
 PLACEBO_MODE = "bucketed"
 PLACEBO_BUCKET = 500
 MAKE_PLACEBO = Path(__file__).resolve().parent / "make_placebo.py"

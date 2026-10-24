@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """Fit all 4 tokenizers (BPE, base-Unigram, PathPiece, LangMAP) for the
 from-scratch experiment at a single vocab size, for either track
-(morph or code). Two CORPUS REGIMES are used per the 2026-05-19 design:
+(morph or code). Two CORPUS REGIMES are used:
   - BPE + base-Unigram see the NATURAL distribution corpus (per-lang lines ∝
     lang_proportions(track)). Shared vocab reflects realistic LM data.
   - LangMAP per-language EM sees a UNIFORM 100k-lines/lang corpus (else
@@ -9,7 +9,7 @@ from-scratch experiment at a single vocab size, for either track
     quality depends on adequate per-lang signal).
   - PathPiece is derived from base (no training data).
 
-Run FOUR times total to cover the full plan:
+Run FOUR times total to cover all track/vocab-size combinations:
   --track morph --vocab_size 50000     # SET-A morph
   --track morph --vocab_size 100000    # SET-B morph
   --track code  --vocab_size 50000     # SET-A code

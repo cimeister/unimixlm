@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 """Shared constants + proportions + corpus prep for the BPE-vs-LangMAP
-from-scratch experiment (plan: ★ ACTIVE 2026-05-19).
+from-scratch experiment.
 
 Two TRACKS:
   - morph: eng + {fin, hun, tur, swh, kor, arb} (FineWeb-v1 eng + FineWeb2 morph).
@@ -37,7 +37,7 @@ ENG_TOK_TRAINING_DIR = _require_env(
     "the FineWeb tokenizer-training sample directory "
     "(tokenizer_training/downstream_lm_training_data/fineweb_sample)",
 )
-# M1 (review-fix 2026-05-21): point at the `output/` (kept docs) subtree, NOT
+# Point at the `output/` (kept docs) subtree, NOT
 # the parent `data/` — `data/` also contains a `removed/` subtree (robots-
 # filtered / low-quality docs). select_files_for_target uses rglob("*.parquet")
 # over this dir; at current SET-B eng targets the lexicographic prefix stays in
@@ -59,8 +59,7 @@ MORPH_SCRIPT = {
     "fin": "_Latn", "hun": "_Latn", "tur": "_Latn", "swh": "_Latn",
     "kor": "_Hang", "arb": "_Arab",
 }
-# Crude token-count estimates from `du -sb` on the FULL FW2 dirs (verified
-# 2026-05-19). Bytes/token ≈ 4 for Latin, ≈ 2 for Hangul/Arabic — purely for
+# Crude token-count estimates from `du -sb` on the FULL FW2 dirs. Bytes/token ≈ 4 for Latin, ≈ 2 for Hangul/Arabic — purely for
 # computing PROPORTIONS; never used as an absolute budget (the manifest
 # in Part B measures real token counts during build).
 MORPH_TOK_EST = {  # millions of tokens, approximate
@@ -114,7 +113,7 @@ TRACKS = {
                           **{l: f"{CODE_TOK_SAMPLE_ROOT}/{l}" for l in CODE_LANGS}},
         "lm_dir_A": {"eng": ENG_TOK_TRAINING_DIR,
                       **{l: f"{CODE_LM_FULL_ROOT}/{l}" for l in CODE_LANGS}},
-        # A5B (2026-05-23): SET-A scale (125M/50k) but 5B-token budget — a
+        # A5B: SET-A scale (125M/50k) but 5B-token budget — a
         # continuation/scaling variant to test whether the code BPE-vs-LangMAP
         # val-BpB gap closes with more UNIQUE data. eng=80%×5B=4B exceeds the
         # 21GB fineweb_sample, so A5B eng uses FULL FW1 (output/), like SET-B.
@@ -129,11 +128,11 @@ TRACKS = {
 
 # ── Default Chinchilla budgets per set (20× params) ──────────────────────────
 # A5B = SET-A scale (125M/50k) at a 5B-token budget (2× A) — code-only scaling
-# variant added 2026-05-23 (see lm_dir_A5B); uses full-FW1 eng.
+# variant (see lm_dir_A5B); uses full-FW1 eng.
 SET_TOTAL_TOKENS = {"A": 2_500_000_000, "A5B": 5_000_000_000, "B": 10_000_000_000}
 SET_VOCAB = {"A": 50_000, "A5B": 50_000, "B": 100_000}
 # Default English share used when a track doesn't override `eng_fraction`.
-# morph: 0.5 (decided 2026-05-19). code: 0.8 (decided 2026-05-19, more
+# morph: 0.5. code: 0.8 (more
 # realistic for code LMs).
 ENG_FRACTION_DEFAULT = 0.5
 
@@ -159,7 +158,7 @@ def text_col(track: str, lang: str) -> str:
 
 
 def eng_fraction(track: str) -> float:
-    """Per-track English share. morph=0.5, code=0.8 (decided 2026-05-19)."""
+    """Per-track English share. morph=0.5, code=0.8."""
     return TRACKS[track].get("eng_fraction", ENG_FRACTION_DEFAULT)
 
 
@@ -359,12 +358,11 @@ BYTES_PER_TOKEN_BY_LANG = {
     # Code: slightly less compressing than English text on average
     "python": 3.5, "javascript": 3.5, "java": 3.5,
 }
-# Margin on the per-lang token target when selecting manifest docs. 2.0 (was
-# 1.5) after the 2026-05-23 hun under-provisioning failure: the previous selector
-# sized by whole-parquet-file bytes (all columns) vs a text-byte/token estimate,
-# so fat non-text columns (FW2 url/scores/...) made it pick far too few docs
+# Margin on the per-lang token target when selecting manifest docs. 2.0. Sizing by
+# whole-parquet-file bytes (all columns) vs a text-byte/token estimate
+# lets fat non-text columns (FW2 url/scores/...) cause far too few docs to be picked
 # (hun: 2 files / 294k docs → only 112M of 224M target tokens). The selector is
-# now TOKEN-AWARE (samples the text column for avg tokens/doc, then selects by
+# TOKEN-AWARE (samples the text column for avg tokens/doc, then selects by
 # row count); 2.0× margin absorbs sampling variance across files. Over-selection
 # is harmless — the cache build stops at target_tokens (no-repeat preserved).
 OVERSAMPLE_FACTOR = 2.0
@@ -401,7 +399,7 @@ def _measure_tokens_per_doc(first_file: str, text_col: str, tokenizer_path: str,
     only those). Two bugs this avoids: (1) bytes/token is not a usable constant
     (hun BPE ≈ 15 B/tok, not 4); (2) RAW tokens/doc wildly overcounts for
     long-doc corpora (hun raw ≈ 1661, but capped ≈ 380) → the cache reaches the
-    target far slower than raw would predict → under-provisioning (2026-05-23).
+    target far slower than raw would predict → under-provisioning.
     BPE is the most-compressing tokenizer (fewest tokens/doc ⇒ most docs needed),
     so sizing for it covers base/pathpiece/langspec. Reads up to `sample_docs`
     rows for a stable mean (the first few-thousand can be atypically long)."""
@@ -431,7 +429,7 @@ def select_files_for_token_target(data_dir: str, target_tokens: int,
                                    oversample: float = OVERSAMPLE_FACTOR) -> tuple[list[str], dict]:
     """TOKEN-AWARE file selection (replaces the old file-byte sizing, which
     sized by whole-parquet-file bytes vs a wrong text-byte/token constant and
-    under-provisioned hun on 2026-05-23).
+    under-provisioned hun).
 
     Measure REAL tokens/doc by tokenizing a text sample with the BPE tokenizer
     (`tokenizer_path`), then select the smallest lexicographic prefix of parquet
@@ -452,8 +450,8 @@ def select_files_for_token_target(data_dir: str, target_tokens: int,
 
     def _num_rows_or_none(p: str):
         """parquet row count, or None if the file is unreadable/corrupt.
-        Real corpora contain truncated/corrupt shards (verified 2026-05-23:
-        3 corrupt files each in StarCoder javascript/java). Skipping an
+        Real corpora contain truncated/corrupt shards (3 corrupt files each in
+        StarCoder javascript/java). Skipping an
         UNREADABLE file is NOT a silent data substitution — it excludes garbage
         we cannot read; with 2.0× oversample + many valid shards, coverage and
         the token budget are unaffected. We log every skip loudly + record the
