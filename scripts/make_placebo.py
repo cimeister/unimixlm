@@ -9,7 +9,7 @@ langspec file and only **permutes the score column** under a fixed seed.
 
 Two modes:
 
-  --mode global   (the original code-tokenizer-branch design, PR #21): one permutation
+  --mode global   (the earlier code-tokenizer pipeline's design): one permutation
       over all non-protected pieces. CONFOUNDED: measured on the real
       100M training corpora, a global permutation IMPROVES compression
       over langspec (e.g. tur 3.34 vs 3.28 bytes/token), because random

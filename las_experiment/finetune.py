@@ -104,9 +104,9 @@ def build_descriptive_tags(cfg, langs, model_path, adapt_mode):
     Every WandB run emitted by this pipeline should carry these. The tags are
     additive to any `cfg.logger.tags` the user configured; never remove.
 
-    `cfg.section` is optional. When set (e.g. `"§8"`), emits `section:§8`.
+    `cfg.section` is optional. When set (e.g. `"8"`), emits `section:8`.
     We deliberately do NOT try to infer section from (base, lang, adapt) here
-    because the mapping is not unique (§3 vs §5 both fit frozen OLMo-3 code).
+    because the mapping is not unique.
     """
     base = _base_alias(model_path)
     tok_map = {"original": "bpe", "base": "base-unigram",
@@ -352,7 +352,7 @@ def resolve_lang_suffixes(langs, cfg_lang_suffix):
     from FINEWEB2_LANG_SUFFIX; this makes every other path agree with it.
 
     Languages absent from FINEWEB2_LANG_SUFFIX fall back to
-    ``cfg_lang_suffix`` (the pre-2026-08-18 behavior, which the code-domain
+    ``cfg_lang_suffix`` (the earlier behavior, which the code-domain
     runs rely on with ``lang_suffix=""``), and the fallback is logged.
 
     Fails loud when a run with exactly one non-eng language declares a
@@ -409,14 +409,14 @@ def resolve_lang_suffixes(langs, cfg_lang_suffix):
 def resolve_fineweb2_lang(lang: str, size: str):
     """(repo, config) for a FineWeb2 language slice as actually published.
 
-    Hub layout (verified 2026-08-13): every non-English language is its own
+    Hub layout: every non-English language is its own
     repo ``FineWeb2-<lang><Script>-<size>`` with a single default ``train``
     split and no named config; English lives as the ``eng_Latn`` config of
     the multi-language ``FineWeb2-100M-olmo3-7b-toks`` repo. Ported verbatim
-    from the code-tokenizer branch (PR #21) so reruns load the exact repos
+    from the earlier code-tokenizer pipeline so reruns load the exact repos
     its runs used, EXCEPT for the script suffix (see FINEWEB2_LANG_SUFFIX): the
     original port hardcoded "_Latn" for every language, which is wrong for
-    arb (needs "_Arab") and hin (needs "_Deva") — F15 fix, 2026-08-17.
+    arb (needs "_Arab") and hin (needs "_Deva").
     Confirmed to exist on the hub: FineWeb2-arb_Arab-100M, FineWeb2-hin_Deva-100M.
     """
     size = size.upper()
@@ -569,8 +569,7 @@ def _compute_schedule_fingerprint(cfg, eval_token_budgets_raw):
     The HF Trainer rebuilds its cosine scheduler against `max_steps` on every
     resume, then fast-forwards by the saved optimizer step count. If any field
     below differs between submissions, the resumed run's remaining schedule
-    shape diverges from the original — silently. Guarded against since
-    2026-04-14.
+    shape diverges from the original, silently. This is guarded against.
 
     This fingerprint is logged to `run_metadata.json` (`training.schedule_fingerprint`)
     and asserted against on `resume_policy=auto` before training starts.
@@ -654,7 +653,7 @@ def _assert_schedule_fingerprint_matches(output_dir, cfg, eval_token_budgets_raw
         raise RuntimeError(
             f"resume_policy='auto' but schedule-affecting config has changed "
             f"since the prior submission (guards against silent LR-schedule "
-            f"drift on resume, in place since 2026-04-14).\n"
+            f"drift on resume).\n"
             f"Mismatches: {json.dumps(mismatches, indent=2)}\n"
             f"HF Trainer rebuilds the cosine scheduler against the NEW max_steps "
             f"on resume, then fast-forwards by the saved optimizer step count — "
@@ -951,8 +950,8 @@ def load_las_tokenizer_with_eos_pad(path, model_tokenizer):
     tok = Tokenizer.from_file(str(path))
     pad_token_id = tok.token_to_id(model_tokenizer.pad_token)
     eos_token_id = tok.token_to_id(model_tokenizer.eos_token)
-    # No silent fallbacks (2026-05-17): the previous `pad_token_id = eos_token_id`
-    # on a None pad masked exactly the OLMo-vs-Qwen3 mismatch that let
+    # No silent fallbacks: substituting `pad_token_id = eos_token_id` on a
+    # None pad would mask an OLMo-vs-Qwen3 tokenizer mismatch and let
     # langspec/base/pathpiece cells train with the wrong eos. If the model's
     # pad/eos strings are not in this LAS vocab, that is a config error — abort
     # naming the offending file and token, never substitute.
@@ -1021,11 +1020,10 @@ def run_finetune(cfg):
     if model_tokenizer.pad_token is None:
         model_tokenizer.pad_token = model_tokenizer.eos_token
 
-    # ── Provenance guard (2026-05-17): model_tokenizer MUST be the tokenizer of
-    # the model being trained. A Hydra-default regression silently left
-    # `model_tokenizer_path` pointing at OLMo for non-original LAS modes, so
-    # eos/pad were resolved from OLMo's special-token strings against the
-    # model's LAS vocab (Qwen3 langspec/base/pathpiece cells trained with
+    # ── Provenance guard: model_tokenizer MUST be the tokenizer of
+    # the model being trained. A `model_tokenizer_path` pointing at OLMo for
+    # non-original LAS modes would resolve eos/pad from OLMo's special-token
+    # strings against the model's LAS vocab (e.g. Qwen3 would get
     # eos=151643 instead of 151645). For LAS modes model_tokenizer is used only
     # to look up pad/eos *strings*; for `original` it IS the training tokenizer.
     # In every case it must match `cfg.model.model_name`. Fail loud on mismatch
@@ -1166,10 +1164,8 @@ def run_finetune(cfg):
         )
         tokenizer_for_lang = {lang: base_tok for lang in langs}
         # English routes through the model's own tokenizer, matching the
-        # langspec mode's eng handling (F15 review finding F2: without this,
-        # base-vs-langspec arms differ in eng tokenization, confounding the
-        # base-Unigram control). Changed 2026-08-17; earlier base-mode runs
-        # that included eng trained eng through the base Unigram.
+        # langspec mode's eng handling (without this, base-vs-langspec arms
+        # differ in eng tokenization, confounding the base-Unigram control).
         if "eng" in langs:
             tokenizer_for_lang["eng"] = model_tokenizer.backend_tokenizer
 
@@ -1290,7 +1286,7 @@ def run_finetune(cfg):
     # ---- Load splits (local parquet or HF hub) ----
     local_data_dir = getattr(cfg.dataset, "local_dir", None)
     text_column = getattr(cfg.dataset, "text_column", "text")
-    # F15 guard, generalized 2026-08-18 for the joint-multilingual arm: the
+    # F15 guard, generalized for the joint-multilingual arm: the
     # HF-hub loader (resolve_fineweb2_lang, below) resolves its own script
     # suffix from FINEWEB2_LANG_SUFFIX and never reads cfg.dataset.lang_suffix
     # at all, while the local_dir path builds lang_dir = local_data_dir /
@@ -1370,8 +1366,8 @@ def run_finetune(cfg):
             # Published hub layout (see resolve_fineweb2_lang): per-language
             # repos FineWeb2-<lang>_Latn-<size>; eng is the eng_Latn config of
             # the multi-language FineWeb2-100M-olmo3-7b-toks repo. This is the
-            # layout the PR #21 branch runs trained on; using the same repos
-            # keeps rerun data identical to those runs.
+            # layout the earlier code-tokenizer pipeline trained on; using the
+            # same repos keeps rerun data identical to those runs.
             hf_name, hf_cfg = resolve_fineweb2_lang(lang, dataset_size)
             resolved_lang_paths[lang] = f"hf://{hf_name}::{hf_cfg or 'train'}"
             logging.info(f"Loading {hf_name} :: {hf_cfg or 'train'}")
@@ -1583,13 +1579,12 @@ def run_finetune(cfg):
             # Prefer the object-identity result from the resolver (authoritative)
             is_tied_weights = bool(is_tied)
             if is_tied:
-                # WARNING (measured 2026-08-14, peft 0.18.1): with only the
+                # WARNING (measured with peft 0.18.1): with only the
                 # input embedding in modules_to_save, PEFT trains a deep COPY
                 # for the input lookup while lm_head keeps the FROZEN original
-                # Parameter — the tie is broken at wrap time and the output
+                # Parameter: the tie is broken at wrap time and the output
                 # head never trains. This is the wiring of every F10/F12/F14
-                # "tie-preserving" cell (memory: modules-to-save-tie-not-
-                # preserved). For a genuinely tied trainable embedding set
+                # "tie-preserving" cell. For a genuinely tied trainable embedding set
                 # cfg.true_tie=true, which adds ensure_weight_tying=True so
                 # PEFT wraps BOTH modules around ONE shared trained Parameter.
                 # PEFT's ensure_weight_tying tie-detection only recognizes the
@@ -1629,12 +1624,11 @@ def run_finetune(cfg):
         if ensure_weight_tying:
             lora_kwargs["ensure_weight_tying"] = True
         lora_config = LoraConfig(**lora_kwargs)
-        # F15 wave 1 (review S3): get_peft_model's default LoRA A-matrix init
+        # F15 wave 1: get_peft_model's default LoRA A-matrix init
         # (kaiming-uniform, B stays zero) reads from the global torch RNG,
-        # which was previously left wherever prior seeding calls happened to
-        # leave it -- init was unseeded. F14c was ALSO unseeded, so this is a
-        # deliberate wave-1-vs-F14c protocol difference, not a bug fix applied
-        # retroactively: seed immediately before the call so LoRA init is
+        # whose state otherwise depends on prior seeding calls. F14c runs were
+        # unseeded, so this is a deliberate wave-1-vs-F14c protocol difference:
+        # seed immediately before the call so LoRA init is
         # reproducible from cfg.seed for every wave-1-and-later run.
         torch.manual_seed(cfg.seed)
         model = get_peft_model(model, lora_config)

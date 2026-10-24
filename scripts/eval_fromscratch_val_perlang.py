@@ -9,7 +9,7 @@ slice on its own, IN EVAL MODE (dropout disabled).
 
 IMPORTANT — why this does NOT reproduce the logged eval_bpb:
   The training-time logged eval_bpb is ~0.015 HIGHER than a clean eval-mode
-  recompute. Diagnosed 2026-05-23: morph-A BPE recomputes to AGG≈1.047 in eval
+  recompute. Example: morph-A BPE recomputes to AGG≈1.047 in eval
   mode (dropout off) vs 1.075 in train mode (dropout on); the logged value 1.062
   sits ~halfway → the 4-GPU training-time eval did NOT fully disable dropout
   (a DDP/accelerate eval-mode propagation quirk). The contamination is uniform

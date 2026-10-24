@@ -1,9 +1,9 @@
 #!/usr/bin/env python3
 """MultiBLiMP + Belebele-eng eval for F14/F14b/F15 cells.
 
-F14/F14b: original PR#21 tab:extrinsic replication. F15: LangMAP downstream
-campaign (per the F15 experiment plan, "Evaluation suite" item
-5) -- adds the base-Unigram (A5) and vocab-extension (A4) arms, the
+F14/F14b: replication of the earlier code-tokenizer pipeline's extrinsic MultiBLiMP
+table. F15: LangMAP downstream
+campaign -- adds the base-Unigram (A5) and vocab-extension (A4) arms, the
 Llama-3.2-1B family, script-aware overlay filenames for arb/hin, and a
 5-shot English-retention task (belebele_eng) routed per the arm's OWN
 training-time English tokenizer.
@@ -14,13 +14,12 @@ For each completed cell under --cells-root (family/model-filtered):
   - model loading per --head-wiring:
       training  : PEFT adapter loaded, NO lm_head re-share -- the output head
                   stays the frozen original the model actually trained
-                  against (modules_to_save does not preserve the tie; see
-                  memory modules-to-save-tie-not-preserved)
+                  against (modules_to_save does not preserve the tie)
       reshared  : downstream_eval._build_eval_lm_kwargs re-share -- the
                   F12/P4d-lineage wiring (tied trained matrix; a
                   configuration training never saw)
     Both avoid lm-eval's resize-before-adapter-load by pre-building the model.
-    SHORT-CIRCUIT: F15 arms are true_tie throughout (plan Design section), so
+    SHORT-CIRCUIT: F15 arms are true_tie throughout, so
     for F15 cells the two wirings load the SAME shared trained Parameter and
     are numerically identical -- the flag only distinguishes pre-true-tie
     F14/F14b cells.
@@ -150,12 +149,11 @@ def find_derived(cell_dir: Path) -> Path:
 def _verify_skip_provenance(out_path: Path, derived: Path) -> None:
     """Before trusting an existing per-task result JSON as satisfying a cell
     (skip-if-exists), verify it actually belongs to THIS cell rather than
-    being a stale file left over from a different run under the same tag --
-    the 2026-08-18 incident (`eval_results/f15_bpb/
-    qwen2_5-0_5b_tur_langspec_truetie_s42__bpb.json` was a stale F14c-era
-    file whose `checkpoint` pointed at `pr21_rerun/`, silently accepted as
-    satisfying the f15_wave1 cell of the same tag -- an earlier provenance
-    defect this check now guards against). Copied verbatim into this script's sibling
+    being a stale file left over from a different run under the same tag
+    (e.g. `eval_results/f15_bpb/
+    qwen2_5-0_5b_tur_langspec_truetie_s42__bpb.json` could be a stale F14c-era
+    file whose `checkpoint` points at `pr21_rerun/`, silently accepted as
+    satisfying the f15_wave1 cell of the same tag). Copied verbatim into this script's sibling
     `scripts/eval_f15_bpb.py` (same rationale as the other copied helpers in
     this file: no runtime dependency between the two driver scripts).
 
@@ -231,12 +229,11 @@ def _resolve_extended_vocab_size(meta: dict, meta_path_hint: str) -> int:
     `run_metadata.json`'s `tokenizer.vocab_extend.n_total_vocab`. This
     mirrors the authoritative source `downstream_eval._build_eval_lm_kwargs`
     uses for the identical resize (confirmed against the landed A4
-    implementation, las_experiment/downstream_eval.py, 2026-08-16): "the
+    implementation, las_experiment/downstream_eval.py): "the
     target size comes from the run's own provenance record -- never from the
     eval config, so it cannot disagree with what trained." Deliberately the
     ONLY source used (no silent fallback to a value reverse-engineered from
-    the saved adapter tensor shape, which was this function's first-pass
-    design before the A4 class landed and exposed the real field)."""
+    the saved adapter tensor shape)."""
     ve = (meta.get("tokenizer") or {}).get("vocab_extend")
     if not ve or ve.get("n_total_vocab") is None:
         raise ValueError(
@@ -331,7 +328,7 @@ def build_eval_task_name(cli_task: str, lang: str) -> str:
 
 
 def build_eng_retention_lm(arm: str, kw: dict, tok_file, batch_size: int):
-    """English-retention routing (plan item 3, belebele_eng). Explicit rule:
+    """English-retention routing (belebele_eng). Explicit rule:
     each arm is evaluated on English through whatever tokenizer it actually
     trained English THROUGH -- not through the arm's target-language
     tokenizer.
@@ -342,8 +339,8 @@ def build_eng_retention_lm(arm: str, kw: dict, tok_file, batch_size: int):
       belebele_eng for these arms is a plain HFLM.
     - vocab_extend: the extension protocol does NOT special-case eng -- it
       keeps every original BPE piece and only appends new per-language
-      pieces (F15 plan A4 rationale: "keeps English handling ... comparable"
-      vs a from-scratch replacement), so eng was trained through the SAME
+      pieces (this keeps English handling comparable
+      with a from-scratch replacement), so eng was trained through the SAME
       extended-vocab tokenizer as the target language. Reuse the arm's own
       ExtendedVocabHFLM/tok_file rather than the plain tokenizer.
     """
@@ -362,8 +359,8 @@ def write_items_jsonl(out_dir: Path, tag: str, head_wiring: str, eval_task_name:
     """Optional sibling `<tag>__head<wiring>__items.jsonl` for
     scripts/compile_f15_stats.py's item-level paired bootstrap. Filename
     matches the results JSON's own keying (`<tag>__head<wiring>[__task].json`)
-    -- pre-launch review fix: the previous bare `<tag>__items.jsonl` name
-    dropped head_wiring, so a training- and a reshared-wiring eval of the
+    -- a bare `<tag>__items.jsonl` name
+    would drop head_wiring, so a training- and a reshared-wiring eval of the
     SAME cell would silently clobber each other's items file. One JSON line
     per item: {"doc_id": ..., "<metric>": <float>}. lm_eval.simple_evaluate
     defaults log_samples=True already (unchanged here), so
@@ -438,7 +435,7 @@ def main() -> None:
              "optimizer saw); 'reshared' = tied trained matrix re-share "
              "(F12/P4d-lineage wiring, a config training never saw for "
              "non-true-tie runs). SHORT-CIRCUIT: F15 arms are true_tie "
-             "throughout (plan Design section), so for F15 cells both "
+             "throughout, so for F15 cells both "
              "wirings load the SAME shared trained Parameter and are "
              "numerically identical -- this flag only distinguishes "
              "pre-true-tie F14/F14b cells.",
@@ -527,7 +524,7 @@ def main() -> None:
         if int(hashlib.sha1(tag.encode()).hexdigest(), 16) % n != k:
             continue
 
-        # derived is computed up front (moved ahead of the skip-if-exists
+        # derived is computed up front (computed ahead of the skip-if-exists
         # decision below) so any already-existing per-task output can be
         # provenance-checked against it before being trusted as satisfying
         # that task -- see _verify_skip_provenance.
@@ -578,7 +575,7 @@ def main() -> None:
         if arm != "original":
             if las_dir is None:
                 raise ValueError(f"{tag}: no las_tokenizer_path in metadata")
-            # base-Unigram is language-AGNOSTIC (F15 plan A5) -- its overlay
+            # base-Unigram is language-AGNOSTIC (A5) -- its overlay
             # dir is shared across a family's languages, so only the
             # genuinely per-language artifacts (langspec/placebo/
             # vocab_extend) get the wrong-language-overlay guard.
@@ -698,13 +695,12 @@ def main() -> None:
                     ckpt_suffix=ckpt_suffix,
                 )
 
-        # GPU cleanup (pre-launch review S11): a prior version of this loop
-        # only deleted `lm` when it was a SEPARATE belebele_eng wrapper
-        # (guarded by `if lm is not lm_arm`). For the common multiblimp-only
-        # case `lm` is an ALIAS of `lm_arm` (`lm = lm_arm` above), so that
-        # guard never fired and `lm` kept a live reference to the model after
-        # `del lm_arm` -- the object never reached refcount 0 and
-        # gc.collect()/empty_cache() below freed nothing. `lm` is always
+        # GPU cleanup: deleting `lm` only when it is a SEPARATE belebele_eng wrapper
+        # (guarded by `if lm is not lm_arm`) is not enough. For the common multiblimp-only
+        # case `lm` is an ALIAS of `lm_arm` (`lm = lm_arm` above), so such a
+        # guard would not fire and `lm` would keep a live reference to the model after
+        # `del lm_arm`; the object would never reach refcount 0 and
+        # gc.collect()/empty_cache() below would free nothing. `lm` is always
         # bound here regardless of which branch ran (pending_tasks is
         # non-empty), so an unconditional `del lm` is always safe.
         # `model_obj` (vocab_extend arm only, ~line 496) is a THIRD name

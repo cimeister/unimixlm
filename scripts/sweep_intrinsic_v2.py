@@ -6,8 +6,8 @@ WHAT THIS IS
 `eval_results/f15_intrinsic/f15_final_v2.py` measured MorphScore for 2 families
 (Qwen2.5-0.5B, Llama-3.2-1B) x 5 languages (tur/fin/hun/arb/hin) with the
 offsets-patched harness and the repaired Arabic gold. This driver generalises
-that to every tokenizer family in the paper's `tab:tokenizers`
-(appendix.tex) x the 7 sweep languages, doing the tokenizer fitting
+that to every tokenizer family in the paper's tokenizer table
+x the 7 sweep languages, doing the tokenizer fitting
 (base-Unigram conversion + per-language LangMAP overlay) where it is missing.
 
 One invocation = one (family, language) CELL. A cell is:
@@ -160,7 +160,7 @@ OUT_ROOT = REPO_ROOT / "eval_results" / "intrinsic_sweep_v2"
 CELL_DIR = OUT_ROOT / "cells"
 CONV_DIR = OUT_ROOT / "conversions"
 
-# The 7 sweep languages (user decision: ben/tha dropped from the original 9).
+# The 7 sweep languages (ben/tha are dropped from the original 9).
 SWEEP_LANGS = {
     "deu": "deu_Latn",
     "fin": "fin_Latn",
@@ -171,15 +171,15 @@ SWEEP_LANGS = {
     "tam": "tam_Taml",
 }
 
-# The 11 tokenizer families of appendix.tex tab:tokenizers, in table order.
+# The 11 tokenizer families of the paper's tokenizer table, in table order.
 #
 # `paper_V` is that table's |V| column ("full vocabulary size, added and special
 # tokens included"); it is checked against the tokenizer actually downloaded and
 # any mismatch is RECORDED, never silently accepted.
 #
 # Every model_id below was CONFIRMED against the paper's own measurements, not
-# guessed: appendix tab:deva-eng-subwords reports a Devanagari-Complete count per
-# row, and recomputing that count under the appendix's stated rule reproduces the
+# guessed: the paper's Devanagari/English subword table reports a Devanagari-Complete count per
+# row, and recomputing that count under the paper's stated rule reproduces the
 # published number exactly for each id here (Bloom 16189, Gemma 13684, Granite 16,
 # Llama 958, Mistral-7b 44, Mistral-Nemo 1530, Phi-3-mini 39, Phi-4 23, Qwen 67,
 # XGLM 5667, Yi 3).
@@ -187,17 +187,17 @@ SWEEP_LANGS = {
 # TWO ERRORS IN THE PAPER'S GEMMA ROW, found by that check:
 #   * the row is Gemma 3, not Gemma 2. google/gemma-3-1b-pt reproduces 13,684
 #     Devanagari-Complete pieces; google/gemma-2-2b gives 1,514. They are
-#     different tokenizers, so tab:tokenizers' label "Gemma 2 & 3" (one row for
+#     different tokenizers, so the tokenizer table's label "Gemma 2 & 3" (one row for
 #     both) is wrong.
 #   * its |V| is 262,144 (262,145 counting the added token at id 262144), not the
-#     256,000 printed in tab:tokenizers and tab:deva-eng-subwords.
+#     256,000 printed in the paper's tokenizer and Devanagari/English subword tables.
 # `gemma2-2b` is registered below so it can be measured on request, but it is NOT
 # the paper's row and is excluded from the 11-family grid.
 FAMILIES = {
     "bloom-3b":         {"model_id": "bigscience/bloom-3b",              "paper_row": "Bloom-3b",         "paper_V": 250880, "provenance": "new"},
     "gemma3-1b":        {"model_id": "google/gemma-3-1b-pt",             "paper_row": "Gemma 2 & 3",      "paper_V": 256000, "provenance": "new",
-                         "paper_V_note": "tab:tokenizers prints 256,000; the tokenizer this row was measured on has 262,144 entries. See module docstring.",
-                         # Sweep-scoped, family-scoped bypass, approved 2026-08-28.
+                         "paper_V_note": "The paper's tokenizer table prints 256,000; the tokenizer this row was measured on has 262,144 entries. See module docstring.",
+                         # Sweep-scoped, family-scoped bypass.
                          # google/gemma-3-1b-pt places <image_soft_token> at id
                          # 262144 == config.vocab_size, so the embedding-row gate
                          # ("tokenizer can emit ids >= embedding rows") fires. That
@@ -222,17 +222,17 @@ FAMILIES = {
     "mistral-nemo-12b": {"model_id": "mistralai/Mistral-Nemo-Base-2407", "paper_row": "Mistral-Nemo-12b", "paper_V": 131072, "provenance": "new"},
     "olmo3-7b":         {"model_id": "allenai/Olmo-3-1025-7B",           "paper_row": None,               "paper_V": 100278, "provenance": "new",
                          "paper_V_note": (
-                             "Not one of tab:tokenizers' 11 families (paper_row=None; "
+                             "Not one of the paper's 11 tokenizer-table families (paper_row=None; "
                              "excluded from PAPER_GRID). OLMo-3-7B is the paper's own "
-                             "base model and appears separately in sec:olmo / "
-                             "tab:morph-expanded-olmo-perlang, an unreproducible 19-"
+                             "base model and appears separately in the paper's OLMo appendix, "
+                             "an unreproducible 19-"
                              "language, 10k-line-corpus, single-seed sweep this family "
                              "entry exists to replace with an artifact-backed cell grid "
                              "under THIS driver's 50k-line protocol. paper_V=100278 is "
                              "config.vocab_size, confirmed via AutoConfig.from_pretrained "
                              "and identical to the fitted tokenizer's vocab_size_total "
                              "(100278 entries + 22 added tokens, all within the same "
-                             "100278 ids) -- not a tab:tokenizers citation."),
+                             "100278 ids), not a tokenizer-table citation."),
                          "old_overlays_not_reused": (
                              "las_tokenizers/olmo3-7b_v100k_fineweb2sample_10klines_* "
                              "were fit under a different (10k-line) protocol and are "
@@ -247,13 +247,13 @@ FAMILIES = {
                              "pre-tokenizes the corpus with the pre-tokenizer and "
                              "validate_tokenizers requires it to be non-null, so this "
                              "family cannot be converted by this pipeline. Confirmed by "
-                             "a failed conversion attempt on 2026-08-27; excluded by "
-                             "decision 2026-08-28. No substitute was used.")},
+                             "a failed conversion attempt; excluded. "
+                             "No substitute was used.")},
     "phi-4":            {"model_id": "microsoft/phi-4",                  "paper_row": "Phi-4",            "paper_V": 100352, "provenance": "new"},
     "qwen2_5-0_5b":     {"model_id": "Qwen/Qwen2.5-0.5B",                "paper_row": "Qwen 2.5 & 3",     "paper_V": 151936, "provenance": "f15"},
     "xglm-2.9b":        {"model_id": "facebook/xglm-2.9B",               "paper_row": "XGLM-2.9b",        "paper_V": 256008, "provenance": "new"},
     "yi-1.5-6b":        {"model_id": "01-ai/Yi-1.5-6B",                  "paper_row": "Yi-1.5-6b",        "paper_V": 64000,  "provenance": "new",
-                         # Decision 2026-08-28: KEEP, measured as transformers loads
+                         # KEEP, measured as transformers loads
                          # it. The Hub tokenizer.json has pre_tokenizer: null and
                          # transformers 5.3.0's save_pretrained synthesises a
                          # Metaspace pre-tokenizer, moves the space->metaspace
@@ -270,15 +270,14 @@ PAPER_GRID = [f for f in FAMILIES
               if FAMILIES[f]["paper_row"] is not None and not FAMILIES[f].get("excluded")]
 
 # Corrections to the paper's own tables, established by recomputing
-# tab:deva-eng-subwords' Devanagari-Complete column under the appendix's stated
-# rule. Carried into the sweep manifest so the finding travels with the numbers;
-# the writeup fix is a separate task.
+# the paper's Devanagari/English subword table's Devanagari-Complete column under the paper's stated
+# rule. Carried into the sweep manifest so the finding travels with the numbers.
 PAPER_TABLE_CORRECTIONS = {
     "tab:tokenizers Gemma row |V|": {
         "published": 256000,
         "actual": 262144,
         "evidence": (
-            "The row's Devanagari-Complete count (13,684 in tab:deva-eng-subwords) "
+            "The row's Devanagari-Complete count (13,684 in the paper's Devanagari subword table) "
             "is reproduced exactly by google/gemma-3-1b-pt and not by "
             "google/gemma-2-2b (1,514). gemma-3-1b-pt's tokenizer has 262,144 vocab "
             "entries (262,145 counting the added token at id 262144); the published "
@@ -683,7 +682,7 @@ def ensure_model_tokenizer(family: str, root: Path) -> dict:
         "vocab_size_total": hf_tok.get_vocab_size(),
         "trainable_vocab": len(_load_vocab_from_hf_tokenizer(hf_tok)),
         "paper_V": FAMILIES[family]["paper_V"],
-        # tab:tokenizers' |V| column tracks the model config's vocab_size (the
+        # The tokenizer table's |V| column tracks the model config's vocab_size (the
         # embedding rows), NOT the tokenizer's entry count -- the two differ for
         # every family that pads its embedding table. Compare against the right
         # quantity and say so when it disagrees.
@@ -697,7 +696,7 @@ def ensure_model_tokenizer(family: str, root: Path) -> dict:
 
 
 # Sentinel handed to prep.verify_and_patch_specials when a family carries an
-# approved measurement-only bypass of the embedding-row gate. prep's function is
+# measurement-only bypass of the embedding-row gate. prep's function is
 # left exactly as the training pipeline uses it; the driver performs the
 # comparison itself and records the outcome, so the bypass is visible in the
 # artifacts rather than hidden inside a shared helper.
@@ -713,14 +712,14 @@ def embed_rows_policy(family: str) -> tuple:
             "reason": cfg["embed_rows_gate_reason"],
             "scope": ("this sweep driver only; scripts/prep_f15_tokenizers.py and "
                       "the training pipeline's gate are unmodified"),
-            "approved": "2026-08-28 filter-policy decision",
+            "approved": "sweep filter policy",
         }
     return None, None
 
 
 def apply_embed_rows_gate(family: str, path: Path, embed_rows: int,
                           specials: dict, what: str) -> dict:
-    """Run the embedding-row check the driver owns, honouring an approved
+    """Run the embedding-row check the driver owns, honouring a
     per-family bypass. Mutates nothing; returns the fields to record."""
     vocab_size_total = specials["vocab_size_total"]
     _, bypass = embed_rows_policy(family)
@@ -746,7 +745,7 @@ def apply_embed_rows_gate(family: str, path: Path, embed_rows: int,
 def verify_specials_readonly(family: str, path: Path, model_tok, embed_rows: int,
                              what: str) -> dict:
     """Read-only twin of prep.verify_and_patch_specials: same gates (eos and pad
-    resolve; no id at or above the embedding rows, subject to an approved
+    resolve; no id at or above the embedding rows, subject to a
     per-family bypass), but it never writes. Used on the REUSE path so an
     already-published artifact can never be rewritten and concurrent readers
     cannot tear."""
@@ -769,7 +768,7 @@ def verify_specials_readonly(family: str, path: Path, model_tok, embed_rows: int
 def _log_paper_V(family: str, mt: dict) -> None:
     if not mt["paper_V_matches_embed_rows"]:
         logger.warning(
-            f"{family}: appendix tab:tokenizers declares |V|={mt['paper_V']} but "
+            f"{family}: the paper's tokenizer table declares |V|={mt['paper_V']} but "
             f"{mt['model_id']}'s config.vocab_size is {mt['embed_rows']} "
             f"(tokenizer entries {mt['vocab_size_total']}). Recorded, not "
             f"corrected.")
@@ -966,7 +965,7 @@ def ensure_overlay(family: str, root: Path, short_lang: str, corpora: dict,
 # Scoring
 # ---------------------------------------------------------------------------
 def gold_for(short_lang: str) -> dict:
-    """Per-language gold + filter policy (user decision): default filter config
+    """Per-language gold + filter policy: default filter config
     everywhere; Arabic measured on the repaired gold.
 
     The path returned here is the file whose sha256 goes into the cell JSON, so
@@ -1390,7 +1389,7 @@ def main() -> None:
     p.add_argument("--stem-eq-lemma", dest="stem_eq_lemma", action="store_true",
                    default=False,
                    help="gold filter: keep only rows whose stem == lemma. "
-                        "Default False, per the sweep decision.")
+                        "Default False.")
     p.add_argument("--force", action="store_true",
                    help="re-score even if the cell JSON already exists")
     p.set_defaults(func=cmd_cell)

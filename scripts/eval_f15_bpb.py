@@ -1,8 +1,7 @@
 #!/usr/bin/env python3
-"""FLORES+ BpB eval for F15 cells (per the F15 experiment plan,
-"Evaluation suite" item 5, BpB half). MultiBLiMP/Belebele-eng is
+"""FLORES+ BpB eval for F15 cells. MultiBLiMP/Belebele-eng is
 `scripts/eval_f14_multiblimp.py`; this script covers the secondary BpB metric
-(plan C1/C2/C3) via FLORES+ (held-out, Wikipedia/news domain, disjoint from
+via FLORES+ (held-out, Wikipedia/news domain, disjoint from
 the FineWeb2 training corpora).
 
 For each completed cell under --cells-root (same discovery/filters/sharding
@@ -51,8 +50,7 @@ overlay-dir-basename==lang guard, `_assert_checkpoint_provenance`):
     disjoint from `scripts/compile_f15_stats.py`'s REQUIRED_KEYS (that loader
     requires a `results` key shaped like an lm_eval results dict; this
     script's numbers live under `flores_bpb_target`/`flores_bpb_eng` instead,
-    no `results` key at all) -- confirmed empirically (see the F15-BpB-driver
-    build session) that `compile_f15_stats.py`'s `load_cells` SKIPS these
+    no `results` key at all) -- `compile_f15_stats.py`'s `load_cells` SKIPS these
     files (reports them in `skipped`, does not crash) rather than erroring.
     --out defaults to `eval_results/f15_bpb/`, a directory separate from
     `eval_results/f14_multiblimp/`, so the two families of per-cell JSON never
@@ -130,8 +128,8 @@ TAG_RE = re.compile(
 
 # Resolved lazily (see --flores-root below): only required when neither the
 # CLI flag nor an already-resolved default is supplied.
-# Magic number: matches the F15 plan's BpB protocol ("Evaluation suite" item
-# 5) and every other project BpB driver (eval_flores_bpb.py, eval_heldout_bpb.py).
+# Magic number: matches the F15 BpB protocol
+# and every other project BpB driver (eval_flores_bpb.py, eval_heldout_bpb.py).
 DEFAULT_MAX_SEQ_LEN = 1024
 DEFAULT_BATCH_SIZE = 8
 
@@ -169,11 +167,10 @@ def _verify_skip_provenance(out_path: Path, derived: Path) -> None:
     """Before trusting an existing `<tag>__bpb[__ckptN].json` as satisfying a
     cell (skip-if-exists), verify it actually belongs to THIS cell rather
     than being a stale file left over from a different run under the same
-    tag -- the 2026-08-18 incident (`eval_results/f15_bpb/
-    qwen2_5-0_5b_tur_langspec_truetie_s42__bpb.json` was a stale F14c-era
-    file whose `checkpoint` pointed at `pr21_rerun/`, silently accepted as
-    satisfying the f15_wave1 cell of the same tag -- an earlier provenance
-    defect this check now guards against). Reads the file's `checkpoint` field and checks it is
+    tag (e.g. `eval_results/f15_bpb/
+    qwen2_5-0_5b_tur_langspec_truetie_s42__bpb.json` could be a stale F14c-era
+    file whose `checkpoint` points at `pr21_rerun/`, silently accepted as
+    satisfying the f15_wave1 cell of the same tag). Reads the file's `checkpoint` field and checks it is
     `derived` itself or a path under it -- the cell's own derived run
     directory (`<cell_dir>/ft*/`, or its `checkpoint-N/` subdir when
     --checkpoint-step is used). The exact checkpoint-N is NOT separately
@@ -384,7 +381,7 @@ def tokenize_texts_extended(texts, ext_tok: ExtendedTokenizer, max_seq_len: int 
 
 def _assert_overlay_matches_model(tok, tok_file: Path, model_tokenizer,
                                    n_probe: int = 1000) -> None:
-    """Pre-launch review S12: this driver resolves langspec/placebo/base
+    """This driver resolves langspec/placebo/base
     tokenizers directly (bpb_core.pick_tokenizer / Tokenizer.from_file),
     never through downstream_eval.BaseUnigramHFLM, so that class's __init__
     vocab-size safety check never runs here. Reproduce it, plus a

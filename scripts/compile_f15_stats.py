@@ -1,8 +1,7 @@
 #!/usr/bin/env python3
-"""F15 statistics/aggregation tool (per the F15 experiment plan,
-section "Statistical protocol"). Builds cell means, paired seed contrasts vs a
+"""F15 statistics/aggregation tool. Builds cell means, paired seed contrasts vs a
 reference arm with percentile-bootstrap CIs, Holm-Bonferroni correction, and
-the pre-registered intrinsic-vs-downstream directional test — from per-cell
+the intrinsic-vs-downstream directional test — from per-cell
 eval JSONs only. No hand-entered numbers anywhere; every table cell carries
 the count and paths of the files it was computed from.
 
@@ -58,16 +57,16 @@ becomes a distinct family automatically — no code change needed.
 
 OPTIONAL PER-ITEM FILES
 ------------------------
-For item-level paired bootstrap (plan: "pairing over items, seeds as
-replicates"), a cell's JSON `<tag>__head<wiring>.json` may have a sibling
+For item-level paired bootstrap (pairing over items, seeds as
+replicates), a cell's JSON `<tag>__head<wiring>.json` may have a sibling
     <tag>__head<wiring>__items.jsonl
 (one JSON object per line: {"doc_id": <int|str>, "<metric>": <float>}, one
 line per eval item, `doc_id` stable across arms/seeds for the same task).
-Naming matches the results JSON's own keying (pre-launch review fix: a bare
+Naming matches the results JSON's own keying (a bare
 `<tag>__items.jsonl`, with no head_wiring, would let a training- and a
 reshared-wiring eval of the same cell silently clobber each other's items
-file). `load_items` falls back to the pre-fix `<tag>__items.jsonl` name when
-the new one is absent, for any file an older driver already wrote. The
+file). `load_items` falls back to the older `<tag>__items.jsonl` name when
+the new one is absent, for any file an older driver wrote. The
 loader falls back cleanly to seed-only bootstrap when neither file exists,
 labeling the CI method used in every contrast row so nothing is silently
 under-powered without saying so.
@@ -78,20 +77,20 @@ STATISTICAL METHODS (all implemented by hand; stdlib + numpy only)
   RNG seed for reproducibility); when per-item files are available for every
   matched seed of both arms in a contrast, use a nested seed+item bootstrap
   (resample seeds, then resample items within each resampled seed, matching
-  the plan's "pairing over items, seeds as replicates"); otherwise resample
+  pairing over items, seeds as replicates); otherwise resample
   seeds only, using each seed's already-computed paired delta.
 - Bootstrap p-value: p = 2 * min(P(delta<=0), P(delta>=0)) over the bootstrap
   distribution, capped at 1 (standard percentile sign-flip p-value).
 - Holm-Bonferroni: standard step-down procedure, applied across all contrasts
   within a family (metric is fixed per run via --metric, so "per (family,
-  metric) table" in the plan reduces to "per family" for a single invocation).
+  metric) table" reduces to "per family" for a single invocation).
 - Spearman rho: Pearson correlation of average ranks (ties handled by
   averaging tied ranks).
 - Exact sign test: exact two-sided binomial test at p=0.5 via math.comb
   (2 * min(lower tail, upper tail), capped at 1).
 
 Magic numbers (flagged per project convention): BOOTSTRAP_ITERS=10000,
-BOOTSTRAP_RNG_SEED=0, ALPHA=0.05 (the plan's pre-registered threshold). All
+BOOTSTRAP_RNG_SEED=0, ALPHA=0.05 (significance threshold). All
 three are CLI-overridable; defaults are recorded in --out-json metadata.
 
 CLI
@@ -153,7 +152,7 @@ import numpy as np
 BOOTSTRAP_ITERS = 10000
 BOOTSTRAP_RNG_SEED = 0
 ALPHA = 0.05
-DIRECTIONAL_TARGET_ARM = "langspec"  # the plan's pre-registered method arm
+DIRECTIONAL_TARGET_ARM = "langspec"  # the method arm under test
 
 
 # ---------------------------------------------------------------------------
@@ -656,8 +655,8 @@ def nested_item_seed_bootstrap(
     """Outer: resample seeds with replacement. Inner: for each resampled
     seed, resample its paired per-item deltas with replacement and take the
     mean. Bootstrap replicate = mean over the (resampled) seeds of those
-    per-seed item-resampled means. Implements the plan's "pairing over
-    items, seeds as replicates"."""
+    per-seed item-resampled means. Implements pairing over
+    items, seeds as replicates."""
     n_seeds = len(seed_item_deltas)
     out = np.empty(iters)
     for b in range(iters):
@@ -787,7 +786,7 @@ def compute_holm_by_family(contrasts: dict[tuple, dict], alpha: float) -> dict:
     pooled together. Applying this separately to the single-language
     `contrasts` dict and a separate joint `contrasts` dict (rather than a
     merged dict) is what keeps the joint per-language correction its own
-    family, per the F15 stats plan."""
+    family."""
     holm_by_family: dict = {}
     for family in sorted({k[0] for k in contrasts}):
         pvals = {
