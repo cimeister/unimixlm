@@ -1,0 +1,10 @@
+name: wandb-default
+
+enabled: true
+project: "langmap"
+# entity: null logs to the account of whoever runs the job; WANDB_ENTITY in the
+# environment takes precedence over this value either way.
+entity: null
+run_name: ${model.model_name}-${las_mode}-lr${learning_rate}-r${lora.r}-ep${epochs}
+tags: []
+notes: null

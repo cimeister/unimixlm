@@ -38,6 +38,8 @@ def main(cfg: DictConfig) -> None:
         model_name=cfg.model.model_name,
         training_cfg=cfg.training,
         is_push_to_hf=cfg.hf.push,
+        local_data_dir=getattr(cfg.data, "local_dir", None),
+        text_column=getattr(cfg.data, "text_column", "text"),
     )
 
 

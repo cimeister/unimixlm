@@ -218,7 +218,11 @@ textual==7.3.0
 thinc==8.3.10
 threadpoolctl==3.6.0
 tiktoken==0.12.0
--e git+https://github.com/Ahmetcanyvz/tokenizers.git@3afc67f12e19725ac7167e4be999d8c28ad8f22a#egg=tokenizers&subdirectory=../../tokenizers/bindings/python
+# The tokenizers fork is REQUIRED (multi-language weight-set routing lives in
+# its Rust layer; stock pip tokenizers does not have it). Building from git
+# needs a Rust toolchain + maturin; setup.sh builds the same commit from the
+# tokenizers/ submodule instead, which is the recommended install path.
+tokenizers @ git+https://github.com/Ahmetcanyvz/tokenizers.git@3afc67f12e19725ac7167e4be999d8c28ad8f22a#subdirectory=bindings/python
 tomli==2.2.1
 tomlkit==0.13.3
 torch==2.9.1

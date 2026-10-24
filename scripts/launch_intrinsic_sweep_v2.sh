@@ -2,7 +2,7 @@
 # Launch the full 10-family x 7-language MorphScore sweep (70 cells).
 #
 # Detached by design: re-exec'd under setsid so it survives the launching shell,
-# the SSH session and any session restart. Progress is a per-cell log
+# the SSH session and any restart of the driving process. Progress is a per-cell log
 # under logs/intrinsic_sweep_v2/cells/ plus one line per finished cell in
 # _status.tsv; completion is the DONE (or FAILED) marker file.
 #
@@ -21,8 +21,8 @@
 # F15 overlays and the 3 already-measured cells therefore cost almost nothing.
 set -u
 
-REPO=/home/USER/unimixlm
-PY=/home/USER/tokenizer_lm_exps_env/bin/python
+REPO="$(cd "$(dirname "$0")/.." && pwd)"
+PY="${SWEEP_VENV_DIR:?set SWEEP_VENV_DIR to the tokenizer-sweep virtualenv}/bin/python"
 BASE_LANGS=tur,fin,hun,arb,hin
 PARALLEL=3          # measured: each spm_train pass takes up to 20 threads; node has 48
 LOGDIR=$REPO/logs/intrinsic_sweep_v2

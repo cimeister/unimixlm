@@ -6,3 +6,7 @@ name: phi3-mini
 # weights are used. This is acceptable here because the metric is the
 # PAIRED Δ across arms on the SAME model — instruct vs base cancels.
 model_name: microsoft/Phi-3-mini-4k-instruct
+
+# Effective batch 128 (per_device x 4 GPUs x grad_accum), sized for 3.8B params.
+per_device_batch_size: 2
+gradient_accumulation_steps: 16
