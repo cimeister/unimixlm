@@ -13,7 +13,7 @@
 # Regime: LoRA r16, FROZEN embeddings (cheapest), seq 1024, 100M tokens,
 # 1 epoch. Override via env vars below.
 #
-# Prereqs (see scripts/CORE_SWEEP_README.md): overlay tokenizers built
+# Prereqs: overlay tokenizers built
 # for each model, HF model + FineWeb2 access, placebo files generated.
 set -euo pipefail
 cd "$(dirname "$0")/.."
