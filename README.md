@@ -149,7 +149,8 @@ Every machine-specific location is read from an environment variable or a comman
 | `FLORES_DATA_DIR` | bits-per-byte scripts | Directory of FLORES+ sentence files. |
 | `SCRATCH_DIR`, `ENGCODE_CACHE_ROOT` | from-scratch pipeline | Scratch roots for checkpoints and tokenized caches. |
 | `CODE_AST_FIT_PARQUET_ROOT` | `scripts/sweep_code_ast_v1.py` | Directory of The Stack samples, one `<lang>/data.parquet` per language. |
-| `TOKEVAL_REPO` | `scripts/sweep_code_ast_v1.py` | Checkout of `tokenizer-intrinsic-evals`, which holds the AST alignment metric. |
+| `TOKEVAL_REPO` | `scripts/sweep_code_ast_v1.py`, `reproduction/convergence/` | Checkout of `tokenizer-intrinsic-evals`, which holds the AST alignment and fertility metrics. |
+| `CONVERGENCE_WORK_DIR`, `FLORES200_DEVTEST_DIR` | `reproduction/convergence/` | Work directory for the convergence corpora and overlays, and the FLORES-200 devtest files. |
 | `LAS_TOKENIZER_DIR` | `tokenizer_dashboard.py` | Tokenizer directory to display. |
 | `BIGCODE_EVAL_MAIN` | `code_benchmark_eval.py` | Path to the `bigcode-evaluation-harness` entry point. |
 | `SLURM_ACCOUNT` | `scripts/launch_*.sh` | Account for SLURM submissions. |
