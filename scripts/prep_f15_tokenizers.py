@@ -1,7 +1,6 @@
 #!/usr/bin/env python3
-"""Prepare tokenizers/overlays for the F15 campaign (see plan
-~/.claude/plans/the-paper-has-not-stateful-bear.md, "Arms" section and
-"Implementation work items" #1).
+"""Prepare tokenizers/overlays for the F15 campaign (see the F15 experiment
+plan, "Arms" section and "Implementation work items" #1).
 
 Deliverables, all under ``las_tokenizers/f15/<family>/`` where family is one
 of ``qwen2_5-0_5b`` (Qwen/Qwen2.5-0.5B) or ``llama3.2-1b``
@@ -46,7 +45,7 @@ IMPORTANT DEVIATION FROM THIS BRANCH'S DEFAULT, REQUIRED BY THE PLAN:
 the per-language SentencePiece EM UNIFORMLY (memory:
 project_langmap_branch_seedscore_divergence.md). The plan requires seeding
 with the shared base tokenizer's already-trained log-scores instead --
-the behavior of the suchir-code-tok/PR#21 branch that produced the
+the behavior of the code-tokenizer branch (PR #21) that produced the
 writeup's tokenizers -- and calls this out as a "CRITICAL setting". This
 script's ownership is scoped to itself and ``las_tokenizers/f15/`` only
 (not ``code/language_specific_unigramlm.py``), so the change is made via a
@@ -172,12 +171,13 @@ FAMILIES = {
 }
 
 OUT_ROOT = REPO_ROOT / "las_tokenizers" / "f15"
-CORPORA_ROOT = Path(
-    os.environ.get(
-        "LAS_TOK_CORPORA_ROOT",
-        f"/capstor/scratch/cscs/{os.environ.get('USER', 'cmeister747')}/unimixlm_las_tokenizers_corpora",
+_LAS_TOK_CORPORA_ROOT = os.environ.get("LAS_TOK_CORPORA_ROOT")
+if not _LAS_TOK_CORPORA_ROOT:
+    raise RuntimeError(
+        "LAS_TOK_CORPORA_ROOT is not set. Point it at the scratch directory "
+        "holding the LAS tokenizer-training corpora (parent of f15_corpora/)."
     )
-) / "f15_corpora"
+CORPORA_ROOT = Path(_LAS_TOK_CORPORA_ROOT) / "f15_corpora"
 MAKE_PLACEBO = REPO_ROOT / "scripts" / "make_placebo.py"
 
 assert NUM_FINETUNE_EM_ITERATIONS == 10, (
@@ -208,7 +208,7 @@ class BaseScoreSeededLASTokenizer(LanguageSpecificUnigramLMTokenizer):
     passed into the method and used only for special-token scores and the
     post-hoc missing-token fallback.
 
-    The suchir-code-tok / PR#21 branch (memory:
+    The code-tokenizer branch (PR #21) (memory:
     project_langmap_branch_seedscore_divergence.md), which produced the
     writeup's tokenizers, seeds the SAME seed-vocab file with
     ``vocab_dict.get(t, initial_log_score)`` instead -- i.e. each piece's EM

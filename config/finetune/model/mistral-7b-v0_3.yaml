@@ -4,3 +4,8 @@ name: mistral-7b-v0_3
 # extended 32768-token tokenizer. Open weights; HF login required for
 # download but not gated/approval-walled.
 model_name: mistralai/Mistral-7B-v0.3
+
+# Effective batch 128 (per_device x 4 GPUs x grad_accum). per_device 1 for the
+# 7B embedding + Adam-state memory footprint, same as olmo3-1025-7b.
+per_device_batch_size: 1
+gradient_accumulation_steps: 32

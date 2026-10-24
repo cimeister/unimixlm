@@ -7,8 +7,20 @@ defaults:
   - _self_
 
 data:
-  output_dir: ./olmo3_las_tokenizers
-  lines_per_lang: 10000
+  output_dir: ./las_tokenizers/olmo3-7b_v100k_fineweb2sample_10klines_afr-ind-ron-swh_softem
+  # 50k is the chosen default (2026-04-21). Earlier experiments (§2, §3, §10,
+  # §12, §13, P4b-code first-pass) trained with 10k lines/lang, which proved
+  # thin for code langs (Gemma3 JavaScript T4b routing at 72% in P4b code).
+  # Record the actual value used per run in this project's own experiment log
+  # and keep it in the tokenizer-dir name suffix (e.g. "_50klines_").
+  lines_per_lang: 50000
+  text_column: text  # Column name in parquet (text for FineWeb2, content for StarCoder)
+  # Local parquet directory for tokenizer training data.
+  # When set, reads from {local_dir}/{lang}/ instead of HF Hub. Set this to
+  # the FineWeb2-sample directory
+  # (tokenizer_training/downstream_lm_training_data/fineweb2_sample) on your
+  # cluster; left null to require an explicit override.
+  local_dir: null
 
 training:
   em_mode: soft # EM mode for tokenizer training ("soft", "hard", "hf")

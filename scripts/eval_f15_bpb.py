@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""FLORES+ BpB eval for F15 cells (plan: `the-paper-has-not-stateful-bear.md`,
+"""FLORES+ BpB eval for F15 cells (per the F15 experiment plan,
 "Evaluation suite" item 5, BpB half). MultiBLiMP/Belebele-eng is
 `scripts/eval_f14_multiblimp.py`; this script covers the secondary BpB metric
 (plan C1/C2/C3) via FLORES+ (held-out, Wikipedia/news domain, disjoint from
@@ -84,6 +84,7 @@ from __future__ import annotations
 import argparse
 import hashlib
 import json
+import os
 import re
 import subprocess
 from datetime import datetime
@@ -127,9 +128,8 @@ TAG_RE = re.compile(
     r"(?P<reinit>_reinitemb)?(?P<truetie>_truetie)?_s(?P<seed>\d+)$"
 )
 
-DEFAULT_FLORES_ROOT = Path(
-    "/capstor/store/cscs/swissai/a139/datasets/tokenizer_training/flores_parallel_data"
-)
+# Resolved lazily (see --flores-root below): only required when neither the
+# CLI flag nor an already-resolved default is supplied.
 # Magic number: matches the F15 plan's BpB protocol ("Evaluation suite" item
 # 5) and every other project BpB driver (eval_flores_bpb.py, eval_heldout_bpb.py).
 DEFAULT_MAX_SEQ_LEN = 1024
@@ -172,8 +172,8 @@ def _verify_skip_provenance(out_path: Path, derived: Path) -> None:
     tag -- the 2026-08-18 incident (`eval_results/f15_bpb/
     qwen2_5-0_5b_tur_langspec_truetie_s42__bpb.json` was a stale F14c-era
     file whose `checkpoint` pointed at `pr21_rerun/`, silently accepted as
-    satisfying the f15_wave1 cell of the same tag; see EXPERIMENTS_RESULTS.md
-    provenance caveat). Reads the file's `checkpoint` field and checks it is
+    satisfying the f15_wave1 cell of the same tag -- an earlier provenance
+    defect this check now guards against). Reads the file's `checkpoint` field and checks it is
     `derived` itself or a path under it -- the cell's own derived run
     directory (`<cell_dir>/ft*/`, or its `checkpoint-N/` subdir when
     --checkpoint-step is used). The exact checkpoint-N is NOT separately
@@ -798,7 +798,10 @@ def main() -> None:
     )
     ap.add_argument("--batch-size", type=int, default=DEFAULT_BATCH_SIZE)
     ap.add_argument("--max-seq-len", type=int, default=DEFAULT_MAX_SEQ_LEN)
-    ap.add_argument("--flores-root", type=Path, default=DEFAULT_FLORES_ROOT)
+    ap.add_argument("--flores-root", type=Path, default=None,
+                    help="FLORES+ parallel-data directory "
+                         "(tokenizer_training/flores_parallel_data); "
+                         "defaults to $FLORES_DATA_DIR if unset")
     ap.add_argument("--device", default="cuda")
     ap.add_argument("--force", action="store_true")
     ap.add_argument(
@@ -824,6 +827,15 @@ def main() -> None:
              "final-checkpoint files.",
     )
     args = ap.parse_args()
+    if args.flores_root is None:
+        flores_data_dir = os.environ.get("FLORES_DATA_DIR")
+        if not flores_data_dir:
+            raise RuntimeError(
+                "Neither --flores-root nor FLORES_DATA_DIR is set; pass "
+                "--flores-root or set FLORES_DATA_DIR to the FLORES+ "
+                "parallel-data directory."
+            )
+        args.flores_root = Path(flores_data_dir)
     args.checkpoint_step_suffix = (
         f"__ckpt{args.checkpoint_step}" if args.checkpoint_step is not None else ""
     )

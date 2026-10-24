@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""F15 statistics/aggregation tool (plan: "the-paper-has-not-stateful-bear.md",
+"""F15 statistics/aggregation tool (per the F15 experiment plan,
 section "Statistical protocol"). Builds cell means, paired seed contrasts vs a
 reference arm with percentile-bootstrap CIs, Holm-Bonferroni correction, and
 the pre-registered intrinsic-vs-downstream directional test — from per-cell
@@ -40,7 +40,7 @@ the tag prefix, e.g. "qwen2_5-0_5b") and the *wiring variant* — the
 reinit_embeddings / truetie / head_wiring booleans and strings. Averaging
 across wiring variants would silently mix numbers that are not comparable
 (F14 as-run vs F14c true-tie vs F14b true-tie+reinit are different training
-protocols entirely — see EXPERIMENTS_RESULTS.md F14/F14b/F14c). This script
+protocols entirely, not interchangeable). This script
 therefore defines
     family = "<model>[<wiring-bits>]"
 where <model> is the tag with the "_<lang>_<arm>[_reinitemb][_truetie]_s<seed>"

@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """Prepare langspec + placebo tokenizers for the PR #21 Qwen2.5-0.5B rerun.
 
-Replicates _prep_tok3.sh (suchir-code-tok branch) exactly, with added
+Replicates _prep_tok3.sh (the code-tokenizer branch, PR #21) exactly, with added
 verification, for the tie-preserving rerun of the writeup tab:extrinsic
 cells:
 
@@ -43,7 +43,7 @@ PLACEBO_SEED = 1234  # make_placebo.py default; recorded in manifest
 # by 20-29% on the real corpora (confounds the control); rank-bucketed
 # permutation at bucket=500 keeps bytes/token within 0.23% of langspec on
 # tur/fin/hun while changing 7-8% of token boundaries (calibration
-# 2026-08-13, 2000 docs/lang; table in EXPERIMENTAL_SETUP.md S16).
+# 2026-08-13, 2000 docs/lang).
 PLACEBO_MODE = "bucketed"
 PLACEBO_BUCKET = 500
 MAKE_PLACEBO = Path(__file__).resolve().parent / "make_placebo.py"

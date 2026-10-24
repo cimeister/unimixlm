@@ -1,7 +1,7 @@
 # Core sweep — what's prepared, prerequisites, how to run
 
 Branch `sct-core-sweep`, worktree `/local/scratch/sas245/unimixlm-sct`,
-forked from `origin/suchir-code-tok`. `log_space` is untouched.
+forked from the code-tokenizer PR branch. `log_space` is untouched.
 
 ## What this sweep is
 The cheapest configuration where the intrinsic results say LangMAP is

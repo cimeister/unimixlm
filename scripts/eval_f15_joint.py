@@ -73,13 +73,14 @@ Output: one `<tag>__<lang>.json` per (cell, lang) in --out, plus one
 
 Usage:
   python scripts/eval_f15_joint.py \\
-      [--cells-root /capstor/scratch/cscs/cmeister747/f15_wave2] \\
+      [--cells-root $SCRATCH_DIR/f15_wave2] \\
       [--out eval_results/f15_joint] [--langs tur,fin,hun,arb,hin] \\
       [--batch-size 16] [--device cuda] [--only-cell TAG] [--force]
 """
 import argparse
 import hashlib
 import json
+import os
 import re
 import subprocess
 from collections import Counter
@@ -122,9 +123,13 @@ LANG_SUFFIX = {
 }
 DEFAULT_LANGS = list(LANG_SUFFIX.keys())
 
-FLORES_DIR = Path(
-    "/capstor/store/cscs/swissai/a139/datasets/tokenizer_training/flores_parallel_data"
-)
+_FLORES_DATA_DIR = os.environ.get("FLORES_DATA_DIR")
+if not _FLORES_DATA_DIR:
+    raise RuntimeError(
+        "FLORES_DATA_DIR is not set. Point it at the FLORES+ parallel-data "
+        "directory (tokenizer_training/flores_parallel_data)."
+    )
+FLORES_DIR = Path(_FLORES_DATA_DIR)
 
 
 def sha256(path: Path) -> str:
@@ -312,8 +317,8 @@ def compute_routing_accuracy(pool_dir: Path, langs: list, manifest: dict) -> dic
 def main() -> None:
     ap = argparse.ArgumentParser()
     ap.add_argument(
-        "--cells-root", type=Path,
-        default=Path("/capstor/scratch/cscs/cmeister747/f15_wave2"),
+        "--cells-root", type=Path, default=None,
+        help="defaults to $SCRATCH_DIR/f15_wave2 if unset",
     )
     ap.add_argument("--out", type=Path, default=Path("eval_results/f15_joint"))
     ap.add_argument(
@@ -329,6 +334,14 @@ def main() -> None:
     )
     ap.add_argument("--force", action="store_true")
     args = ap.parse_args()
+    if args.cells_root is None:
+        scratch_dir = os.environ.get("SCRATCH_DIR")
+        if not scratch_dir:
+            raise RuntimeError(
+                "Neither --cells-root nor SCRATCH_DIR is set; pass "
+                "--cells-root or set SCRATCH_DIR to your cluster scratch root."
+            )
+        args.cells_root = Path(scratch_dir) / "f15_wave2"
 
     langs = [l.strip() for l in args.langs.split(",") if l.strip()]
     bad = set(langs) - set(LANG_SUFFIX)

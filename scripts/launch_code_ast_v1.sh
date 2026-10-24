@@ -6,7 +6,7 @@
 #   bash scripts/launch_code_ast_v1.sh
 #
 # Detached by design: re-exec'd under setsid so it survives the launching shell,
-# the SSH session and any Claude-session restart. Progress is a per-cell log
+# the SSH session and any restart of the driving process. Progress is a per-cell log
 # under logs/code_ast_v1/cells/ plus one line per finished cell in _status.tsv;
 # completion is the DONE (or FAILED) marker file.
 #
@@ -33,8 +33,8 @@
 # hashes still verify is skipped in seconds.
 set -u
 
-REPO=/users/cmeister747/unimixlm
-PY=/users/cmeister747/tokenizer_lm_exps_env/bin/python
+REPO="$(cd "$(dirname "$0")/.." && pwd)"
+PY="${SWEEP_VENV_DIR:?set SWEEP_VENV_DIR to the tokenizer-sweep virtualenv}/bin/python"
 BASE_LANGS=tur,fin,hun,arb,hin
 # Each overlay fit runs spm_train with up to 20 threads on a ~150-240 MB corpus.
 # Node has 48 cores; 3 concurrent cells is the setting the natural-language

@@ -1,7 +1,7 @@
 defaults:
   - _self_         # default.yaml top-level FIRST, so model-group overrides win
   - model: olmo3-1025-7b
-  - logger: wandb-andrzej
+  - logger: wandb-default
   - lora: r64-k128
 
 # Languages are supplied at the CLI, either as a list (langs=[eng,tur], all
@@ -11,7 +11,7 @@ defaults:
 # finetune.py raises if langs is empty/null.
 langs: null
 
-output_dir: /iopsstor/scratch/cscs/cmeister747/unimix_ckpts
+output_dir: ./checkpoints
 
 
 # LAS tokenizer configuration

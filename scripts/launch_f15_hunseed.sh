@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 # launch_f15_wave1.sh — F15 wave 1: Qwen2.5-0.5B new cells (A1/A2/A3/A5/A4).
 #
-# See ~/.claude/plans/the-paper-has-not-stateful-bear.md ("Arms" table,
+# Per the F15 experiment plan ("Arms" table,
 # "Execution order" step 2: "Wave 1: Qwen2.5 new cells"). Pre-launch review
 # finding S1 (2026-08-17) found the tur/fin/hun langspec overlays previously
 # in use were PR21-era HF artifacts, not fit from THIS family's F15
@@ -91,14 +91,15 @@
 # Usage: bash scripts/launch_f15_wave1.sh [--dry-run]
 set -euo pipefail
 
-REPO_DIR="/users/cmeister747/unimixlm"
-PYTHON="/capstor/scratch/cscs/cmeister747/unimixlm-venv-aug26/bin/python"
+REPO_DIR="$(cd "$(dirname "$0")/.." && pwd)"
+SCRATCH_DIR="${SCRATCH_DIR:?set SCRATCH_DIR to your cluster scratch root}"
+PYTHON="${VENV_DIR:?set VENV_DIR to the project virtualenv}/bin/python"
 TOK_ROOT="${REPO_DIR}/las_tokenizers/f15/qwen2_5-0_5b"
-OUT_ROOT="/capstor/scratch/cscs/cmeister747/f15_wave1"
+OUT_ROOT="${SCRATCH_DIR}/f15_wave1"
 # Verified complete (2026-08-17): all 5 F15 lang repos, the eng repo, and
 # the Qwen2.5-0.5B snapshot are cached here (shared with the PR#21 rerun --
 # same hub repos, see finetune.py resolve_fineweb2_lang).
-HF_CACHE="/capstor/scratch/cscs/cmeister747/hf_cache_pr21"
+HF_CACHE="${SCRATCH_DIR}/hf_cache_pr21"
 LOG_DIR="${REPO_DIR}/logs/f15_wave1"
 JID_FILE="${REPO_DIR}/.f15_hunseed_jids"
 mkdir -p "${OUT_ROOT}" "${LOG_DIR}"
@@ -272,7 +273,7 @@ exit \$rc
   # 8h allowance -- not a coincidence, just headroom that was already there.
   jid=$(sbatch --parsable \
     --job-name="${name}" \
-    --account=infra01 --partition=normal \
+    --account="${SLURM_ACCOUNT:?set SLURM_ACCOUNT to your cluster account}" --partition=normal \
     --nodes=1 --ntasks=1 --cpus-per-task=288 --mem=450G \
     --time=08:00:00 \
     --output="${LOG_DIR}/${name}_%j.out" --error="${LOG_DIR}/${name}_%j.err" \

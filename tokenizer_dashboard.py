@@ -10,6 +10,7 @@ Requires: pip install gradio
 from __future__ import annotations
 
 import html
+import os
 import re
 from pathlib import Path
 
@@ -22,7 +23,14 @@ from code.language_specific_unigramlm import LanguageSpecificUnigramLMTokenizer
 # Constants
 # ---------------------------------------------------------------------------
 
-TOKENIZER_DIR = Path(__file__).resolve().parent / "olmo3_las_tokenizers"
+_LAS_TOKENIZER_DIR = os.environ.get("LAS_TOKENIZER_DIR")
+if not _LAS_TOKENIZER_DIR:
+    raise RuntimeError(
+        "LAS_TOKENIZER_DIR is not set. Point it at the LAS tokenizer group "
+        "directory to visualize (e.g. "
+        "las_tokenizers/olmo3-7b_v100k_fineweb2sample_10klines_afr-ind-ron-swh_softem)."
+    )
+TOKENIZER_DIR = Path(_LAS_TOKENIZER_DIR)
 MODEL_TOKENIZER_DIR = TOKENIZER_DIR / "model_tokenizer"
 
 # 20-color vibrant palette for token coloring (better contrast)

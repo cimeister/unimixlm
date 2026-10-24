@@ -200,8 +200,7 @@ SCRIPT_RANGES = {
         (0xFB50, 0xFDFF),  # Arabic Presentation Forms-A
         (0xFE70, 0xFEFF),  # Arabic Presentation Forms-B
     ],
-    # Added for F15 (hin_Deva): see plan
-    # ~/.claude/plans/the-paper-has-not-stateful-bear.md, Arms/work item 1.
+    # Added for F15 (hin_Deva); per the F15 experiment plan, Arms/work item 1.
     "Deva": [
         (0x0900, 0x097F),  # Devanagari
         (0xA8E0, 0xA8FF),  # Devanagari Extended

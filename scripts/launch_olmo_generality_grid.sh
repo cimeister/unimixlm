@@ -21,8 +21,8 @@
 #   pass) and the corpus-availability evidence. No corpus was substituted.
 set -u
 
-REPO=/users/cmeister747/unimixlm
-PY=/users/cmeister747/tokenizer_lm_exps_env/bin/python
+REPO="$(cd "$(dirname "$0")/.." && pwd)"
+PY="${SWEEP_VENV_DIR:?set SWEEP_VENV_DIR to the tokenizer-sweep virtualenv}/bin/python"
 BASE_LANGS=tur,fin,hun,arb,hin
 PARALLEL=3
 LOGDIR=$REPO/logs/intrinsic_sweep_v2/olmo_generality
