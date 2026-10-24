@@ -15,10 +15,10 @@ set -euo pipefail
 REPO_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 cd "$REPO_ROOT"
 
-# HF auth lives in the shared .hf token store on this box.
-export HF_HOME="${HF_HOME:-/local/scratch/sas245/.hf}"
+# Hugging Face auth is read from the cache directory named by HF_HOME.
+export HF_HOME="${HF_HOME:?set HF_HOME to the Hugging Face cache directory}"
 
-PYTHON="${PYTHON:-/local/scratch/sas245/unimixlm-sct/.venv/bin/python}"
+PYTHON="${PYTHON:-python3}"
 
 TARGET_TOKENS="${TARGET_TOKENS:-500000000}"   # per language
 LANGUAGES="${LANGUAGES:-fin_Latn hun_Latn tur_Latn}"

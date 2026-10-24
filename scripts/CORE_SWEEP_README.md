@@ -1,6 +1,6 @@
 # Core sweep — what's prepared, prerequisites, how to run
 
-Branch `sct-core-sweep`, worktree `/local/scratch/sas245/unimixlm-sct`,
+Branch `sct-core-sweep`, a separate worktree,
 forked from the code-tokenizer PR branch. `log_space` is untouched.
 
 ## What this sweep is
@@ -80,7 +80,7 @@ All Python compiles; bash syntax-checked. **Nothing has been executed**
 
 ## Run
 ```
-cd /local/scratch/sas245/unimixlm-sct
+cd <path-to-worktree>
 SIZE=100M bash scripts/run_core_sweep.sh
 ```
 Resumable (skips `completed` cells). Tune via env vars: `SIZE`, `SEQ`,
