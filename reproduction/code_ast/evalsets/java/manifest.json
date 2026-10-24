@@ -1,0 +1,921 @@
+{
+  "lang": "java",
+  "paper_label": "Java",
+  "built": "2026-08-28T06:37:25.663036+00:00",
+  "n_snippets": 100,
+  "eval_snippets_per_lang_constant": 100,
+  "selection_rule": "first N non-blank snippets in eval-parquet row order after CodeDataLoader's own normalisation (_strip_starcoder_metadata, _normalize_source, rstrip) -- identical to CodeDataLoader(max_snippets_per_lang=N) on that parquet",
+  "deterministic": true,
+  "seed": null,
+  "seed_note": "selection is by parquet row order, not sampling, so no seed exists to record; the file list below IS the selection",
+  "eval_parquet": "<local>/tokenizer-intrinsic-evals/starcoder/java.parquet",
+  "eval_parquet_sha256": "442c3aa28caa3de78ba90b86eb4a706abe68ee28d65f6a0e4a32177733758595",
+  "eval_parquet_rows": 6113,
+  "rows_scanned_to_fill": 100,
+  "extension": ".java",
+  "dir": "<repo>/eval_results/code_ast_v1/evalsets/java",
+  "total_chars": 361828,
+  "roundtrip_verified_through": "CodeDataLoader(dir).get_code_snippets",
+  "files": [
+    {
+      "file": "snippet_0000.java",
+      "sha256": "d5b0f973654c246deb49f06c0103187e4df445bd744dbba2ca0f5c211b608b7c",
+      "chars": 1539,
+      "source_row_id": "2895",
+      "source_repo_path": "src/main/java/leetcode/LongestSubstring.java",
+      "source_repo_name": "cmsandiga/prepare-interview",
+      "parquet_row_index": 0
+    },
+    {
+      "file": "snippet_0001.java",
+      "sha256": "3ef93645314e4107680f3f35cbf0bceae6e9bfea95a107ad3bf35307c0d28c38",
+      "chars": 1655,
+      "source_row_id": "8278",
+      "source_repo_path": "src/main/java/net/socialhub/service/action/CommentActionImpl.java",
+      "source_repo_name": "uakihir0/SocialHub",
+      "parquet_row_index": 1
+    },
+    {
+      "file": "snippet_0002.java",
+      "sha256": "1c4da0f955acac0ed19a0cfc350b348a71c32aa0ca37dbc6bf0363a99b68730a",
+      "chars": 16849,
+      "source_row_id": "13579",
+      "source_repo_path": "src/main/java/com/google/cloud/compute/v1/stub/HttpJsonRegionHealthCheckServiceStub.java",
+      "source_repo_name": "pmakani/java-compute",
+      "parquet_row_index": 2
+    },
+    {
+      "file": "snippet_0003.java",
+      "sha256": "43b72120fd851729fc85763cdbe7ab2a0a8028afa892a5dda4be624203d96f09",
+      "chars": 9054,
+      "source_row_id": "15526",
+      "source_repo_path": "src/test/java/kr/lul/util/assertion/AssertsTest.java",
+      "source_repo_name": "JustBurrow/java-utils",
+      "parquet_row_index": 3
+    },
+    {
+      "file": "snippet_0004.java",
+      "sha256": "5037295c056ea2ce953b48a72a5f4477bbc62de92585b75f7c377d9acff6bb13",
+      "chars": 916,
+      "source_row_id": "22236",
+      "source_repo_path": "src/vm/tables/MethodsTable.java",
+      "source_repo_name": "Berzeger/MI-RUN",
+      "parquet_row_index": 4
+    },
+    {
+      "file": "snippet_0005.java",
+      "sha256": "985d56e9eefe6b000c860aa5941b87729c6c7e4887a460a7c48380e4fa12e69f",
+      "chars": 272,
+      "source_row_id": "23074",
+      "source_repo_path": "service/src/main/java/org/sgc/rak/repositories/FeedbackRepository.java",
+      "source_repo_name": "bobbylight/random-acts-of-kinase",
+      "parquet_row_index": 5
+    },
+    {
+      "file": "snippet_0006.java",
+      "sha256": "9b7a8f2caf7d81c2544fa82394ad9152772e252a991fd3d3ce96524dea86fc08",
+      "chars": 2983,
+      "source_row_id": "26540",
+      "source_repo_path": "plugins/org.jkiss.dbeaver.core/src/org/jkiss/dbeaver/ui/views/session/AbstractSessionEditor.java",
+      "source_repo_name": "bsv798/dbeaver",
+      "parquet_row_index": 6
+    },
+    {
+      "file": "snippet_0007.java",
+      "sha256": "65c94418c4049c6e341af57c2cba0487b3691de0a20616ea965c141d00d5bad9",
+      "chars": 1632,
+      "source_row_id": "32212",
+      "source_repo_path": "src/main/java/test/GFG.java",
+      "source_repo_name": "zxjlm/TCM_analize_tools",
+      "parquet_row_index": 7
+    },
+    {
+      "file": "snippet_0008.java",
+      "sha256": "df05610d18b681083cb95d6cdacea0237e18c2f3b4f3a98ba850759e10aed3cc",
+      "chars": 3482,
+      "source_row_id": "32843",
+      "source_repo_path": "graphwalker-core/src/main/java/org/graphwalker/core/generator/CombinedPath.java",
+      "source_repo_name": "timlg07/graphwalker-project",
+      "parquet_row_index": 8
+    },
+    {
+      "file": "snippet_0009.java",
+      "sha256": "3ec15a106ca2b3f5cd60a09354443f8d1d87f979fb9e60dcd00305d19ea99872",
+      "chars": 301,
+      "source_row_id": "35528",
+      "source_repo_path": "simulator/test-data-quality/src/main/java/webserver/RestResponse.java",
+      "source_repo_name": "rdsea/EdgeCorneringAssistance",
+      "parquet_row_index": 9
+    },
+    {
+      "file": "snippet_0010.java",
+      "sha256": "04ffd469c9453890f20e3d0acf209aa1f781694f0bf60f035795f1245138f7df",
+      "chars": 2049,
+      "source_row_id": "38623",
+      "source_repo_path": "location-provider-service/src/main/java/com/rsakin/getaxi/locationproviderservice/consumer/LocationConsumer.java",
+      "source_repo_name": "ramazansakin/GeTaxiApp2",
+      "parquet_row_index": 10
+    },
+    {
+      "file": "snippet_0011.java",
+      "sha256": "be57f85486747bd19e5d7b89dd0d4978761a54081e2cc1b9df85dfbc1d029a2e",
+      "chars": 8613,
+      "source_row_id": "46870",
+      "source_repo_path": "src/main/java/io/github/handofgod94/common/XmlUtil.java",
+      "source_repo_name": "HandOfGod94/xml-language-server",
+      "parquet_row_index": 11
+    },
+    {
+      "file": "snippet_0012.java",
+      "sha256": "7fc1935a8444c19977138c226a73212d74c8671d8c1ecbb895ca1c4aa8ded629",
+      "chars": 4074,
+      "source_row_id": "51566",
+      "source_repo_path": "src/test/java/com/android/tools/r8/resolution/SingleTargetExecutionTest.java",
+      "source_repo_name": "ganadist/r8",
+      "parquet_row_index": 12
+    },
+    {
+      "file": "snippet_0013.java",
+      "sha256": "2c0c561f91cb7bcd4af4c30c14f4823ed1e1750549870efc8c51e3fae0b4d5a2",
+      "chars": 2252,
+      "source_row_id": "53046",
+      "source_repo_path": "src/main/java/scrapers/common/Main.java",
+      "source_repo_name": "bjorns/website-monitors",
+      "parquet_row_index": 13
+    },
+    {
+      "file": "snippet_0014.java",
+      "sha256": "f3e335c8c5ec54136cf5cc4c138d5e2ce2289c3587709beaea100016756fa5c6",
+      "chars": 1634,
+      "source_row_id": "54340",
+      "source_repo_path": "src/main/java/com/noctarius/graphquul/impl/MutableInteger.java",
+      "source_repo_name": "microprograms/graphquul",
+      "parquet_row_index": 14
+    },
+    {
+      "file": "snippet_0015.java",
+      "sha256": "a6b89cb37d1d30dc75c95234f7d95635a8b716f3239baebfc27cc5a05daaaf3f",
+      "chars": 7062,
+      "source_row_id": "56188",
+      "source_repo_path": "ilves-vaadin/src/main/java/org/bubblecloud/ilves/security/SecurityApiImpl.java",
+      "source_repo_name": "bubblecloud/ilves",
+      "parquet_row_index": 15
+    },
+    {
+      "file": "snippet_0016.java",
+      "sha256": "40bec39aff78a10d03d187b56826c0382f2518ff56143aee9764da2ee27051c5",
+      "chars": 4038,
+      "source_row_id": "59646",
+      "source_repo_path": "kanbanik-web/src/main/java/com/googlecode/kanbanik/client/managers/ClassOfServicesManager.java",
+      "source_repo_name": "kanbanik/kanbanik-core",
+      "parquet_row_index": 16
+    },
+    {
+      "file": "snippet_0017.java",
+      "sha256": "10edc51c04356608eb44b1662b76063b51347eee44625626103406064a41e40a",
+      "chars": 552,
+      "source_row_id": "65597",
+      "source_repo_path": "Lecture 39/Question01.java",
+      "source_repo_name": "ADITYA-PRATAP/CSE310---PROGRAMMING-IN-JAVA-21222-",
+      "parquet_row_index": 17
+    },
+    {
+      "file": "snippet_0018.java",
+      "sha256": "5a23ce721d88a28c850d185f87f23820041e98348d76d69e1f464963cf64e238",
+      "chars": 741,
+      "source_row_id": "70036",
+      "source_repo_path": "src/main/java/com/adportas/videollamadas/service/interfaces/IWebsocketService.java",
+      "source_repo_name": "bnjmnsepulveda/OpenViduVideollamadasServer",
+      "parquet_row_index": 18
+    },
+    {
+      "file": "snippet_0019.java",
+      "sha256": "4f9bbc66fff99dbc470275af0d6f8317ce056c3ff1c18ef662d8c18909b05885",
+      "chars": 2025,
+      "source_row_id": "74485",
+      "source_repo_path": "app/src/main/java/dk/adamino/rehabilitation/GUI/Model/FirebaseClientModel.java",
+      "source_repo_name": "onero/Rehabilitation-Android",
+      "parquet_row_index": 19
+    },
+    {
+      "file": "snippet_0020.java",
+      "sha256": "2f03d584c9a6e25cc9fe2c30add657022b4ba687d27ce3dc3d8c24614982ceb0",
+      "chars": 5655,
+      "source_row_id": "75511",
+      "source_repo_path": "android/app/src/main/java/com/maximummpd/BonjourListenerModule.java",
+      "source_repo_name": "HaikuZen/MaximumMPD",
+      "parquet_row_index": 20
+    },
+    {
+      "file": "snippet_0021.java",
+      "sha256": "a09417ca0110a64750d29385ce0edb939be22b79aa926ebd8fd74222978e40e4",
+      "chars": 7870,
+      "source_row_id": "82096",
+      "source_repo_path": "src/main/java/li/cil/scannable/client/renderer/ScannerRenderer.java",
+      "source_repo_name": "MightyPirates/Scannable",
+      "parquet_row_index": 21
+    },
+    {
+      "file": "snippet_0022.java",
+      "sha256": "b34d26cf03c9f26c7e6a2729fb07a7b47a2cc0d67c42c1c69fdba0149b29ec74",
+      "chars": 435,
+      "source_row_id": "87712",
+      "source_repo_path": "opencloud-platform/opencloud-auth-provider/src/main/java/com/opencloud/auth/provider/service/feign/BaseUserAccountRemoteService.java",
+      "source_repo_name": "rico-qian/open-cloud",
+      "parquet_row_index": 22
+    },
+    {
+      "file": "snippet_0023.java",
+      "sha256": "d95a50dee3bfbf2ea4618ed70e0353e61bda372dce0450dae20fbfb528d9bdcd",
+      "chars": 1147,
+      "source_row_id": "92713",
+      "source_repo_path": "src/main/java/no/nav/pus/decorator/redirect/RedirectServlet.java",
+      "source_repo_name": "olofab/pus-decorator",
+      "parquet_row_index": 23
+    },
+    {
+      "file": "snippet_0024.java",
+      "sha256": "f547a8b4af7a10a6129fdc015e284d1348345987349c50174d39636d3665ded5",
+      "chars": 1066,
+      "source_row_id": "96832",
+      "source_repo_path": "src/main/java/net/mureng/mureng/core/advice/AbstractControllerAdvice.java",
+      "source_repo_name": "Catnap421/Android-Team-1-Backend",
+      "parquet_row_index": 24
+    },
+    {
+      "file": "snippet_0025.java",
+      "sha256": "45fc5ac6e756399285c289c29e6f486ebd851252b0d68eca123b8e298c1459c0",
+      "chars": 535,
+      "source_row_id": "97782",
+      "source_repo_path": "testing-modules/mocks/src/main/java/com/baeldung/jimfs/FileManipulation.java",
+      "source_repo_name": "DBatOWL/tutorials",
+      "parquet_row_index": 25
+    },
+    {
+      "file": "snippet_0026.java",
+      "sha256": "823bb0fdaeb94ac0954988d575608a09509cd2526a58c16e0bf622603127d986",
+      "chars": 9295,
+      "source_row_id": "106312",
+      "source_repo_path": "binding-java/runtime/src/test/java/org/apache/etch/bindings/java/msg/TestStructValue.java",
+      "source_repo_name": "apache/etch",
+      "parquet_row_index": 26
+    },
+    {
+      "file": "snippet_0027.java",
+      "sha256": "6614ddd6d6263a11808189d38cb9718cb480df0e368ae0b8b45cd5917031f59e",
+      "chars": 950,
+      "source_row_id": "106734",
+      "source_repo_path": "src/main/java/info/u_team/u_mod/data/UModDataGenerator.java",
+      "source_repo_name": "HyCraftHD/U-Mod",
+      "parquet_row_index": 27
+    },
+    {
+      "file": "snippet_0028.java",
+      "sha256": "9382ec7435106c4cbf1b718570d298a6563e5560507c346a76e684b1c370cf63",
+      "chars": 26655,
+      "source_row_id": "107807",
+      "source_repo_path": "downloadmanagerplus/src/main/java/ir/siaray/downloadmanagerplus/classes/Downloader.java",
+      "source_repo_name": "JnariyaInnov/DownloadManagerPlus",
+      "parquet_row_index": 28
+    },
+    {
+      "file": "snippet_0029.java",
+      "sha256": "3df7f8f263d271409994554780734701f483f533a56e1fe81f42c643f21603d0",
+      "chars": 628,
+      "source_row_id": "111676",
+      "source_repo_path": "identity/adapter/json/src/main/java/uk/co/idv/identity/adapter/json/phonenumber/PhoneNumberExtractor.java",
+      "source_repo_name": "michaelruocco/idv-context",
+      "parquet_row_index": 29
+    },
+    {
+      "file": "snippet_0030.java",
+      "sha256": "5b58420adf9e4f58ceecaac39514fdf5e2edda1a1704397def5dd093c01a747b",
+      "chars": 4182,
+      "source_row_id": "118973",
+      "source_repo_path": "smack-integration-test/src/main/java/org/jivesoftware/smackx/httpfileupload/HttpFileUploadIntegrationTest.java",
+      "source_repo_name": "matteocampana/Smack",
+      "parquet_row_index": 30
+    },
+    {
+      "file": "snippet_0031.java",
+      "sha256": "4655ec3dce94252105b8967c3892b0304221456f43d10620183edb2855999e1a",
+      "chars": 1810,
+      "source_row_id": "124053",
+      "source_repo_path": "tomcat-7.0.62/webapps/calendar-portlet/WEB-INF/src/com/liferay/calendar/util/PortletPropsValues.java",
+      "source_repo_name": "vinterra/portal-distribution",
+      "parquet_row_index": 31
+    },
+    {
+      "file": "snippet_0032.java",
+      "sha256": "31441387cfaded1c749dfe3d9535d8cd3f642636e043155bb102153eb0856fca",
+      "chars": 5868,
+      "source_row_id": "128887",
+      "source_repo_path": "com/planet_ink/coffee_mud/Abilities/Spells/Spell_Pocket.java",
+      "source_repo_name": "jaredway/HellbridgeMUD",
+      "parquet_row_index": 32
+    },
+    {
+      "file": "snippet_0033.java",
+      "sha256": "27920e51750f4e4e79786989feee5fa7dbe119c9a7839c31b590667806bd27d6",
+      "chars": 28594,
+      "source_row_id": "129091",
+      "source_repo_path": "src/main/java/org/accounting/system/endpoints/ProjectEndpoint.java",
+      "source_repo_name": "ARGOeu/ARGO-accounting",
+      "parquet_row_index": 33
+    },
+    {
+      "file": "snippet_0034.java",
+      "sha256": "1d057aee47df941630eb310b1fbf8c9e56f8988fb09e6837281ab141dbfbff3d",
+      "chars": 3169,
+      "source_row_id": "131259",
+      "source_repo_path": "dropwizard-logging/src/main/java/io/dropwizard/logging/ThrottlingAppenderWrapper.java",
+      "source_repo_name": "shail/dropwizard",
+      "parquet_row_index": 34
+    },
+    {
+      "file": "snippet_0035.java",
+      "sha256": "a4e8c5084bc6481b8b7059c70d9dbd9d2caf7447680f347b770c6f133ce33b0e",
+      "chars": 4810,
+      "source_row_id": "135576",
+      "source_repo_path": "org.hl7.fhir.publisher.core/src/main/java/org/hl7/fhir/igtools/renderers/StatusRenderer.java",
+      "source_repo_name": "markkramerus/fhir-ig-publisher",
+      "parquet_row_index": 35
+    },
+    {
+      "file": "snippet_0036.java",
+      "sha256": "35b7d4439c0d0abc03f5f67928bff257fd3861f038fc713f3aa70f439a6def24",
+      "chars": 5746,
+      "source_row_id": "138377",
+      "source_repo_path": "world.java",
+      "source_repo_name": "mdw-at-linuxbox/zxid",
+      "parquet_row_index": 36
+    },
+    {
+      "file": "snippet_0037.java",
+      "sha256": "4f96d16e0dd6a7d7aa951055dc969cbe9081afb03ab4bedde3dfc6b91df851ce",
+      "chars": 1255,
+      "source_row_id": "140176",
+      "source_repo_path": "source/org/tigr/microarray/mev/persistence/ClusterWrapperPersistenceDelegate.java",
+      "source_repo_name": "SamGG/mev",
+      "parquet_row_index": 37
+    },
+    {
+      "file": "snippet_0038.java",
+      "sha256": "041125920d521a419d090bab02406262201ac80b3c8e1de87d0250609abf0ea8",
+      "chars": 533,
+      "source_row_id": "145254",
+      "source_repo_path": "Java-Object_Oriented_Programming/IO_Streams/ReadDir.java",
+      "source_repo_name": "Shahraaz/JavaCodes",
+      "parquet_row_index": 38
+    },
+    {
+      "file": "snippet_0039.java",
+      "sha256": "75bad0414df70b5af3c3659f848f9aaa6197f07523e1afe772f37e1f744dc394",
+      "chars": 2260,
+      "source_row_id": "147070",
+      "source_repo_path": "src/main/java/net/nicholaspurdy/sdrslicegrabber/model/SliceFileItem.java",
+      "source_repo_name": "NicholasPurdy/SDRSliceGrabber",
+      "parquet_row_index": 39
+    },
+    {
+      "file": "snippet_0040.java",
+      "sha256": "8620d6b8f9f50f458681665463d864f69fef78561cea840233b6876deb6b367e",
+      "chars": 405,
+      "source_row_id": "153525",
+      "source_repo_path": "grupo3.ejercicio027-master-2d1b8234672e5fedc5221e847d3e922b6f45a2e8/src/main/java/es/cic/curso/grupo3/ejercicio027/service/TipoService.java",
+      "source_repo_name": "mantamusica/java_cic_grupos",
+      "parquet_row_index": 40
+    },
+    {
+      "file": "snippet_0041.java",
+      "sha256": "06bd60ab82cdf8b042ac2508a54b4fa20bc66ab9ceb599a19745bbd534a5cf35",
+      "chars": 1361,
+      "source_row_id": "154467",
+      "source_repo_path": "java/java-codec/src/main/java/org/cloudburstmc/protocol/java/codec/v754/serializer/play/serverbound/PlayerCommandSerializer_v754.java",
+      "source_repo_name": "D3ATHBRINGER13/Protocol",
+      "parquet_row_index": 41
+    },
+    {
+      "file": "snippet_0042.java",
+      "sha256": "38136b2841b33a7514d04a67ca807f8ada3ef3a00f3ee5566cc7f46046dcbb66",
+      "chars": 2964,
+      "source_row_id": "156658",
+      "source_repo_path": "java version/src/AutoSuggest.java",
+      "source_repo_name": "imakskr/autoSuggestions",
+      "parquet_row_index": 42
+    },
+    {
+      "file": "snippet_0043.java",
+      "sha256": "8b086ae875563ecae1d86bf552ae2ebd0b4c59c8acd7d83c5fddfafbe21efffa",
+      "chars": 1476,
+      "source_row_id": "159968",
+      "source_repo_path": "src/main/java/org/desarrolladorslp/technovation/config/auth/ResourceServerConfig.java",
+      "source_repo_name": "desarrolladorSLP/technovationslp-backend",
+      "parquet_row_index": 43
+    },
+    {
+      "file": "snippet_0044.java",
+      "sha256": "64d553c3e248993877b0d3d823900d6841a22f7409d1f894af9bf7331f34c85b",
+      "chars": 752,
+      "source_row_id": "161487",
+      "source_repo_path": "app/src/main/java/com/useradgents/burgers/test/managers/NewsManager.java",
+      "source_repo_name": "sofien4387/MyFooty",
+      "parquet_row_index": 44
+    },
+    {
+      "file": "snippet_0045.java",
+      "sha256": "869e5f9d884581f8ef912cba13bfbbf69722fa1b306e210b90ae23b4a2a9f8bf",
+      "chars": 3527,
+      "source_row_id": "162042",
+      "source_repo_path": "sellers/src/main/java/com/paypal/sellers/bankaccountextract/service/impl/MiraklBankAccountExtractServiceImpl.java",
+      "source_repo_name": "Panem-org/mirakl-hyperwallet-connector",
+      "parquet_row_index": 45
+    },
+    {
+      "file": "snippet_0046.java",
+      "sha256": "125c19fef0d968fc6f74b8847d4f8af3b471c27bf0c4adb4df182ad29a4025ff",
+      "chars": 5363,
+      "source_row_id": "163433",
+      "source_repo_path": "sasl2-sys/sasl2/java/CyrusSasl/SaslUtils.java",
+      "source_repo_name": "umanwizard/rust-sasl",
+      "parquet_row_index": 46
+    },
+    {
+      "file": "snippet_0047.java",
+      "sha256": "ed38ddcdb483e63fccb4a89c34d12b0a738e75d96d104c360fe130dd0ded6761",
+      "chars": 152,
+      "source_row_id": "166984",
+      "source_repo_path": "src/test/resources/Tricky7.java",
+      "source_repo_name": "alexr007/codeminders",
+      "parquet_row_index": 47
+    },
+    {
+      "file": "snippet_0048.java",
+      "sha256": "c616cd441a9e9b7e778b5089dd2ec6cc44ae23a2ac694a4edf088e58485dce8d",
+      "chars": 1020,
+      "source_row_id": "167726",
+      "source_repo_path": "threadinfodaogenater/src/main/java/com/example/ThreadInfoDaoGeneater.java",
+      "source_repo_name": "AleGogogo/Dowload_File_App",
+      "parquet_row_index": 48
+    },
+    {
+      "file": "snippet_0049.java",
+      "sha256": "1f55ed2e447b00667e41cdd5596ed484294bf06f7c4e96ed96fd1d83f11557dd",
+      "chars": 206,
+      "source_row_id": "177524",
+      "source_repo_path": "test/transform/resource/before/EqualsAndHashCodeRank.java",
+      "source_repo_name": "aoztaskin/lombok",
+      "parquet_row_index": 49
+    },
+    {
+      "file": "snippet_0050.java",
+      "sha256": "082b6b2b2aea49f7ea47820fa05aceeba91f8186ccc2501dee5d24105d3d6dc8",
+      "chars": 4306,
+      "source_row_id": "186053",
+      "source_repo_path": "cone/src/main/java/de/mpg/mpdl/inge/cone/LocalizedString.java",
+      "source_repo_name": "MPDL/INGe",
+      "parquet_row_index": 50
+    },
+    {
+      "file": "snippet_0051.java",
+      "sha256": "aeccd82729ecb3c420bd0b5b84ecd750fdf1eeb424ffc5f4ea0dadaf3a051fec",
+      "chars": 401,
+      "source_row_id": "188392",
+      "source_repo_path": "db4o.j/db4o-core/core/src/com/db4o/reflect/core/ReflectConstructor.java",
+      "source_repo_name": "iboxdb/db4o-gpl",
+      "parquet_row_index": 51
+    },
+    {
+      "file": "snippet_0052.java",
+      "sha256": "1cc48e1fa9be847ddc7446a0f46f6b1af4698393f5ba1c3dab1cf38eb53f7209",
+      "chars": 386,
+      "source_row_id": "188528",
+      "source_repo_path": "src/handy/marketsim/investors/holders/OilPortfolioInvestor.java",
+      "source_repo_name": "matt-handy/401kStrategySimulator",
+      "parquet_row_index": 52
+    },
+    {
+      "file": "snippet_0053.java",
+      "sha256": "c31b994168d3cc6005267f98986d233cde3ab977759ff531eaa207d34e3ca779",
+      "chars": 2574,
+      "source_row_id": "189166",
+      "source_repo_path": "nifi-nar-bundles/nifi-framework-bundle/nifi-framework/nifi-framework-cluster/src/main/java/org/apache/nifi/cluster/manager/PropertyDescriptorDtoMerger.java",
+      "source_repo_name": "westdart/nifi",
+      "parquet_row_index": 53
+    },
+    {
+      "file": "snippet_0054.java",
+      "sha256": "03ac2428f74257ff28cf35a49c2c66c01b0301c5054e4b33eba0db6fc78548c0",
+      "chars": 1312,
+      "source_row_id": "189419",
+      "source_repo_path": "test-core/src/test/java/com/adaivskenan/gof/factory/simple/package-info.java",
+      "source_repo_name": "adaivskenan/team4All",
+      "parquet_row_index": 54
+    },
+    {
+      "file": "snippet_0055.java",
+      "sha256": "61ce3d1f3a92472117f4019cf4ebe5f759de39997477dd15d8f13aa05dbdaf93",
+      "chars": 6994,
+      "source_row_id": "191003",
+      "source_repo_path": "modules/product/src/test/java/com/opengamma/strata/product/deposit/IborFixingDepositTest.java",
+      "source_repo_name": "hwang-pku/Strata",
+      "parquet_row_index": 55
+    },
+    {
+      "file": "snippet_0056.java",
+      "sha256": "b8c437e21b0d29d3e2a52f0f5604387997b927c42f6189e5a30005726120236f",
+      "chars": 216,
+      "source_row_id": "191960",
+      "source_repo_path": "src/main/java/kfs/api/ImportTable.java",
+      "source_repo_name": "k0fis/KfsSpringUtils",
+      "parquet_row_index": 56
+    },
+    {
+      "file": "snippet_0057.java",
+      "sha256": "b87018c826a2ca2302c151e2bab3d8ba7427b1ef562799c06bc0ceca2088d377",
+      "chars": 1166,
+      "source_row_id": "194164",
+      "source_repo_path": "src/main/java/frc/robot/commands/IntakeTurn.java",
+      "source_repo_name": "Scorpions-Robotics/Command-Based-Robot",
+      "parquet_row_index": 57
+    },
+    {
+      "file": "snippet_0058.java",
+      "sha256": "17a3b2d6519d1bb1a8814d027e47e211c30c36b20a4895943544c187f0478af4",
+      "chars": 2040,
+      "source_row_id": "194958",
+      "source_repo_path": "electronic-parent/electronic-sampler-server/src/test/java/ElectricPowerApplicationTests.java",
+      "source_repo_name": "278363011/intelligence-electronic",
+      "parquet_row_index": 58
+    },
+    {
+      "file": "snippet_0059.java",
+      "sha256": "5df10fc62d64e683036a6732fbd667aae5fc21fd5419dc75888739c0ca0f5923",
+      "chars": 1487,
+      "source_row_id": "1605596",
+      "source_repo_path": "src/main/java/com/bean/StaffOperRecord.java",
+      "source_repo_name": "HuangDanGeeker/BankDepositSystem",
+      "parquet_row_index": 59
+    },
+    {
+      "file": "snippet_0060.java",
+      "sha256": "16aee3fc65800c8a2be1e274480e335decd5895a0281f3ea9ebae8ea98a46798",
+      "chars": 3627,
+      "source_row_id": "1614618",
+      "source_repo_path": "library/src/main/java/com/vincan/tinyhttpd/codec/HttpRequestDecoder.java",
+      "source_repo_name": "yangwencan2002/TinyHttpd",
+      "parquet_row_index": 60
+    },
+    {
+      "file": "snippet_0061.java",
+      "sha256": "44ca414deddf1e048ddc6290ca54e659f21acd12bd4b0571f4746369b7fcd06d",
+      "chars": 3401,
+      "source_row_id": "1629396",
+      "source_repo_path": "acceptance-tests/src/test/java/uk/gov/service/bluebadge/test/acceptance/steps/site/WhereCanWalkSteps.java",
+      "source_repo_name": "uk-gov-dft/bluebadge-citizen-webapp",
+      "parquet_row_index": 61
+    },
+    {
+      "file": "snippet_0062.java",
+      "sha256": "cdc79b988aa41cc511edbfa77909cce2b3c7e95bf2c622085abfd17a8cdb562c",
+      "chars": 436,
+      "source_row_id": "1629800",
+      "source_repo_path": "src/gui/RunFormDataMahasiswa.java",
+      "source_repo_name": "yuliasalsabilla/Pemograman_Lanjut",
+      "parquet_row_index": 62
+    },
+    {
+      "file": "snippet_0063.java",
+      "sha256": "185222a19b04d683224159212a00b127eb683f95cd8ccc70174a2dd6dec3911b",
+      "chars": 407,
+      "source_row_id": "1631111",
+      "source_repo_path": "ebean-api/src/main/java/io/ebean/config/dbplatform/db2/DB2ZosPlatform.java",
+      "source_repo_name": "tibco-jufernan/ebean-h2-fix",
+      "parquet_row_index": 63
+    },
+    {
+      "file": "snippet_0064.java",
+      "sha256": "460e3e0a4bac89109faee0a96522dc1875633a09d120c2c5ca5363cc864d83ff",
+      "chars": 1155,
+      "source_row_id": "1631714",
+      "source_repo_path": "app/src/main/java/com/nj/zhihu/ui/adapter/comment/CommentLongHeaderDelegate.java",
+      "source_repo_name": "njjames/ZhiHu",
+      "parquet_row_index": 64
+    },
+    {
+      "file": "snippet_0065.java",
+      "sha256": "b8974900285a780dcd0f38c1baec0c23b82c8ee4dd61f9e5046d00eb8983dfca",
+      "chars": 2884,
+      "source_row_id": "1633784",
+      "source_repo_path": "server/src/main/java/com/genymobile/scrcpy/PointersState.java",
+      "source_repo_name": "KristiaN1337/vCast",
+      "parquet_row_index": 65
+    },
+    {
+      "file": "snippet_0066.java",
+      "sha256": "7fecd0381b462e48aa942b09de130d568f3772d45fc5e6dcac10e7a887cf8f9a",
+      "chars": 566,
+      "source_row_id": "1638408",
+      "source_repo_path": "springboot-service-locator-factory-bean/src/main/java/com/springboot/config/VehicleConfig.java",
+      "source_repo_name": "SimpleProgramming/springboot-servicelocatorfactorybean",
+      "parquet_row_index": 66
+    },
+    {
+      "file": "snippet_0067.java",
+      "sha256": "bb5744e218ca78e53b947fe01815022f999f8cc634128a0e4f9c0e2a87a250dd",
+      "chars": 216,
+      "source_row_id": "1639424",
+      "source_repo_path": "Ajedrez/src/ajedrez/Knight.java",
+      "source_repo_name": "joseramonhq/java",
+      "parquet_row_index": 67
+    },
+    {
+      "file": "snippet_0068.java",
+      "sha256": "d5a644440bae66430233b0b9d49df2ee1d1ada77d8bc70ffe6ca3dc03898400a",
+      "chars": 2417,
+      "source_row_id": "1642195",
+      "source_repo_path": "code/src/main/java/rnk/bb/views/bean/util/EditAddressBean.java",
+      "source_repo_name": "drJabber/boombook",
+      "parquet_row_index": 68
+    },
+    {
+      "file": "snippet_0069.java",
+      "sha256": "a9a175613bd0a81798ad34fe860b573f7e3a1c6e61b81fb0058f2c4dfc9465fb",
+      "chars": 3224,
+      "source_row_id": "1644620",
+      "source_repo_path": "core/src/com/gamestudio24/martianrun/actors/Background.java",
+      "source_repo_name": "romanrrr/runner-game-template",
+      "parquet_row_index": 69
+    },
+    {
+      "file": "snippet_0070.java",
+      "sha256": "48ce5a8609a837b91a98ab4b8ea5c9b2e4d0dc14ea3cb16e6c6364d19a23ba72",
+      "chars": 1211,
+      "source_row_id": "1644658",
+      "source_repo_path": "galvan/src/test/java/org/terracotta/testing/master/ServerModeTest.java",
+      "source_repo_name": "chrisdennis/galvan",
+      "parquet_row_index": 70
+    },
+    {
+      "file": "snippet_0071.java",
+      "sha256": "52d07d63847cfc2881beebf73fa27d41beccb34d142ee95818cab0b1a6519fea",
+      "chars": 466,
+      "source_row_id": "1645714",
+      "source_repo_path": "topcoder/SRM-500-DIV-2/1000/GeometricProgressions.java",
+      "source_repo_name": "bristy/codemania",
+      "parquet_row_index": 71
+    },
+    {
+      "file": "snippet_0072.java",
+      "sha256": "66d6e0a85a62adc8da0b84250ea0ea04e09f077059c82d4c6183975cf74e99e0",
+      "chars": 4392,
+      "source_row_id": "1646543",
+      "source_repo_path": "Plant/plant/src/main/java/org/tonygatins/tonysmith/xjikll/plant/graphics/drawable/FieldBackgroundDrawable.java",
+      "source_repo_name": "TonyChenSmith/plant",
+      "parquet_row_index": 72
+    },
+    {
+      "file": "snippet_0073.java",
+      "sha256": "2e2b0c243b66a9a51e790fee0c1e313002c3c38eab0bd2850f96660ca27bbeef",
+      "chars": 1676,
+      "source_row_id": "1653545",
+      "source_repo_path": "app/src/main/java/org/company/iendo/bean/EditDataBean.java",
+      "source_repo_name": "ILoveLin/iEndo",
+      "parquet_row_index": 73
+    },
+    {
+      "file": "snippet_0074.java",
+      "sha256": "64b3e3d3c3262a1ac4474a9e6638c1f48dcdf5e01cac5b03db08cfea2f7aa8bf",
+      "chars": 1179,
+      "source_row_id": "1654257",
+      "source_repo_path": "Server/src/net/nocturne/game/player/controllers/trollinvasion/CliffCombat.java",
+      "source_repo_name": "dylan-worth/OfflineRS",
+      "parquet_row_index": 74
+    },
+    {
+      "file": "snippet_0075.java",
+      "sha256": "4f2aff23b213ef68cf7ba0fb35d4b39853f168583e7728b935ffd13ae1cd1db3",
+      "chars": 1357,
+      "source_row_id": "1655778",
+      "source_repo_path": "arlas-core/src/main/java/io/arlas/server/core/utils/ImageUtil.java",
+      "source_repo_name": "gisaia/ARLAS-server",
+      "parquet_row_index": 75
+    },
+    {
+      "file": "snippet_0076.java",
+      "sha256": "3b992ca707a84796932891924d16cb4bf08ada5b2e1c8ba656ab3c0b187e9861",
+      "chars": 423,
+      "source_row_id": "1673455",
+      "source_repo_path": "rotor-api/src/main/java/com/mouse/api/service/GoodsSpecificationService.java",
+      "source_repo_name": "bit-go/mouse",
+      "parquet_row_index": 76
+    },
+    {
+      "file": "snippet_0077.java",
+      "sha256": "b89f22e554a5e8818e5ac139567738737ea2841dd9a3a81ecca1e6fd9e358fa3",
+      "chars": 2364,
+      "source_row_id": "1675634",
+      "source_repo_path": "protocol/src/main/java/org/jboss/as/protocol/mgmt/ManagementPingRequest.java",
+      "source_repo_name": "neha-b2001/wildfly-core",
+      "parquet_row_index": 77
+    },
+    {
+      "file": "snippet_0078.java",
+      "sha256": "98f606034bbffd24e5c2b6a248b5d3c2e89f547b45c8c92b1a9b26c3e386e454",
+      "chars": 2888,
+      "source_row_id": "1679075",
+      "source_repo_path": "app/src/main/java/com/company/ecsample/MyApplication.java",
+      "source_repo_name": "ebiyy/sampleAndroidApp",
+      "parquet_row_index": 78
+    },
+    {
+      "file": "snippet_0079.java",
+      "sha256": "c6947aae354751eb357655b3b5db06bc5dcd6385cda396e24b96624914d86a2e",
+      "chars": 620,
+      "source_row_id": "1681625",
+      "source_repo_path": "rangood-pdv-apigateway-server/src/main/java/br/com/rangood/pdv/rangoodpdvapigatewayserver/RangoodPdvApigatewayServerApplication.java",
+      "source_repo_name": "gersonguimares/rangood-pdv",
+      "parquet_row_index": 79
+    },
+    {
+      "file": "snippet_0080.java",
+      "sha256": "dfcb90bd016899a626e841a53a5a9c5b294590ad5e84101dd399b5d4fe147d9a",
+      "chars": 5427,
+      "source_row_id": "1681646",
+      "source_repo_path": "spring-cloud-contract-tools/spring-cloud-contract-pact/src/main/java/org/springframework/cloud/contract/verifier/spec/pact/PactContractConverter.java",
+      "source_repo_name": "adrianhj/spring-cloud-contract",
+      "parquet_row_index": 80
+    },
+    {
+      "file": "snippet_0081.java",
+      "sha256": "5dc6d0fa68d33777fc46a7962be53a842710faff7ae79c9a4f17c0792b5fc914",
+      "chars": 2281,
+      "source_row_id": "1682550",
+      "source_repo_path": "docker/src/main/java/brooklyn/location/docker/strategy/CpuUsagePlacementStrategy.java",
+      "source_repo_name": "e-green/clocker",
+      "parquet_row_index": 81
+    },
+    {
+      "file": "snippet_0082.java",
+      "sha256": "62c9a98874348f0bcd2ba044a80c68d271d7af60401acd8191f51c28cce0d74c",
+      "chars": 3421,
+      "source_row_id": "1696452",
+      "source_repo_path": "src/myJStuff/MyPanel.java",
+      "source_repo_name": "piercedejong/AAA---Java",
+      "parquet_row_index": 82
+    },
+    {
+      "file": "snippet_0083.java",
+      "sha256": "858d84a91bfb36c4470b1051910bdbd5961155ec1123177103abd4e18568c589",
+      "chars": 1155,
+      "source_row_id": "1698426",
+      "source_repo_path": "src/main/java/org/lkpnotice/infra/metrics/seReport/EmptyReport.java",
+      "source_repo_name": "turningme/lkp-cache",
+      "parquet_row_index": 83
+    },
+    {
+      "file": "snippet_0084.java",
+      "sha256": "4ce936600d362e7c1d63e69bb47810ca28ba67f7e51a7726567f6f7e22406860",
+      "chars": 338,
+      "source_row_id": "1710651",
+      "source_repo_path": "app/src/main/java/com/smarttop/library/widget/OnAddressSelectedListener.java",
+      "source_repo_name": "hcxxiaomo/ChCarAppNew_as",
+      "parquet_row_index": 84
+    },
+    {
+      "file": "snippet_0085.java",
+      "sha256": "e922053470864928b0d3ec2847cb993a8f739698a19355bb3e6be371276fca1c",
+      "chars": 35979,
+      "source_row_id": "1710664",
+      "source_repo_path": "00_framework/exchange-core/src/main/java/com/bizzan/bitrade/service/ExchangeOrderService.java",
+      "source_repo_name": "hackervipvhp/CoinExchange",
+      "parquet_row_index": 85
+    },
+    {
+      "file": "snippet_0086.java",
+      "sha256": "9f6efada2833e717789fae93c1c243b315dfbf55fa3d31620c12ae6c9a47bfc4",
+      "chars": 4106,
+      "source_row_id": "1718222",
+      "source_repo_path": "dd-java-agent/instrumentation/liberty-20/src/main/java/datadog/trace/instrumentation/liberty20/LibertyDecorator.java",
+      "source_repo_name": "MatthewMartinFD/dd-trace-java",
+      "parquet_row_index": 86
+    },
+    {
+      "file": "snippet_0087.java",
+      "sha256": "9052d8d655ff79df0db58bb66da1743719dc8a39311ee77e602beed69c76f1f0",
+      "chars": 3458,
+      "source_row_id": "1718682",
+      "source_repo_path": "hdf5iolib/src/main/java/app/keve/hdf5io/fileformat/level2message/AttributeMessageV2BB.java",
+      "source_repo_name": "kevemueller/hdf5io",
+      "parquet_row_index": 87
+    },
+    {
+      "file": "snippet_0088.java",
+      "sha256": "f65d26bbe60f25c1522e9fc19f67c83b78ca2bc483807871de0fa44aae63abae",
+      "chars": 3550,
+      "source_row_id": "1721404",
+      "source_repo_path": "src/main/java/com/tlkzzz/jeesite/modules/ck/web/CHouCarController.java",
+      "source_repo_name": "tlkzzz/xpjfx",
+      "parquet_row_index": 88
+    },
+    {
+      "file": "snippet_0089.java",
+      "sha256": "878847988c8a88a238c0f1aafb8de0812ec59a2fbeec8e7265dce572d828ce35",
+      "chars": 1523,
+      "source_row_id": "1722205",
+      "source_repo_path": "src/main/java/com/code/street/PowerOfThorEpisode1.java",
+      "source_repo_name": "kallelzied/CodinGame",
+      "parquet_row_index": 89
+    },
+    {
+      "file": "snippet_0090.java",
+      "sha256": "592a25240f537f03d40585e2b42d64a3fb016b7027d1a172bfc240158b5c4fe8",
+      "chars": 6385,
+      "source_row_id": "1729025",
+      "source_repo_path": "languages/baseLanguage/collections/source_gen/jetbrains/mps/baseLanguage/collections/editor/IOperation_Contribution.java",
+      "source_repo_name": "trespasserw/MPS",
+      "parquet_row_index": 90
+    },
+    {
+      "file": "snippet_0091.java",
+      "sha256": "03b61d14ed73b419919d8d2a6ceade7f66ff2206a333d4df7fc5207d4f1e2796",
+      "chars": 1849,
+      "source_row_id": "1729384",
+      "source_repo_path": "src/main/java/com/projectkroma/terrabyte/renderer/StandardShaderPipeline.java",
+      "source_repo_name": "Archadia/terrabyte",
+      "parquet_row_index": 91
+    },
+    {
+      "file": "snippet_0092.java",
+      "sha256": "caff2e0398a6240217c2a407a0e0fd215814a912a5964b658ae7a7930aabb561",
+      "chars": 1398,
+      "source_row_id": "1730715",
+      "source_repo_path": "org.caleydo.core/src/org/caleydo/core/data/selection/events/SelectionUpdateListener.java",
+      "source_repo_name": "Caleydo/caleydo",
+      "parquet_row_index": 92
+    },
+    {
+      "file": "snippet_0093.java",
+      "sha256": "353226bebb11345893a0a676d815962a2a6a6f1ae52646ad0c675e8a51d95efc",
+      "chars": 2924,
+      "source_row_id": "1733265",
+      "source_repo_path": "Android/App/app/src/main/java/com/example/malte/app/MainActivity.java",
+      "source_repo_name": "Jugendhackt/DatenParty",
+      "parquet_row_index": 93
+    },
+    {
+      "file": "snippet_0094.java",
+      "sha256": "02d26d8297b96a3e432e7ffcae8cf8e645ef51e874d4c157786ddfb099be0101",
+      "chars": 803,
+      "source_row_id": "1738259",
+      "source_repo_path": "snail/src/test/java/com/acgist/snail/utils/BeanUtilsTest.java",
+      "source_repo_name": "wnbx/snail",
+      "parquet_row_index": 94
+    },
+    {
+      "file": "snippet_0095.java",
+      "sha256": "68068f115a71c9e71560724327deda5cafb79c7d050d232bb09f97c6042ab13d",
+      "chars": 1479,
+      "source_row_id": "1740251",
+      "source_repo_path": "src/main/java/com/jfinal/aop/Enhancer.java",
+      "source_repo_name": "kinwind1/jfinal",
+      "parquet_row_index": 95
+    },
+    {
+      "file": "snippet_0096.java",
+      "sha256": "8d1fc4574f655e666e405d9f1d7805bbcedb6a5d94622626fc734c09c8f0362a",
+      "chars": 4729,
+      "source_row_id": "1740846",
+      "source_repo_path": "app/src/main/java/be/rufer/babybottlecalculator/MainActivity.java",
+      "source_repo_name": "rufer7/be.rufer.babybottlecalculator",
+      "parquet_row_index": 96
+    },
+    {
+      "file": "snippet_0097.java",
+      "sha256": "b1bbe29a2356b57f9006ec0e3e441acae1332799dff7eb6c166a64f100725c78",
+      "chars": 2600,
+      "source_row_id": "1750148",
+      "source_repo_path": "backend/src/main/java/net/coding/ide/utils/ShortKeyGenerator.java",
+      "source_repo_name": "Jabin-Huang/WebIDE",
+      "parquet_row_index": 97
+    },
+    {
+      "file": "snippet_0098.java",
+      "sha256": "e312b6b11b99566d64f1df0b376cd083aaa9225e1638b67e19009a8fa639c0e9",
+      "chars": 18117,
+      "source_row_id": "1752766",
+      "source_repo_path": "components/data-services/org.wso2.carbon.dataservices.core/src/main/java/org/wso2/carbon/dataservices/core/description/query/CassandraQuery.java",
+      "source_repo_name": "fossabot/carbon-data",
+      "parquet_row_index": 98
+    },
+    {
+      "file": "snippet_0099.java",
+      "sha256": "8707010d51b0489a43d76f24c6020647acd60dde267d6d7ff45eb4741a150508",
+      "chars": 3103,
+      "source_row_id": "1761356",
+      "source_repo_path": "testah-junit/src/main/java/org/testah/driver/web/browser/PhantomJsBrowser.java",
+      "source_repo_name": "grpatil27/Testah",
+      "parquet_row_index": 99
+    }
+  ]
+}

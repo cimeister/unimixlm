@@ -1,0 +1,53 @@
+{
+  "pool_dir": "<repo>/las_tokenizers/f15/qwen2_5-0_5b/pool",
+  "family": "qwen2_5-0_5b",
+  "pool_manifest_git_commit": "ab7e2ee86f71bcd5b132aef66026223f81b6a28e",
+  "langs": [
+    "tur",
+    "fin",
+    "hun",
+    "arb",
+    "hin"
+  ],
+  "n_sentences": {
+    "tur": 997,
+    "fin": 997,
+    "hun": 997,
+    "arb": 997,
+    "hin": 997
+  },
+  "confusion_counts": {
+    "tur": {
+      "tur_Latn": 997
+    },
+    "fin": {
+      "fin_Latn": 997
+    },
+    "hun": {
+      "hun_Latn": 997
+    },
+    "arb": {
+      "arb_Arab": 997
+    },
+    "hin": {
+      "hin_Deva": 997
+    }
+  },
+  "routing_accuracy": {
+    "tur": 1.0,
+    "fin": 1.0,
+    "hun": 1.0,
+    "arb": 1.0,
+    "hin": 1.0
+  },
+  "cells_using_pool": [
+    "qwen2_5-0_5b_joint5_langspec_truetie_s42",
+    "qwen2_5-0_5b_joint5_langspec_truetie_s43",
+    "qwen2_5-0_5b_joint5_langspec_truetie_s44"
+  ],
+  "eval_git": {
+    "commit": "84378a7f91b96013be64b36ae6f9014ff4ff32db",
+    "dirty": true
+  },
+  "timestamp": "2026-08-23T08:58:43.637107"
+}

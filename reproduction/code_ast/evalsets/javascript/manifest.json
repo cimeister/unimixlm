@@ -1,0 +1,921 @@
+{
+  "lang": "javascript",
+  "paper_label": "JS",
+  "built": "2026-08-28T06:37:54.125245+00:00",
+  "n_snippets": 100,
+  "eval_snippets_per_lang_constant": 100,
+  "selection_rule": "first N non-blank snippets in eval-parquet row order after CodeDataLoader's own normalisation (_strip_starcoder_metadata, _normalize_source, rstrip) -- identical to CodeDataLoader(max_snippets_per_lang=N) on that parquet",
+  "deterministic": true,
+  "seed": null,
+  "seed_note": "selection is by parquet row order, not sampling, so no seed exists to record; the file list below IS the selection",
+  "eval_parquet": "<local>/tokenizer-intrinsic-evals/starcoder/javascript.parquet",
+  "eval_parquet_sha256": "dc17ad1275dea62a4bfe6b5fefb8ca471d2f37c08af3f2496691115186d9d5d7",
+  "eval_parquet_rows": 6715,
+  "rows_scanned_to_fill": 100,
+  "extension": ".js",
+  "dir": "<repo>/eval_results/code_ast_v1/evalsets/javascript",
+  "total_chars": 290500,
+  "roundtrip_verified_through": "CodeDataLoader(dir).get_code_snippets",
+  "files": [
+    {
+      "file": "snippet_0000.js",
+      "sha256": "3ea775df3a447480e333171e39a1f1fc9a1ab9f6da7774fa78d58d4a267520de",
+      "chars": 2074,
+      "source_row_id": "2895",
+      "source_repo_path": "public/assets/js/main.js",
+      "source_repo_name": "pkbox/webserver",
+      "parquet_row_index": 0
+    },
+    {
+      "file": "snippet_0001.js",
+      "sha256": "599f51e8e1d1ff92f1ede1fd4b7e1d18a870f9210ea7c4c2f356226da8e9e07f",
+      "chars": 1196,
+      "source_row_id": "5294",
+      "source_repo_path": "Libraries/CameraRoll/ImagePickerIOS.js",
+      "source_repo_name": "chinaman8732/react-native",
+      "parquet_row_index": 1
+    },
+    {
+      "file": "snippet_0002.js",
+      "sha256": "b2a4b5b7f56b081ce2336aa6599243b0e1cc5bd8bc9d8e615361f847e0016ab7",
+      "chars": 728,
+      "source_row_id": "6185",
+      "source_repo_path": "example/src/App.theme.js",
+      "source_repo_name": "jdconner/styled-themer",
+      "parquet_row_index": 2
+    },
+    {
+      "file": "snippet_0003.js",
+      "sha256": "8016e59c29b798d37e28c11904f7877fb50c509246423d3adf5eda5c1ece7625",
+      "chars": 11346,
+      "source_row_id": "6564",
+      "source_repo_path": "node_modules/react-vis/dist/plot/series/arc-series.js",
+      "source_repo_name": "laokingshineUAV/VoTT",
+      "parquet_row_index": 3
+    },
+    {
+      "file": "snippet_0004.js",
+      "sha256": "f276eaf22a34785c13c36a1f1f40c3cb7a873663c2cd300f2390d419e2993296",
+      "chars": 1803,
+      "source_row_id": "9667",
+      "source_repo_path": "src/pages/index.js",
+      "source_repo_name": "Jeremy-Mitchell89/Calendar",
+      "parquet_row_index": 4
+    },
+    {
+      "file": "snippet_0005.js",
+      "sha256": "3037c6e58f3254a70caf3e7d157740067bc18a80e1f7497c8d1fe4ae7517af65",
+      "chars": 632,
+      "source_row_id": "16362",
+      "source_repo_path": "main.js",
+      "source_repo_name": "bskaplou/home-assistant-electron",
+      "parquet_row_index": 5
+    },
+    {
+      "file": "snippet_0006.js",
+      "sha256": "91414e1c0f2908c97c6f24e90351f19a63063c0bba5dae0acb8f4964bc18dee5",
+      "chars": 1328,
+      "source_row_id": "21576",
+      "source_repo_path": "website/src/css/tippy.js",
+      "source_repo_name": "benkeen/tippyjs",
+      "parquet_row_index": 6
+    },
+    {
+      "file": "snippet_0007.js",
+      "sha256": "0877373420f45ce8ab62723a8d1c84ff25e74a5d721e76f18e58e5a72d8b3db2",
+      "chars": 1466,
+      "source_row_id": "26033",
+      "source_repo_path": "src/pages/404.js",
+      "source_repo_name": "3v1lW1th1n/gatsby-starter-interviews",
+      "parquet_row_index": 7
+    },
+    {
+      "file": "snippet_0008.js",
+      "sha256": "3a1b1af16f2cd1faa1eddc38417553816814298d34e0467825ebe65d5722924c",
+      "chars": 389,
+      "source_row_id": "26540",
+      "source_repo_path": "src/components/divWrapper/index.test.js",
+      "source_repo_name": "imagineLife/big-site",
+      "parquet_row_index": 8
+    },
+    {
+      "file": "snippet_0009.js",
+      "sha256": "b8434574717c7265883b1df06ad6e336237619dbe8025a0040b65b0602199ea7",
+      "chars": 7183,
+      "source_row_id": "28293",
+      "source_repo_path": "history/main.js",
+      "source_repo_name": "Thatguyjs/Citation-Extension",
+      "parquet_row_index": 9
+    },
+    {
+      "file": "snippet_0010.js",
+      "sha256": "93989040a322855f976d43ae2607e2ec84e74796c08d45a00fdb050d481a6b90",
+      "chars": 1228,
+      "source_row_id": "32843",
+      "source_repo_path": "src/main/resources/META-INF/resources/kicker-games-list.js",
+      "source_repo_name": "zorcic/kicker",
+      "parquet_row_index": 10
+    },
+    {
+      "file": "snippet_0011.js",
+      "sha256": "4dbf40d8b4ee8e99263c93c413c2ef2a09175f39a6e8b3940484bc8c000a099b",
+      "chars": 3873,
+      "source_row_id": "33771",
+      "source_repo_path": "src/index.js",
+      "source_repo_name": "material-docs/react-components-docs-extension",
+      "parquet_row_index": 11
+    },
+    {
+      "file": "snippet_0012.js",
+      "sha256": "a8a645f36df0e60ed4cfa90be5b4741a7e6e0257e07449ceb164cfca21f612e7",
+      "chars": 138,
+      "source_row_id": "41475",
+      "source_repo_path": "ee/app/assets/javascripts/pages/projects/analytics/issues_analytics/index.js",
+      "source_repo_name": "fxiao/gitlab",
+      "parquet_row_index": 12
+    },
+    {
+      "file": "snippet_0013.js",
+      "sha256": "ee800e840b3841ec8a11d0c1d8771f9570bef801ce946def75f4de971ec25f98",
+      "chars": 1446,
+      "source_row_id": "43949",
+      "source_repo_path": "src/arguments/rolename.js",
+      "source_repo_name": "AetherLibs/Aero",
+      "parquet_row_index": 13
+    },
+    {
+      "file": "snippet_0014.js",
+      "sha256": "778251868c672589820ec8ebf4d11232fd3b316ddd35bbfc71b9bc21be800abe",
+      "chars": 3571,
+      "source_row_id": "47485",
+      "source_repo_path": "server/util/ComposesHelper.js",
+      "source_repo_name": "arpetti/LEDITA",
+      "parquet_row_index": 14
+    },
+    {
+      "file": "snippet_0015.js",
+      "sha256": "75aa2e7708c7fef5af287f16e682d675c0f0becde4615f236fd72d170148b39a",
+      "chars": 4012,
+      "source_row_id": "49057",
+      "source_repo_path": "docker_management.js",
+      "source_repo_name": "spoole167/crui-demo",
+      "parquet_row_index": 15
+    },
+    {
+      "file": "snippet_0016.js",
+      "sha256": "42619c822ebd27bd49ab8db7baa6751cd8d1eda7884a66df02e1eb8897520fa7",
+      "chars": 5214,
+      "source_row_id": "51525",
+      "source_repo_path": "src/main/webapp/js/schedule-editor.js",
+      "source_repo_name": "farmdawgnation/scyig-judicial",
+      "parquet_row_index": 16
+    },
+    {
+      "file": "snippet_0017.js",
+      "sha256": "dfa919942f976e831a28cefca7bf4105fdddf89570dfc999d870b723064fb1b4",
+      "chars": 102,
+      "source_row_id": "54339",
+      "source_repo_path": "REDSI_1160929_1161573/boost_1_67_0/libs/hana/doc/html/fwd_2not_8hpp.js",
+      "source_repo_name": "Wultyc/ISEP_1718_2A2S_REDSI_TrabalhoGrupo",
+      "parquet_row_index": 17
+    },
+    {
+      "file": "snippet_0018.js",
+      "sha256": "abbafc395e3c9bdc88944da2ea6694c39b02d8d025d94a8bf520f44fd34c0ee2",
+      "chars": 156,
+      "source_row_id": "60327",
+      "source_repo_path": "aadecode.js",
+      "source_repo_name": "jamtg/aaencode-and-aadecode",
+      "parquet_row_index": 18
+    },
+    {
+      "file": "snippet_0019.js",
+      "sha256": "05be682b12a1ff578bc9b66158cce80b4e97e4a8e3f975c9e7a5495a9e8726c5",
+      "chars": 943,
+      "source_row_id": "61610",
+      "source_repo_path": "public/coach/js/rotate.js",
+      "source_repo_name": "SimonGheeraert/coachme",
+      "parquet_row_index": 19
+    },
+    {
+      "file": "snippet_0020.js",
+      "sha256": "47fb8712ea40830d3c27a1e47f9d88e473d0662ef89f2e2dff54723effe201c4",
+      "chars": 15393,
+      "source_row_id": "65720",
+      "source_repo_path": "function.js",
+      "source_repo_name": "jason71708/mp3player",
+      "parquet_row_index": 20
+    },
+    {
+      "file": "snippet_0021.js",
+      "sha256": "5ea2388ec6038d5d97e74601b0291602bd06ada12f92b26cfb75623b97d02739",
+      "chars": 383,
+      "source_row_id": "69178",
+      "source_repo_path": "app/components/EditButton.js",
+      "source_repo_name": "mzanini/merlin",
+      "parquet_row_index": 21
+    },
+    {
+      "file": "snippet_0022.js",
+      "sha256": "b32f6d7ddd49895c9fac8737d8fd18a904c2c1aba65451a5a5342a7d741fd593",
+      "chars": 24431,
+      "source_row_id": "79347",
+      "source_repo_path": "MOBILAPP/BGX-App/BGX/src/views/Menu.js",
+      "source_repo_name": "ValKhv/BGX",
+      "parquet_row_index": 22
+    },
+    {
+      "file": "snippet_0023.js",
+      "sha256": "9b5b84ba8e427d7fc700248ed31b3dd719ec978ea46d558bcba844c881bdc6a7",
+      "chars": 888,
+      "source_row_id": "82455",
+      "source_repo_path": "spec/spec_helper.js",
+      "source_repo_name": "asis/flot-pyramid",
+      "parquet_row_index": 23
+    },
+    {
+      "file": "snippet_0024.js",
+      "sha256": "0e9d89745cdc751d23ab2475b48744431f7daaffd764d2e2a01e9e970b6c628e",
+      "chars": 1658,
+      "source_row_id": "84233",
+      "source_repo_path": "src/controllers/rental.controller.js",
+      "source_repo_name": "pedrohmenezes1/Market-API",
+      "parquet_row_index": 24
+    },
+    {
+      "file": "snippet_0025.js",
+      "sha256": "a701e765c0ebd225fc04ccb779894093f68394badc62b9eb3202cebff4c596aa",
+      "chars": 1447,
+      "source_row_id": "91521",
+      "source_repo_path": "web-admin/src/reducers/uiReducer.js",
+      "source_repo_name": "mikucy/Grimm",
+      "parquet_row_index": 25
+    },
+    {
+      "file": "snippet_0026.js",
+      "sha256": "3e35b31242eedde3b54d13446a68e1adbceb41a6a2c88ce52db66772e2379563",
+      "chars": 221,
+      "source_row_id": "91951",
+      "source_repo_path": "node_modules/semantic-ui-react/dist/commonjs/modules/Modal/index.js",
+      "source_repo_name": "Sid1000/sample-page",
+      "parquet_row_index": 26
+    },
+    {
+      "file": "snippet_0027.js",
+      "sha256": "dfa9cac0403f498b58ab5662697037b87a85dba51ae97d11062821253f10361e",
+      "chars": 1961,
+      "source_row_id": "95145",
+      "source_repo_path": "lib/factory/TextBoxEntryFactory.js",
+      "source_repo_name": "zionlogtec/bpmn-js-properties-panel",
+      "parquet_row_index": 27
+    },
+    {
+      "file": "snippet_0028.js",
+      "sha256": "abe69ed9b4adf00e95d3e9b7874de10b85818617b8893d246f221e2279623b83",
+      "chars": 235,
+      "source_row_id": "100078",
+      "source_repo_path": "src/components/scale/util/updateScale.js",
+      "source_repo_name": "AnikaNietzer/vue-data-components",
+      "parquet_row_index": 28
+    },
+    {
+      "file": "snippet_0029.js",
+      "sha256": "9394f08da0d53d9f8864590a2ed31555db10cda4d1c8e2291e2778eb2f9f9621",
+      "chars": 2745,
+      "source_row_id": "101448",
+      "source_repo_path": "site_asset/vendor/revolution-plugin/assets/warning.js",
+      "source_repo_name": "som888/mail",
+      "parquet_row_index": 29
+    },
+    {
+      "file": "snippet_0030.js",
+      "sha256": "5a655c5a95c8d819ea03e50fd61752b6c3cf485b20aaf1dc57a2b92310273905",
+      "chars": 23222,
+      "source_row_id": "103504",
+      "source_repo_path": "index.js",
+      "source_repo_name": "Murtatrxx/Djs-Moderation-Bot",
+      "parquet_row_index": 30
+    },
+    {
+      "file": "snippet_0031.js",
+      "sha256": "d89dbbad410e86fa53bd3f577b848e49c41bd4e1a9eebb9b9ad96834da532beb",
+      "chars": 57,
+      "source_row_id": "108934",
+      "source_repo_path": "index.js",
+      "source_repo_name": "btoles/eslint-config",
+      "parquet_row_index": 31
+    },
+    {
+      "file": "snippet_0032.js",
+      "sha256": "8021a25b3bf48e3e68c1bf52c5ae6467473c728def8a96bafbe70f40217497e2",
+      "chars": 16216,
+      "source_row_id": "110659",
+      "source_repo_path": "dist/3d-force-graph.common.js",
+      "source_repo_name": "whoamipls/leach_component_star",
+      "parquet_row_index": 32
+    },
+    {
+      "file": "snippet_0033.js",
+      "sha256": "3ce4886eba1defcea79e3c38f50bc7dfbb305c0600cd057fcc4a65b4dbb42f5b",
+      "chars": 1029,
+      "source_row_id": "116639",
+      "source_repo_path": "app.js",
+      "source_repo_name": "drenchoman/blog_api",
+      "parquet_row_index": 33
+    },
+    {
+      "file": "snippet_0034.js",
+      "sha256": "213dfc260f9afc3f225f4d6e9cd61a6fa297cedf34690a649b1d83b295186f75",
+      "chars": 480,
+      "source_row_id": "118385",
+      "source_repo_path": "vue.config.js",
+      "source_repo_name": "xingrz/sideload",
+      "parquet_row_index": 34
+    },
+    {
+      "file": "snippet_0035.js",
+      "sha256": "63549b7562c2e17183965501e3cb6d413f680567aaf61507185df3d48745202b",
+      "chars": 552,
+      "source_row_id": "124396",
+      "source_repo_path": "src/components/container.js",
+      "source_repo_name": "TopKeingt/mhscs",
+      "parquet_row_index": 35
+    },
+    {
+      "file": "snippet_0036.js",
+      "sha256": "cb15dc3d178b7031c46dc968598fa0923e82419f03ed2b2bc7d23c36cf417571",
+      "chars": 1436,
+      "source_row_id": "126841",
+      "source_repo_path": "views/text_area_view.js",
+      "source_repo_name": "flamejs/flame.js",
+      "parquet_row_index": 36
+    },
+    {
+      "file": "snippet_0037.js",
+      "sha256": "9ee90dc8014137ee9961a09a8c6c2c2b917bffd9d7cffeacb8cab0d9c1a6fbfb",
+      "chars": 190,
+      "source_row_id": "126863",
+      "source_repo_path": "p2p-jsx/trunk/samples/mutex_test/mutex_test.js",
+      "source_repo_name": "lafernando/archive",
+      "parquet_row_index": 37
+    },
+    {
+      "file": "snippet_0038.js",
+      "sha256": "ee594da87567f3ef2dd02570f03e13a717502a0277c89284f5901bb8ca3b87ec",
+      "chars": 1442,
+      "source_row_id": "133425",
+      "source_repo_path": "src/util/convert/formatStr.js",
+      "source_repo_name": "f5devcentral/f5-as3-config-converter",
+      "parquet_row_index": 38
+    },
+    {
+      "file": "snippet_0039.js",
+      "sha256": "86e49c4c02eebe4b895071894169f9693cdeadee1d86f8a7c8bafffcb9ed28cb",
+      "chars": 2726,
+      "source_row_id": "138436",
+      "source_repo_path": "js/src/utils.js",
+      "source_repo_name": "rogercoll/optimistic-roll-in",
+      "parquet_row_index": 39
+    },
+    {
+      "file": "snippet_0040.js",
+      "sha256": "890f3175853e336f166484a3cdbaf0151d4f2d48ec3beb019fc1a53ca1141788",
+      "chars": 158,
+      "source_row_id": "147070",
+      "source_repo_path": "index.js",
+      "source_repo_name": "LimeEng/HashingService",
+      "parquet_row_index": 40
+    },
+    {
+      "file": "snippet_0041.js",
+      "sha256": "5c53248914f1465deb193bc30d66782c9d4cbc6d8d754548eef6f7a3826552a8",
+      "chars": 1530,
+      "source_row_id": "148036",
+      "source_repo_path": "src/js/app/apis/__tests__/getJokeApi-spec.js",
+      "source_repo_name": "choonchernlim/front-end-stack",
+      "parquet_row_index": 41
+    },
+    {
+      "file": "snippet_0042.js",
+      "sha256": "71d6f0bf80d6891a94c618a4ef50af6beb13d0ea76155a23b6559cbb4c927899",
+      "chars": 1480,
+      "source_row_id": "152015",
+      "source_repo_path": "exchange/bybit/orderbook/OrderbookManager.js",
+      "source_repo_name": "azidyn/socket2em",
+      "parquet_row_index": 42
+    },
+    {
+      "file": "snippet_0043.js",
+      "sha256": "04491500ecd93c078e3c6f1903f70577834ddfd61c70976a2ef273a03b281101",
+      "chars": 5443,
+      "source_row_id": "154111",
+      "source_repo_path": "src/stories/index.js",
+      "source_repo_name": "ThisIsNoZaku/idle-game-creator",
+      "parquet_row_index": 43
+    },
+    {
+      "file": "snippet_0044.js",
+      "sha256": "4a754ac86740f7e0cade0aaef8c2766f7dcb7e10affbb32233c7cba69b47faa3",
+      "chars": 20034,
+      "source_row_id": "154429",
+      "source_repo_path": "src/components/svg/Ontology.js",
+      "source_repo_name": "RobinLallier/dotk-visualization",
+      "parquet_row_index": 44
+    },
+    {
+      "file": "snippet_0045.js",
+      "sha256": "c3d1b66a7bd2a3bacfce1703e9c6a397372ebb219f541e12ce516cb44866fd32",
+      "chars": 343,
+      "source_row_id": "159287",
+      "source_repo_path": "src/content/projs/index.js",
+      "source_repo_name": "carlomazzaferro/carlomazzaferro.github.io",
+      "parquet_row_index": 45
+    },
+    {
+      "file": "snippet_0046.js",
+      "sha256": "1bff85a59a1ca48e3cfa213c6c3aab8512ae3eefc0249d68152ed67be4f40925",
+      "chars": 710,
+      "source_row_id": "163433",
+      "source_repo_path": "client/src/app/actions/admin/getSelectedUser.js",
+      "source_repo_name": "benfluleck/HelloBooks",
+      "parquet_row_index": 46
+    },
+    {
+      "file": "snippet_0047.js",
+      "sha256": "e38402991cc586c42fa4fbbfc09d97b2feec40ad877ed3eca2e50e4f01bb4116",
+      "chars": 767,
+      "source_row_id": "164901",
+      "source_repo_path": "src/main/EventListener.js",
+      "source_repo_name": "eliasjosemelo/automatic-analytics-trigger",
+      "parquet_row_index": 47
+    },
+    {
+      "file": "snippet_0048.js",
+      "sha256": "f859a1692a3fc353fc260484adede0600862c22bdf6fd41c0ca80fd299750190",
+      "chars": 286,
+      "source_row_id": "165701",
+      "source_repo_path": "client/node_modules/material-ui-pickers/TimePicker/index.js",
+      "source_repo_name": "arjaesj/google-books-search",
+      "parquet_row_index": 48
+    },
+    {
+      "file": "snippet_0049.js",
+      "sha256": "d49614df92c17830abe3b68f2d937b6f7e9f485a4b4949826c6cc1f82ddb75b8",
+      "chars": 518,
+      "source_row_id": "166396",
+      "source_repo_path": "src/commands/fun/lev.js",
+      "source_repo_name": "omarkdev/levxyca-pandadomalbot",
+      "parquet_row_index": 49
+    },
+    {
+      "file": "snippet_0050.js",
+      "sha256": "39f760397ac974d4f9eaf80d3c7763d5d46dba7ce2af8180c380a1b1b8996a49",
+      "chars": 469,
+      "source_row_id": "170914",
+      "source_repo_path": "src/components/index.js",
+      "source_repo_name": "mygodness100/paradise-comics-web",
+      "parquet_row_index": 50
+    },
+    {
+      "file": "snippet_0051.js",
+      "sha256": "ec49a55435c7f30243ebc7782d1546052114471f4db92533919f9c66e37b466c",
+      "chars": 177,
+      "source_row_id": "180611",
+      "source_repo_path": "js/main.js",
+      "source_repo_name": "rh-tn/rhtn-tech-blog-web-server",
+      "parquet_row_index": 51
+    },
+    {
+      "file": "snippet_0052.js",
+      "sha256": "24b8d941ff402cdff25cb02ee3eb9ba38753fe6707230ec23c12e459eae34bea",
+      "chars": 50,
+      "source_row_id": "183524",
+      "source_repo_path": "test/projects/large/c771.js",
+      "source_repo_name": "homobel/makebird-node",
+      "parquet_row_index": 52
+    },
+    {
+      "file": "snippet_0053.js",
+      "sha256": "c90dbc580ec248a54785ab64dabfab6baad4688eba5fbfb4a07de5a8cad0d91e",
+      "chars": 184,
+      "source_row_id": "187986",
+      "source_repo_path": "src/server/workers/mailer/constants.js",
+      "source_repo_name": "BadIdeaFactory/tech-and-check-alerts",
+      "parquet_row_index": 53
+    },
+    {
+      "file": "snippet_0054.js",
+      "sha256": "a08804503f8c66bdf67fe3807dfc8163f494ebd722070332cbe14710b3e99c24",
+      "chars": 192,
+      "source_row_id": "188392",
+      "source_repo_path": "src/lte.test.js",
+      "source_repo_name": "nullobject/fkit",
+      "parquet_row_index": 54
+    },
+    {
+      "file": "snippet_0055.js",
+      "sha256": "4994dffeec7c69b940104b30cf325c8de7b05f5654afe4f2dc11bd8142e22607",
+      "chars": 729,
+      "source_row_id": "189419",
+      "source_repo_path": "src/api/login.js",
+      "source_repo_name": "lijiliang/stone-web",
+      "parquet_row_index": 55
+    },
+    {
+      "file": "snippet_0056.js",
+      "sha256": "350f811c8dc59a970a71cef90ae2b850f33905a0be5130cfafb1ce629e8fc76d",
+      "chars": 443,
+      "source_row_id": "190979",
+      "source_repo_path": "src/Input/inputSources/MouseSource/rawEvents.js",
+      "source_repo_name": "maciekChmura/spherical-world",
+      "parquet_row_index": 56
+    },
+    {
+      "file": "snippet_0057.js",
+      "sha256": "20c21e79b6e7c0cd3c3ab54520394320fa1d042a86c4c15dd81cdeaea5a7b394",
+      "chars": 2791,
+      "source_row_id": "191960",
+      "source_repo_path": "src/pages/project/createProjCtrl.js",
+      "source_repo_name": "shalom26/barNoham",
+      "parquet_row_index": 57
+    },
+    {
+      "file": "snippet_0058.js",
+      "sha256": "eaa25759939e770be5cbbced7a9c0312f8a58652db3ef6df2c04f7cce0ff1e36",
+      "chars": 981,
+      "source_row_id": "193492",
+      "source_repo_path": "server/api/system.manage/system.config/menu.rights.config/menu.rights.config.controller.js",
+      "source_repo_name": "sunshinelina1213/blog",
+      "parquet_row_index": 58
+    },
+    {
+      "file": "snippet_0059.js",
+      "sha256": "448c229cf65d16d2567e094ea6a87dfd0bd9ed917c3ef446238ad227c6ace770",
+      "chars": 233,
+      "source_row_id": "196749",
+      "source_repo_path": "packages/vx-network/src/index.js",
+      "source_repo_name": "Flaque/vx",
+      "parquet_row_index": 59
+    },
+    {
+      "file": "snippet_0060.js",
+      "sha256": "398fec58ff9b6064588a9c79f487afad1c159e53a07537d9a1d3ebda93ea5fb2",
+      "chars": 462,
+      "source_row_id": "198140",
+      "source_repo_path": "src/app.module.js",
+      "source_repo_name": "radhikareddy3798/newsfeed",
+      "parquet_row_index": 60
+    },
+    {
+      "file": "snippet_0061.js",
+      "sha256": "ae66185414376d1dfe37b71128f0ffe1fd1f46723954f979a664a665b11db4f3",
+      "chars": 25604,
+      "source_row_id": "1603870",
+      "source_repo_path": "server/routes/home.js",
+      "source_repo_name": "vxcuong199x/stvplay",
+      "parquet_row_index": 61
+    },
+    {
+      "file": "snippet_0062.js",
+      "sha256": "8942992f406355072ff5cca22714dbc5b2477723be3529053c567fd9d07b45c3",
+      "chars": 270,
+      "source_row_id": "1609348",
+      "source_repo_path": "gulpfile.js",
+      "source_repo_name": "hencca/mandarinJS",
+      "parquet_row_index": 62
+    },
+    {
+      "file": "snippet_0063.js",
+      "sha256": "75950083dc231163570c8f676367207e7151adf16b06e24303e777e8a969e9fa",
+      "chars": 4110,
+      "source_row_id": "1611130",
+      "source_repo_path": "server/Models/user.js",
+      "source_repo_name": "Enterisr/tuneTalk",
+      "parquet_row_index": 63
+    },
+    {
+      "file": "snippet_0064.js",
+      "sha256": "1603746ed1d92b664a7b751f173a3aab76b79eb338a60a3315cd572bc146d9f5",
+      "chars": 1121,
+      "source_row_id": "1612987",
+      "source_repo_path": "graphql-bookstore/client/src/components/AuthorCard.js",
+      "source_repo_name": "souzadriano/study-ruby-on-rails",
+      "parquet_row_index": 64
+    },
+    {
+      "file": "snippet_0065.js",
+      "sha256": "a801e2d6905cd18cde9e891e1ae5b991fc22b26e6e7e0067cf4a9e22473be747",
+      "chars": 706,
+      "source_row_id": "1613999",
+      "source_repo_path": "src/memo-show.js",
+      "source_repo_name": "lili668668/memo",
+      "parquet_row_index": 65
+    },
+    {
+      "file": "snippet_0066.js",
+      "sha256": "968ae714a488cdb54f375fcd78edd0fc325f270e2ef08651d742c7b06e163b5a",
+      "chars": 93,
+      "source_row_id": "1614006",
+      "source_repo_path": "spec/javascripts/config.js",
+      "source_repo_name": "kristianmandrup/beer_can",
+      "parquet_row_index": 66
+    },
+    {
+      "file": "snippet_0067.js",
+      "sha256": "2df56385e58fec7bf00ed4d3cc41ce0f564e15d8f375eaaab72f52f1accedffb",
+      "chars": 47,
+      "source_row_id": "1621042",
+      "source_repo_path": "jspm_packages/npm/jade@1.9.2.js",
+      "source_repo_name": "tzglaeser/aurelia-firebase",
+      "parquet_row_index": 67
+    },
+    {
+      "file": "snippet_0068.js",
+      "sha256": "96d3deae9f5cd2101a8b11f3da04642984e418c28249814fd245ac15992c6449",
+      "chars": 1342,
+      "source_row_id": "1621873",
+      "source_repo_path": "src/pages/Explore/Explore.js",
+      "source_repo_name": "PayasSingh/indie-threads",
+      "parquet_row_index": 68
+    },
+    {
+      "file": "snippet_0069.js",
+      "sha256": "8cb1b16c9b3561fa32fd78ab3ed5735b8689f7f72e91a974d97783755fbc95cc",
+      "chars": 491,
+      "source_row_id": "1629507",
+      "source_repo_path": "client/components/chosen-card-mini.js",
+      "source_repo_name": "k-westbrook/quikexplr",
+      "parquet_row_index": 69
+    },
+    {
+      "file": "snippet_0070.js",
+      "sha256": "355c7ef238967de6fa5fde021be0d1f8286ac16565278c3c00e9889fe5d0d99a",
+      "chars": 1397,
+      "source_row_id": "1629800",
+      "source_repo_path": "test/lib/dnsProviderTests.js",
+      "source_repo_name": "F5Networks/f5-cloud-libs",
+      "parquet_row_index": 70
+    },
+    {
+      "file": "snippet_0071.js",
+      "sha256": "f5f351ac14b804ce1182f74c85a600577c5c65158de9074ff1b9b7ab112f1f79",
+      "chars": 4140,
+      "source_row_id": "1630012",
+      "source_repo_path": "src/net/HttpListener.js",
+      "source_repo_name": "d0ntth1nc/Love2Code",
+      "parquet_row_index": 71
+    },
+    {
+      "file": "snippet_0072.js",
+      "sha256": "9f45e9befb65ba176993bc8938efdb443e468dabbe9f4ca564b28047c31e2f50",
+      "chars": 581,
+      "source_row_id": "1632778",
+      "source_repo_path": "src/jogo/Category.js",
+      "source_repo_name": "mario-gnosis/quiz",
+      "parquet_row_index": 72
+    },
+    {
+      "file": "snippet_0073.js",
+      "sha256": "b45a79d520c0db11e11938bfa4797aeb13ca0fbfe297630f51980898cb280438",
+      "chars": 3186,
+      "source_row_id": "1635360",
+      "source_repo_path": "web/js/inwords.js",
+      "source_repo_name": "sqbreza/PO-ManagementApp",
+      "parquet_row_index": 73
+    },
+    {
+      "file": "snippet_0074.js",
+      "sha256": "f30f1f92e718354450c728123c15b72c8f36e8ea7f44cb6fe30d02f4a57b8845",
+      "chars": 1066,
+      "source_row_id": "1635563",
+      "source_repo_path": "src/components/about-me.js",
+      "source_repo_name": "bajraroshan/bajraroshan.github.io",
+      "parquet_row_index": 74
+    },
+    {
+      "file": "snippet_0075.js",
+      "sha256": "5625a17daa88a396d32434e8feb8e198ba778ea70e0cc8a12389a63a518f8b20",
+      "chars": 2526,
+      "source_row_id": "1636318",
+      "source_repo_path": "karma.conf.js",
+      "source_repo_name": "ssierrao/caderon-heroes",
+      "parquet_row_index": 75
+    },
+    {
+      "file": "snippet_0076.js",
+      "sha256": "2504c8a7a35a9dbae4ff8120bf248438ca98bae53e7589ad30f8987f4f41ef41",
+      "chars": 2152,
+      "source_row_id": "1636334",
+      "source_repo_path": "src/node/table.js",
+      "source_repo_name": "NagendraDevara/letsugaoo",
+      "parquet_row_index": 76
+    },
+    {
+      "file": "snippet_0077.js",
+      "sha256": "2ea22072a0c7afbeaca32284280a207f8626efda52a5f29a4674efa38fae4250",
+      "chars": 192,
+      "source_row_id": "1637106",
+      "source_repo_path": "src/Container/axios.js",
+      "source_repo_name": "aqutor/SMangerPanel",
+      "parquet_row_index": 77
+    },
+    {
+      "file": "snippet_0078.js",
+      "sha256": "f30bcd950ca8a8b3d87c9396b060df0da38c4b5985fd8e9ddb64bcb138fc3aba",
+      "chars": 26241,
+      "source_row_id": "1637709",
+      "source_repo_path": "src/node/dbi/postgres/postgresDBI.js",
+      "source_repo_name": "markddrake/JSONExchange",
+      "parquet_row_index": 78
+    },
+    {
+      "file": "snippet_0079.js",
+      "sha256": "6e8b31c911b23e30028e1151ada7e03281fd3dea83d13e084ad77a2d241e6124",
+      "chars": 2788,
+      "source_row_id": "1637833",
+      "source_repo_path": "implementation/js/js/evy.js",
+      "source_repo_name": "twuni/evy",
+      "parquet_row_index": 79
+    },
+    {
+      "file": "snippet_0080.js",
+      "sha256": "b363a3d58b9eb67a24d30870dfc11ec238ae17fa76e101197e6179b12ac2cc17",
+      "chars": 5479,
+      "source_row_id": "1642397",
+      "source_repo_path": "src/components/Home.js",
+      "source_repo_name": "medwards81/EduGames",
+      "parquet_row_index": 80
+    },
+    {
+      "file": "snippet_0081.js",
+      "sha256": "21f77ccf252855546a44aa98dff2f749779555a17c24c51e04986765147c4c4e",
+      "chars": 719,
+      "source_row_id": "1643525",
+      "source_repo_path": "src/router/Customers/Rent.js",
+      "source_repo_name": "dyc1lyf/sassForUncle",
+      "parquet_row_index": 81
+    },
+    {
+      "file": "snippet_0082.js",
+      "sha256": "2f36166eb71da6e4d0e8012c88459aeaf014ce0aa6572eda1895b7dd1ffbefe6",
+      "chars": 651,
+      "source_row_id": "1654330",
+      "source_repo_path": "src/services/pilot_startship.services.js",
+      "source_repo_name": "Lmsilvano/teste-processoseletivo-certi-backend",
+      "parquet_row_index": 82
+    },
+    {
+      "file": "snippet_0083.js",
+      "sha256": "ba40809b57c65bbbeee843a80a4538d64468d7b1abb5d98bc04cd45379b9789d",
+      "chars": 262,
+      "source_row_id": "1657935",
+      "source_repo_path": "python/static/js/controllers.js",
+      "source_repo_name": "kinddevil/react_test",
+      "parquet_row_index": 83
+    },
+    {
+      "file": "snippet_0084.js",
+      "sha256": "b4b9327afb3e8dfccffbd8c0ae428bb6ffd2133eb7133f595ee813e7556fd8e7",
+      "chars": 2160,
+      "source_row_id": "1658666",
+      "source_repo_path": "src/libs/agentplugin.js",
+      "source_repo_name": "Chywsad8546/Art-cms",
+      "parquet_row_index": 84
+    },
+    {
+      "file": "snippet_0085.js",
+      "sha256": "872dd6b95c6d581dc7861bc5219b254454e0533a6f4aee550aa4a067ff595283",
+      "chars": 415,
+      "source_row_id": "1662499",
+      "source_repo_path": "app/src/handlers/helloword.js",
+      "source_repo_name": "bharadwajturlapati/node-serverless-lambda-boilerplate",
+      "parquet_row_index": 85
+    },
+    {
+      "file": "snippet_0086.js",
+      "sha256": "df7afe1fc4d327158c44a42ebcbf8c8b5c59b229dbe390aa997cf1273cb7e2fa",
+      "chars": 952,
+      "source_row_id": "1663122",
+      "source_repo_path": "scripts/download.js",
+      "source_repo_name": "UmInventorQualquer/tutorial-s3-basico",
+      "parquet_row_index": 86
+    },
+    {
+      "file": "snippet_0087.js",
+      "sha256": "213976fa293f33d27a556d43062fbca974f24fa54329ee1480f022fa2a283521",
+      "chars": 8612,
+      "source_row_id": "1665151",
+      "source_repo_path": "examples/backend/src/modules/Personio/test/Api.test.js",
+      "source_repo_name": "sheehantoufiq/frigg",
+      "parquet_row_index": 87
+    },
+    {
+      "file": "snippet_0088.js",
+      "sha256": "b8c251e73cd6f947ceb7a4c63e25a672636f858bcb67fd17f3d2c9ecfe4a84bf",
+      "chars": 261,
+      "source_row_id": "1673667",
+      "source_repo_path": "src/Apollo/Queries/getExternalResources.js",
+      "source_repo_name": "ianaa/Cassandra",
+      "parquet_row_index": 88
+    },
+    {
+      "file": "snippet_0089.js",
+      "sha256": "5b8de9349b1bb60219be0a85b1a4daca0e3dea000ba77b861af2aa198c943934",
+      "chars": 211,
+      "source_row_id": "1675283",
+      "source_repo_path": "src/components/Loader/styles.js",
+      "source_repo_name": "ArturW1998/TodoListAPI",
+      "parquet_row_index": 89
+    },
+    {
+      "file": "snippet_0090.js",
+      "sha256": "fb7ff1b9fa3484d8cd3652c99c2ae77371e296e1ab294ee3c85c3d249e811d2a",
+      "chars": 137,
+      "source_row_id": "1679584",
+      "source_repo_path": "JSFundamental/JSStringRegexEx/Check if String starts with a given Substring.js",
+      "source_repo_name": "ssotirova/JSCore",
+      "parquet_row_index": 90
+    },
+    {
+      "file": "snippet_0091.js",
+      "sha256": "99e4ee7c44134eb190c061d3296b9cf2d76f9986b71bc0efbaffca2e49d1b769",
+      "chars": 1332,
+      "source_row_id": "1680638",
+      "source_repo_path": "client/components/Row.js",
+      "source_repo_name": "ergdyne/Graina",
+      "parquet_row_index": 91
+    },
+    {
+      "file": "snippet_0092.js",
+      "sha256": "a5ba956b48570efef0410227fb5900de72b57f2c4bde565fb633759e0f2f8a97",
+      "chars": 1925,
+      "source_row_id": "1680749",
+      "source_repo_path": "server/schemas/typeDefs.js",
+      "source_repo_name": "clerick44/recipe-box",
+      "parquet_row_index": 92
+    },
+    {
+      "file": "snippet_0093.js",
+      "sha256": "03118ec452f7fd5219e4bab0779cbbf46aa67966bebb9d86c213877071cdb0eb",
+      "chars": 378,
+      "source_row_id": "1681457",
+      "source_repo_path": "webdev/es6+/lib/extensions/sets.js",
+      "source_repo_name": "JafarSadik/code-lab",
+      "parquet_row_index": 93
+    },
+    {
+      "file": "snippet_0094.js",
+      "sha256": "54a422b4540d7a7774bdc32648d75382dfa5facc46cc34c40ea34031244121aa",
+      "chars": 800,
+      "source_row_id": "1682821",
+      "source_repo_path": "src/utils/packageMetadata.js",
+      "source_repo_name": "rlfagan/flipper",
+      "parquet_row_index": 94
+    },
+    {
+      "file": "snippet_0095.js",
+      "sha256": "0827ac3353ea5a8d4cae0e9aa8f9d79b0df292500ec142fa50a398eb51c2d85a",
+      "chars": 1234,
+      "source_row_id": "1685910",
+      "source_repo_path": "mail/pop3.js",
+      "source_repo_name": "REONTeam/reon",
+      "parquet_row_index": 95
+    },
+    {
+      "file": "snippet_0096.js",
+      "sha256": "c883898888b2051822b8e636e21abfcb775eddd9fe159b9b700ce89a349a6308",
+      "chars": 281,
+      "source_row_id": "1686919",
+      "source_repo_path": "Code Examples/static-server/server.js",
+      "source_repo_name": "fosteman/web422-1",
+      "parquet_row_index": 96
+    },
+    {
+      "file": "snippet_0097.js",
+      "sha256": "9d4fe2b7281b08900f36af93a71f19b556ebfa5f0cc0b2a3bfb0d9525673e143",
+      "chars": 760,
+      "source_row_id": "1687985",
+      "source_repo_path": "packages/codistica-node/src/modules/file-utils/internals/exists-sync.js",
+      "source_repo_name": "codistica/codistica-js",
+      "parquet_row_index": 97
+    },
+    {
+      "file": "snippet_0098.js",
+      "sha256": "4a859b71a7377c4a462ed9a750815bd4369da777fbe8c54755aa74e7c7f5de9d",
+      "chars": 560,
+      "source_row_id": "1690872",
+      "source_repo_path": "test/serializer/optimized-functions/HavocObjects3.js",
+      "source_repo_name": "himanshiLt/prepack",
+      "parquet_row_index": 98
+    },
+    {
+      "file": "snippet_0099.js",
+      "sha256": "6feef7170bdcde629100cbc2afdcbf2287dd6b5ec8774f1372aa4283de9ea0fc",
+      "chars": 1798,
+      "source_row_id": "1691640",
+      "source_repo_path": "sapui5-sdk-1.74.0/test-resources/sap/ui/generic/app/util/ModelUtil.qunit.js",
+      "source_repo_name": "juanfelipe82193/opensap",
+      "parquet_row_index": 99
+    }
+  ]
+}

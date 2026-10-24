@@ -1,0 +1,1693 @@
+{
+  "metadata": {
+    "reference_arm": "original",
+    "metric": "acc",
+    "alpha": 0.05,
+    "bootstrap_iters": 10000,
+    "bootstrap_seed": 0,
+    "script_git_commit": "66d52fdf5442c0f6e56022c7af14c362eb9e5645",
+    "generated_at": "2026-08-27T15:13:08.708556+00:00",
+    "eval_dir": "eval_results/f15_multiblimp",
+    "intrinsic_csv": "eval_results/f15_intrinsic/matched_v2_recall.csv",
+    "intrinsic_csv_sha256": "6d0238b7dc56a8f142dd69aa510fde51f84ddd5f202a53ce83a7fe84664e4a71",
+    "n_input_files_loaded": 105,
+    "n_input_files_skipped": 12,
+    "skipped_files": [
+      {
+        "path": "eval_results/f15_multiblimp/summary_acc.json",
+        "reason": "not a per-cell record (missing keys: ['arm', 'head_wiring', 'lang', 'reinit_embeddings', 'results', 'seed', 'tag', 'truetie'])"
+      },
+      {
+        "path": "eval_results/f15_multiblimp/summary_acc_5seed.json",
+        "reason": "not a per-cell record (missing keys: ['arm', 'head_wiring', 'lang', 'reinit_embeddings', 'results', 'seed', 'tag', 'truetie'])"
+      },
+      {
+        "path": "eval_results/f15_multiblimp/summary_acc_batchfix.json",
+        "reason": "not a per-cell record (missing keys: ['arm', 'head_wiring', 'lang', 'reinit_embeddings', 'results', 'seed', 'tag', 'truetie'])"
+      },
+      {
+        "path": "eval_results/f15_multiblimp/summary_acc_directional_macrof1.json",
+        "reason": "not a per-cell record (missing keys: ['arm', 'head_wiring', 'lang', 'reinit_embeddings', 'results', 'seed', 'tag', 'truetie'])"
+      },
+      {
+        "path": "eval_results/f15_multiblimp/summary_acc_directional_microf1.json",
+        "reason": "not a per-cell record (missing keys: ['arm', 'head_wiring', 'lang', 'reinit_embeddings', 'results', 'seed', 'tag', 'truetie'])"
+      },
+      {
+        "path": "eval_results/f15_multiblimp/summary_acc_directional_prec.json",
+        "reason": "not a per-cell record (missing keys: ['arm', 'head_wiring', 'lang', 'reinit_embeddings', 'results', 'seed', 'tag', 'truetie'])"
+      },
+      {
+        "path": "eval_results/f15_multiblimp/summary_acc_directional_recall.json",
+        "reason": "not a per-cell record (missing keys: ['arm', 'head_wiring', 'lang', 'reinit_embeddings', 'results', 'seed', 'tag', 'truetie'])"
+      },
+      {
+        "path": "eval_results/f15_multiblimp/summary_acc_full.json",
+        "reason": "not a per-cell record (missing keys: ['arm', 'head_wiring', 'lang', 'reinit_embeddings', 'results', 'seed', 'tag', 'truetie'])"
+      },
+      {
+        "path": "eval_results/f15_multiblimp/summary_acc_full2.json",
+        "reason": "not a per-cell record (missing keys: ['arm', 'head_wiring', 'lang', 'reinit_embeddings', 'results', 'seed', 'tag', 'truetie'])"
+      },
+      {
+        "path": "eval_results/f15_multiblimp/summary_acc_llama_wave2.json",
+        "reason": "not a per-cell record (missing keys: ['arm', 'head_wiring', 'lang', 'reinit_embeddings', 'results', 'seed', 'tag', 'truetie'])"
+      },
+      {
+        "path": "eval_results/f15_multiblimp/summary_acc_vs_placebo.json",
+        "reason": "not a per-cell record (missing keys: ['arm', 'head_wiring', 'lang', 'reinit_embeddings', 'results', 'seed', 'tag', 'truetie'])"
+      },
+      {
+        "path": "eval_results/f15_multiblimp/summary_acc_vs_placebo_batchfix.json",
+        "reason": "not a per-cell record (missing keys: ['arm', 'head_wiring', 'lang', 'reinit_embeddings', 'results', 'seed', 'tag', 'truetie'])"
+      }
+    ]
+  },
+  "cells": {
+    "llama3_2-1b[truetie+head-training]|arb|langspec": {
+      "family": "llama3_2-1b[truetie+head-training]",
+      "lang": "arb",
+      "arm": "langspec",
+      "mean": 0.9078189300411523,
+      "sd": 0.0028511124404425577,
+      "n_seeds": 3,
+      "seeds": [
+        42,
+        43,
+        44
+      ],
+      "n_files": 3,
+      "files": [
+        "eval_results/f15_multiblimp/llama3_2-1b_arb_langspec_truetie_s42__headtraining.json",
+        "eval_results/f15_multiblimp/llama3_2-1b_arb_langspec_truetie_s43__headtraining.json",
+        "eval_results/f15_multiblimp/llama3_2-1b_arb_langspec_truetie_s44__headtraining.json"
+      ],
+      "n_samples_effective": {
+        "42": 1215,
+        "43": 1215,
+        "44": 1215
+      }
+    },
+    "llama3_2-1b[truetie+head-training]|arb|original": {
+      "family": "llama3_2-1b[truetie+head-training]",
+      "lang": "arb",
+      "arm": "original",
+      "mean": 0.9072702331961592,
+      "sd": 0.004223540279380183,
+      "n_seeds": 3,
+      "seeds": [
+        42,
+        43,
+        44
+      ],
+      "n_files": 3,
+      "files": [
+        "eval_results/f15_multiblimp/llama3_2-1b_arb_original_truetie_s42__headtraining.json",
+        "eval_results/f15_multiblimp/llama3_2-1b_arb_original_truetie_s43__headtraining.json",
+        "eval_results/f15_multiblimp/llama3_2-1b_arb_original_truetie_s44__headtraining.json"
+      ],
+      "n_samples_effective": {
+        "42": 1215,
+        "43": 1215,
+        "44": 1215
+      }
+    },
+    "llama3_2-1b[truetie+head-training]|hin|langspec": {
+      "family": "llama3_2-1b[truetie+head-training]",
+      "lang": "hin",
+      "arm": "langspec",
+      "mean": 0.9716655148583276,
+      "sd": 0.0038477984539253725,
+      "n_seeds": 3,
+      "seeds": [
+        42,
+        43,
+        44
+      ],
+      "n_files": 3,
+      "files": [
+        "eval_results/f15_multiblimp/llama3_2-1b_hin_langspec_truetie_s42__headtraining.json",
+        "eval_results/f15_multiblimp/llama3_2-1b_hin_langspec_truetie_s43__headtraining.json",
+        "eval_results/f15_multiblimp/llama3_2-1b_hin_langspec_truetie_s44__headtraining.json"
+      ],
+      "n_samples_effective": {
+        "42": 1447,
+        "43": 1447,
+        "44": 1447
+      }
+    },
+    "llama3_2-1b[truetie+head-training]|hin|original": {
+      "family": "llama3_2-1b[truetie+head-training]",
+      "lang": "hin",
+      "arm": "original",
+      "mean": 0.9718958765261462,
+      "sd": 0.00523281119170723,
+      "n_seeds": 3,
+      "seeds": [
+        42,
+        43,
+        44
+      ],
+      "n_files": 3,
+      "files": [
+        "eval_results/f15_multiblimp/llama3_2-1b_hin_original_truetie_s42__headtraining.json",
+        "eval_results/f15_multiblimp/llama3_2-1b_hin_original_truetie_s43__headtraining.json",
+        "eval_results/f15_multiblimp/llama3_2-1b_hin_original_truetie_s44__headtraining.json"
+      ],
+      "n_samples_effective": {
+        "42": 1447,
+        "43": 1447,
+        "44": 1447
+      }
+    },
+    "llama3_2-1b[truetie+head-training]|hun|langspec": {
+      "family": "llama3_2-1b[truetie+head-training]",
+      "lang": "hun",
+      "arm": "langspec",
+      "mean": 0.9462721893491125,
+      "sd": 0.0029703906267481983,
+      "n_seeds": 5,
+      "seeds": [
+        42,
+        43,
+        44,
+        45,
+        46
+      ],
+      "n_files": 5,
+      "files": [
+        "eval_results/f15_multiblimp/llama3_2-1b_hun_langspec_truetie_s42__headtraining.json",
+        "eval_results/f15_multiblimp/llama3_2-1b_hun_langspec_truetie_s43__headtraining.json",
+        "eval_results/f15_multiblimp/llama3_2-1b_hun_langspec_truetie_s44__headtraining.json",
+        "eval_results/f15_multiblimp/llama3_2-1b_hun_langspec_truetie_s45__headtraining.json",
+        "eval_results/f15_multiblimp/llama3_2-1b_hun_langspec_truetie_s46__headtraining.json"
+      ],
+      "n_samples_effective": {
+        "42": 845,
+        "43": 845,
+        "44": 845,
+        "45": 845,
+        "46": 845
+      }
+    },
+    "llama3_2-1b[truetie+head-training]|hun|original": {
+      "family": "llama3_2-1b[truetie+head-training]",
+      "lang": "hun",
+      "arm": "original",
+      "mean": 0.9382248520710059,
+      "sd": 0.01053187950830156,
+      "n_seeds": 5,
+      "seeds": [
+        42,
+        43,
+        44,
+        45,
+        46
+      ],
+      "n_files": 5,
+      "files": [
+        "eval_results/f15_multiblimp/llama3_2-1b_hun_original_truetie_s42__headtraining.json",
+        "eval_results/f15_multiblimp/llama3_2-1b_hun_original_truetie_s43__headtraining.json",
+        "eval_results/f15_multiblimp/llama3_2-1b_hun_original_truetie_s44__headtraining.json",
+        "eval_results/f15_multiblimp/llama3_2-1b_hun_original_truetie_s45__headtraining.json",
+        "eval_results/f15_multiblimp/llama3_2-1b_hun_original_truetie_s46__headtraining.json"
+      ],
+      "n_samples_effective": {
+        "42": 845,
+        "43": 845,
+        "44": 845,
+        "45": 845,
+        "46": 845
+      }
+    },
+    "llama3_2-1b[truetie+head-training]|tur|langspec": {
+      "family": "llama3_2-1b[truetie+head-training]",
+      "lang": "tur",
+      "arm": "langspec",
+      "mean": 0.8587830080367395,
+      "sd": 0.004139553703173333,
+      "n_seeds": 3,
+      "seeds": [
+        42,
+        43,
+        44
+      ],
+      "n_files": 3,
+      "files": [
+        "eval_results/f15_multiblimp/llama3_2-1b_tur_langspec_truetie_s42__headtraining.json",
+        "eval_results/f15_multiblimp/llama3_2-1b_tur_langspec_truetie_s43__headtraining.json",
+        "eval_results/f15_multiblimp/llama3_2-1b_tur_langspec_truetie_s44__headtraining.json"
+      ],
+      "n_samples_effective": {
+        "42": 1742,
+        "43": 1742,
+        "44": 1742
+      }
+    },
+    "llama3_2-1b[truetie+head-training]|tur|original": {
+      "family": "llama3_2-1b[truetie+head-training]",
+      "lang": "tur",
+      "arm": "original",
+      "mean": 0.869307309605817,
+      "sd": 0.006297161374628486,
+      "n_seeds": 3,
+      "seeds": [
+        42,
+        43,
+        44
+      ],
+      "n_files": 3,
+      "files": [
+        "eval_results/f15_multiblimp/llama3_2-1b_tur_original_truetie_s42__headtraining.json",
+        "eval_results/f15_multiblimp/llama3_2-1b_tur_original_truetie_s43__headtraining.json",
+        "eval_results/f15_multiblimp/llama3_2-1b_tur_original_truetie_s44__headtraining.json"
+      ],
+      "n_samples_effective": {
+        "42": 1742,
+        "43": 1742,
+        "44": 1742
+      }
+    },
+    "qwen2_5-0_5b[truetie+head-training]|arb|base": {
+      "family": "qwen2_5-0_5b[truetie+head-training]",
+      "lang": "arb",
+      "arm": "base",
+      "mean": 0.9300411522633745,
+      "sd": 0.003292181069958877,
+      "n_seeds": 3,
+      "seeds": [
+        42,
+        43,
+        44
+      ],
+      "n_files": 3,
+      "files": [
+        "eval_results/f15_multiblimp/qwen2_5-0_5b_arb_base_truetie_s42__headtraining.json",
+        "eval_results/f15_multiblimp/qwen2_5-0_5b_arb_base_truetie_s43__headtraining.json",
+        "eval_results/f15_multiblimp/qwen2_5-0_5b_arb_base_truetie_s44__headtraining.json"
+      ],
+      "n_samples_effective": {
+        "42": 1215,
+        "43": 1215,
+        "44": 1215
+      }
+    },
+    "qwen2_5-0_5b[truetie+head-training]|arb|langspec": {
+      "family": "qwen2_5-0_5b[truetie+head-training]",
+      "lang": "arb",
+      "arm": "langspec",
+      "mean": 0.9319615912208504,
+      "sd": 0.0026457203733862822,
+      "n_seeds": 3,
+      "seeds": [
+        42,
+        43,
+        44
+      ],
+      "n_files": 3,
+      "files": [
+        "eval_results/f15_multiblimp/qwen2_5-0_5b_arb_langspec_truetie_s42__headtraining.json",
+        "eval_results/f15_multiblimp/qwen2_5-0_5b_arb_langspec_truetie_s43__headtraining.json",
+        "eval_results/f15_multiblimp/qwen2_5-0_5b_arb_langspec_truetie_s44__headtraining.json"
+      ],
+      "n_samples_effective": {
+        "42": 1215,
+        "43": 1215,
+        "44": 1215
+      }
+    },
+    "qwen2_5-0_5b[truetie+head-training]|arb|original": {
+      "family": "qwen2_5-0_5b[truetie+head-training]",
+      "lang": "arb",
+      "arm": "original",
+      "mean": 0.9248285322359396,
+      "sd": 0.006286112064411323,
+      "n_seeds": 3,
+      "seeds": [
+        42,
+        43,
+        44
+      ],
+      "n_files": 3,
+      "files": [
+        "eval_results/f15_multiblimp/qwen2_5-0_5b_arb_original_truetie_s42__headtraining.json",
+        "eval_results/f15_multiblimp/qwen2_5-0_5b_arb_original_truetie_s43__headtraining.json",
+        "eval_results/f15_multiblimp/qwen2_5-0_5b_arb_original_truetie_s44__headtraining.json"
+      ],
+      "n_samples_effective": {
+        "42": 1215,
+        "43": 1215,
+        "44": 1215
+      }
+    },
+    "qwen2_5-0_5b[truetie+head-training]|arb|placebo": {
+      "family": "qwen2_5-0_5b[truetie+head-training]",
+      "lang": "arb",
+      "arm": "placebo",
+      "mean": 0.9212620027434841,
+      "sd": 0.005028889651529027,
+      "n_seeds": 3,
+      "seeds": [
+        42,
+        43,
+        44
+      ],
+      "n_files": 3,
+      "files": [
+        "eval_results/f15_multiblimp/qwen2_5-0_5b_arb_placebo_truetie_s42__headtraining.json",
+        "eval_results/f15_multiblimp/qwen2_5-0_5b_arb_placebo_truetie_s43__headtraining.json",
+        "eval_results/f15_multiblimp/qwen2_5-0_5b_arb_placebo_truetie_s44__headtraining.json"
+      ],
+      "n_samples_effective": {
+        "42": 1215,
+        "43": 1215,
+        "44": 1215
+      }
+    },
+    "qwen2_5-0_5b[truetie+head-training]|arb|vocab_extend": {
+      "family": "qwen2_5-0_5b[truetie+head-training]",
+      "lang": "arb",
+      "arm": "vocab_extend",
+      "mean": 0.9262002743484224,
+      "sd": 0.004822605166322905,
+      "n_seeds": 3,
+      "seeds": [
+        42,
+        43,
+        44
+      ],
+      "n_files": 3,
+      "files": [
+        "eval_results/f15_multiblimp/qwen2_5-0_5b_arb_vocab_extend_truetie_s42__headtraining.json",
+        "eval_results/f15_multiblimp/qwen2_5-0_5b_arb_vocab_extend_truetie_s43__headtraining.json",
+        "eval_results/f15_multiblimp/qwen2_5-0_5b_arb_vocab_extend_truetie_s44__headtraining.json"
+      ],
+      "n_samples_effective": {
+        "42": 1215,
+        "43": 1215,
+        "44": 1215
+      }
+    },
+    "qwen2_5-0_5b[truetie+head-training]|fin|base": {
+      "family": "qwen2_5-0_5b[truetie+head-training]",
+      "lang": "fin",
+      "arm": "base",
+      "mean": 0.869390402075227,
+      "sd": 0.0019584525123918866,
+      "n_seeds": 3,
+      "seeds": [
+        42,
+        43,
+        44
+      ],
+      "n_files": 3,
+      "files": [
+        "eval_results/f15_multiblimp/qwen2_5-0_5b_fin_base_truetie_s42__headtraining.json",
+        "eval_results/f15_multiblimp/qwen2_5-0_5b_fin_base_truetie_s43__headtraining.json",
+        "eval_results/f15_multiblimp/qwen2_5-0_5b_fin_base_truetie_s44__headtraining.json"
+      ],
+      "n_samples_effective": {
+        "42": 2570,
+        "43": 2570,
+        "44": 2570
+      }
+    },
+    "qwen2_5-0_5b[truetie+head-training]|fin|langspec": {
+      "family": "qwen2_5-0_5b[truetie+head-training]",
+      "lang": "fin",
+      "arm": "langspec",
+      "mean": 0.8712062256809339,
+      "sd": 0.003948985044782951,
+      "n_seeds": 3,
+      "seeds": [
+        42,
+        43,
+        44
+      ],
+      "n_files": 3,
+      "files": [
+        "eval_results/f15_multiblimp/qwen2_5-0_5b_fin_langspec_truetie_s42__headtraining.json",
+        "eval_results/f15_multiblimp/qwen2_5-0_5b_fin_langspec_truetie_s43__headtraining.json",
+        "eval_results/f15_multiblimp/qwen2_5-0_5b_fin_langspec_truetie_s44__headtraining.json"
+      ],
+      "n_samples_effective": {
+        "42": 2570,
+        "43": 2570,
+        "44": 2570
+      }
+    },
+    "qwen2_5-0_5b[truetie+head-training]|fin|original": {
+      "family": "qwen2_5-0_5b[truetie+head-training]",
+      "lang": "fin",
+      "arm": "original",
+      "mean": 0.8734111543450065,
+      "sd": 0.006156391328822712,
+      "n_seeds": 3,
+      "seeds": [
+        42,
+        43,
+        44
+      ],
+      "n_files": 3,
+      "files": [
+        "eval_results/f15_multiblimp/qwen2_5-0_5b_fin_original_truetie_s42__headtraining.json",
+        "eval_results/f15_multiblimp/qwen2_5-0_5b_fin_original_truetie_s43__headtraining.json",
+        "eval_results/f15_multiblimp/qwen2_5-0_5b_fin_original_truetie_s44__headtraining.json"
+      ],
+      "n_samples_effective": {
+        "42": 2570,
+        "43": 2570,
+        "44": 2570
+      }
+    },
+    "qwen2_5-0_5b[truetie+head-training]|fin|vocab_extend": {
+      "family": "qwen2_5-0_5b[truetie+head-training]",
+      "lang": "fin",
+      "arm": "vocab_extend",
+      "mean": 0.91284046692607,
+      "sd": 0.0010294752183130666,
+      "n_seeds": 3,
+      "seeds": [
+        42,
+        43,
+        44
+      ],
+      "n_files": 3,
+      "files": [
+        "eval_results/f15_multiblimp/qwen2_5-0_5b_fin_vocab_extend_truetie_s42__headtraining.json",
+        "eval_results/f15_multiblimp/qwen2_5-0_5b_fin_vocab_extend_truetie_s43__headtraining.json",
+        "eval_results/f15_multiblimp/qwen2_5-0_5b_fin_vocab_extend_truetie_s44__headtraining.json"
+      ],
+      "n_samples_effective": {
+        "42": 2570,
+        "43": 2570,
+        "44": 2570
+      }
+    },
+    "qwen2_5-0_5b[truetie+head-training]|hin|base": {
+      "family": "qwen2_5-0_5b[truetie+head-training]",
+      "lang": "hin",
+      "arm": "base",
+      "mean": 0.977654918221608,
+      "sd": 0.005094066894147871,
+      "n_seeds": 3,
+      "seeds": [
+        42,
+        43,
+        44
+      ],
+      "n_files": 3,
+      "files": [
+        "eval_results/f15_multiblimp/qwen2_5-0_5b_hin_base_truetie_s42__headtraining.json",
+        "eval_results/f15_multiblimp/qwen2_5-0_5b_hin_base_truetie_s43__headtraining.json",
+        "eval_results/f15_multiblimp/qwen2_5-0_5b_hin_base_truetie_s44__headtraining.json"
+      ],
+      "n_samples_effective": {
+        "42": 1447,
+        "43": 1447,
+        "44": 1447
+      }
+    },
+    "qwen2_5-0_5b[truetie+head-training]|hin|langspec": {
+      "family": "qwen2_5-0_5b[truetie+head-training]",
+      "lang": "hin",
+      "arm": "langspec",
+      "mean": 0.9790370882285188,
+      "sd": 0.002877216308868179,
+      "n_seeds": 3,
+      "seeds": [
+        42,
+        43,
+        44
+      ],
+      "n_files": 3,
+      "files": [
+        "eval_results/f15_multiblimp/qwen2_5-0_5b_hin_langspec_truetie_s42__headtraining.json",
+        "eval_results/f15_multiblimp/qwen2_5-0_5b_hin_langspec_truetie_s43__headtraining.json",
+        "eval_results/f15_multiblimp/qwen2_5-0_5b_hin_langspec_truetie_s44__headtraining.json"
+      ],
+      "n_samples_effective": {
+        "42": 1447,
+        "43": 1447,
+        "44": 1447
+      }
+    },
+    "qwen2_5-0_5b[truetie+head-training]|hin|original": {
+      "family": "qwen2_5-0_5b[truetie+head-training]",
+      "lang": "hin",
+      "arm": "original",
+      "mean": 0.9781156415572448,
+      "sd": 0.0014386081544341118,
+      "n_seeds": 3,
+      "seeds": [
+        42,
+        43,
+        44
+      ],
+      "n_files": 3,
+      "files": [
+        "eval_results/f15_multiblimp/qwen2_5-0_5b_hin_original_truetie_s42__headtraining.json",
+        "eval_results/f15_multiblimp/qwen2_5-0_5b_hin_original_truetie_s43__headtraining.json",
+        "eval_results/f15_multiblimp/qwen2_5-0_5b_hin_original_truetie_s44__headtraining.json"
+      ],
+      "n_samples_effective": {
+        "42": 1447,
+        "43": 1447,
+        "44": 1447
+      }
+    },
+    "qwen2_5-0_5b[truetie+head-training]|hin|placebo": {
+      "family": "qwen2_5-0_5b[truetie+head-training]",
+      "lang": "hin",
+      "arm": "placebo",
+      "mean": 0.9790370882285188,
+      "sd": 0.0022215274731612338,
+      "n_seeds": 3,
+      "seeds": [
+        42,
+        43,
+        44
+      ],
+      "n_files": 3,
+      "files": [
+        "eval_results/f15_multiblimp/qwen2_5-0_5b_hin_placebo_truetie_s42__headtraining.json",
+        "eval_results/f15_multiblimp/qwen2_5-0_5b_hin_placebo_truetie_s43__headtraining.json",
+        "eval_results/f15_multiblimp/qwen2_5-0_5b_hin_placebo_truetie_s44__headtraining.json"
+      ],
+      "n_samples_effective": {
+        "42": 1447,
+        "43": 1447,
+        "44": 1447
+      }
+    },
+    "qwen2_5-0_5b[truetie+head-training]|hin|vocab_extend": {
+      "family": "qwen2_5-0_5b[truetie+head-training]",
+      "lang": "hin",
+      "arm": "vocab_extend",
+      "mean": 0.9751209398756048,
+      "sd": 0.0006910850034554383,
+      "n_seeds": 3,
+      "seeds": [
+        42,
+        43,
+        44
+      ],
+      "n_files": 3,
+      "files": [
+        "eval_results/f15_multiblimp/qwen2_5-0_5b_hin_vocab_extend_truetie_s42__headtraining.json",
+        "eval_results/f15_multiblimp/qwen2_5-0_5b_hin_vocab_extend_truetie_s43__headtraining.json",
+        "eval_results/f15_multiblimp/qwen2_5-0_5b_hin_vocab_extend_truetie_s44__headtraining.json"
+      ],
+      "n_samples_effective": {
+        "42": 1447,
+        "43": 1447,
+        "44": 1447
+      }
+    },
+    "qwen2_5-0_5b[truetie+head-training]|hun|base": {
+      "family": "qwen2_5-0_5b[truetie+head-training]",
+      "lang": "hun",
+      "arm": "base",
+      "mean": 0.9538461538461539,
+      "sd": 0.008284023668639062,
+      "n_seeds": 3,
+      "seeds": [
+        42,
+        43,
+        44
+      ],
+      "n_files": 3,
+      "files": [
+        "eval_results/f15_multiblimp/qwen2_5-0_5b_hun_base_truetie_s42__headtraining.json",
+        "eval_results/f15_multiblimp/qwen2_5-0_5b_hun_base_truetie_s43__headtraining.json",
+        "eval_results/f15_multiblimp/qwen2_5-0_5b_hun_base_truetie_s44__headtraining.json"
+      ],
+      "n_samples_effective": {
+        "42": 845,
+        "43": 845,
+        "44": 845
+      }
+    },
+    "qwen2_5-0_5b[truetie+head-training]|hun|langspec": {
+      "family": "qwen2_5-0_5b[truetie+head-training]",
+      "lang": "hun",
+      "arm": "langspec",
+      "mean": 0.9642603550295858,
+      "sd": 0.00227637681203209,
+      "n_seeds": 5,
+      "seeds": [
+        42,
+        43,
+        44,
+        45,
+        46
+      ],
+      "n_files": 5,
+      "files": [
+        "eval_results/f15_multiblimp/qwen2_5-0_5b_hun_langspec_truetie_s42__headtraining.json",
+        "eval_results/f15_multiblimp/qwen2_5-0_5b_hun_langspec_truetie_s43__headtraining.json",
+        "eval_results/f15_multiblimp/qwen2_5-0_5b_hun_langspec_truetie_s44__headtraining.json",
+        "eval_results/f15_multiblimp/qwen2_5-0_5b_hun_langspec_truetie_s45__headtraining.json",
+        "eval_results/f15_multiblimp/qwen2_5-0_5b_hun_langspec_truetie_s46__headtraining.json"
+      ],
+      "n_samples_effective": {
+        "42": 845,
+        "43": 845,
+        "44": 845,
+        "45": 845,
+        "46": 845
+      }
+    },
+    "qwen2_5-0_5b[truetie+head-training]|hun|original": {
+      "family": "qwen2_5-0_5b[truetie+head-training]",
+      "lang": "hun",
+      "arm": "original",
+      "mean": 0.9526627218934911,
+      "sd": 0.003550295857988143,
+      "n_seeds": 5,
+      "seeds": [
+        42,
+        43,
+        44,
+        45,
+        46
+      ],
+      "n_files": 5,
+      "files": [
+        "eval_results/f15_multiblimp/qwen2_5-0_5b_hun_original_truetie_s42__headtraining.json",
+        "eval_results/f15_multiblimp/qwen2_5-0_5b_hun_original_truetie_s43__headtraining.json",
+        "eval_results/f15_multiblimp/qwen2_5-0_5b_hun_original_truetie_s44__headtraining.json",
+        "eval_results/f15_multiblimp/qwen2_5-0_5b_hun_original_truetie_s45__headtraining.json",
+        "eval_results/f15_multiblimp/qwen2_5-0_5b_hun_original_truetie_s46__headtraining.json"
+      ],
+      "n_samples_effective": {
+        "42": 845,
+        "43": 845,
+        "44": 845,
+        "45": 845,
+        "46": 845
+      }
+    },
+    "qwen2_5-0_5b[truetie+head-training]|hun|placebo": {
+      "family": "qwen2_5-0_5b[truetie+head-training]",
+      "lang": "hun",
+      "arm": "placebo",
+      "mean": 0.9564497041420118,
+      "sd": 0.005384290256131267,
+      "n_seeds": 5,
+      "seeds": [
+        42,
+        43,
+        44,
+        45,
+        46
+      ],
+      "n_files": 5,
+      "files": [
+        "eval_results/f15_multiblimp/qwen2_5-0_5b_hun_placebo_truetie_s42__headtraining.json",
+        "eval_results/f15_multiblimp/qwen2_5-0_5b_hun_placebo_truetie_s43__headtraining.json",
+        "eval_results/f15_multiblimp/qwen2_5-0_5b_hun_placebo_truetie_s44__headtraining.json",
+        "eval_results/f15_multiblimp/qwen2_5-0_5b_hun_placebo_truetie_s45__headtraining.json",
+        "eval_results/f15_multiblimp/qwen2_5-0_5b_hun_placebo_truetie_s46__headtraining.json"
+      ],
+      "n_samples_effective": {
+        "42": 845,
+        "43": 845,
+        "44": 845,
+        "45": 845,
+        "46": 845
+      }
+    },
+    "qwen2_5-0_5b[truetie+head-training]|hun|vocab_extend": {
+      "family": "qwen2_5-0_5b[truetie+head-training]",
+      "lang": "hun",
+      "arm": "vocab_extend",
+      "mean": 0.9611834319526628,
+      "sd": 0.003871107037584853,
+      "n_seeds": 5,
+      "seeds": [
+        42,
+        43,
+        44,
+        45,
+        46
+      ],
+      "n_files": 5,
+      "files": [
+        "eval_results/f15_multiblimp/qwen2_5-0_5b_hun_vocab_extend_truetie_s42__headtraining.json",
+        "eval_results/f15_multiblimp/qwen2_5-0_5b_hun_vocab_extend_truetie_s43__headtraining.json",
+        "eval_results/f15_multiblimp/qwen2_5-0_5b_hun_vocab_extend_truetie_s44__headtraining.json",
+        "eval_results/f15_multiblimp/qwen2_5-0_5b_hun_vocab_extend_truetie_s45__headtraining.json",
+        "eval_results/f15_multiblimp/qwen2_5-0_5b_hun_vocab_extend_truetie_s46__headtraining.json"
+      ],
+      "n_samples_effective": {
+        "42": 845,
+        "43": 845,
+        "44": 845,
+        "45": 845,
+        "46": 845
+      }
+    },
+    "qwen2_5-0_5b[truetie+head-training]|tur|base": {
+      "family": "qwen2_5-0_5b[truetie+head-training]",
+      "lang": "tur",
+      "arm": "base",
+      "mean": 0.8304630692690393,
+      "sd": 0.0029458102407846605,
+      "n_seeds": 3,
+      "seeds": [
+        42,
+        43,
+        44
+      ],
+      "n_files": 3,
+      "files": [
+        "eval_results/f15_multiblimp/qwen2_5-0_5b_tur_base_truetie_s42__headtraining.json",
+        "eval_results/f15_multiblimp/qwen2_5-0_5b_tur_base_truetie_s43__headtraining.json",
+        "eval_results/f15_multiblimp/qwen2_5-0_5b_tur_base_truetie_s44__headtraining.json"
+      ],
+      "n_samples_effective": {
+        "42": 1742,
+        "43": 1742,
+        "44": 1742
+      }
+    },
+    "qwen2_5-0_5b[truetie+head-training]|tur|langspec": {
+      "family": "qwen2_5-0_5b[truetie+head-training]",
+      "lang": "tur",
+      "arm": "langspec",
+      "mean": 0.8308457711442786,
+      "sd": 0.010836276413905667,
+      "n_seeds": 3,
+      "seeds": [
+        42,
+        43,
+        44
+      ],
+      "n_files": 3,
+      "files": [
+        "eval_results/f15_multiblimp/qwen2_5-0_5b_tur_langspec_truetie_s42__headtraining.json",
+        "eval_results/f15_multiblimp/qwen2_5-0_5b_tur_langspec_truetie_s43__headtraining.json",
+        "eval_results/f15_multiblimp/qwen2_5-0_5b_tur_langspec_truetie_s44__headtraining.json"
+      ],
+      "n_samples_effective": {
+        "42": 1742,
+        "43": 1742,
+        "44": 1742
+      }
+    },
+    "qwen2_5-0_5b[truetie+head-training]|tur|original": {
+      "family": "qwen2_5-0_5b[truetie+head-training]",
+      "lang": "tur",
+      "arm": "original",
+      "mean": 0.838691159586682,
+      "sd": 0.0034918269404697155,
+      "n_seeds": 3,
+      "seeds": [
+        42,
+        43,
+        44
+      ],
+      "n_files": 3,
+      "files": [
+        "eval_results/f15_multiblimp/qwen2_5-0_5b_tur_original_truetie_s42__headtraining.json",
+        "eval_results/f15_multiblimp/qwen2_5-0_5b_tur_original_truetie_s43__headtraining.json",
+        "eval_results/f15_multiblimp/qwen2_5-0_5b_tur_original_truetie_s44__headtraining.json"
+      ],
+      "n_samples_effective": {
+        "42": 1742,
+        "43": 1742,
+        "44": 1742
+      }
+    },
+    "qwen2_5-0_5b[truetie+head-training]|tur|vocab_extend": {
+      "family": "qwen2_5-0_5b[truetie+head-training]",
+      "lang": "tur",
+      "arm": "vocab_extend",
+      "mean": 0.8603138155376961,
+      "sd": 0.005750087715773716,
+      "n_seeds": 3,
+      "seeds": [
+        42,
+        43,
+        44
+      ],
+      "n_files": 3,
+      "files": [
+        "eval_results/f15_multiblimp/qwen2_5-0_5b_tur_vocab_extend_truetie_s42__headtraining.json",
+        "eval_results/f15_multiblimp/qwen2_5-0_5b_tur_vocab_extend_truetie_s43__headtraining.json",
+        "eval_results/f15_multiblimp/qwen2_5-0_5b_tur_vocab_extend_truetie_s44__headtraining.json"
+      ],
+      "n_samples_effective": {
+        "42": 1742,
+        "43": 1742,
+        "44": 1742
+      }
+    }
+  },
+  "contrasts": {
+    "llama3_2-1b[truetie+head-training]|arb|langspec_vs_original": {
+      "family": "llama3_2-1b[truetie+head-training]",
+      "lang": "arb",
+      "arm": "langspec",
+      "reference_arm": "original",
+      "mean_delta": 0.0005486968449931462,
+      "sd_delta": 0.006601486647745389,
+      "n_seeds_matched": 3,
+      "matched_seeds": [
+        42,
+        43,
+        44
+      ],
+      "ci_low": -0.010432098765432093,
+      "ci_high": 0.011796982167352537,
+      "bootstrap_p": 0.9226,
+      "ci_method": "item+seed percentile bootstrap",
+      "n_files": 6,
+      "files": {
+        "reference": [
+          "eval_results/f15_multiblimp/llama3_2-1b_arb_original_truetie_s42__headtraining.json",
+          "eval_results/f15_multiblimp/llama3_2-1b_arb_original_truetie_s43__headtraining.json",
+          "eval_results/f15_multiblimp/llama3_2-1b_arb_original_truetie_s44__headtraining.json"
+        ],
+        "arm": [
+          "eval_results/f15_multiblimp/llama3_2-1b_arb_langspec_truetie_s42__headtraining.json",
+          "eval_results/f15_multiblimp/llama3_2-1b_arb_langspec_truetie_s43__headtraining.json",
+          "eval_results/f15_multiblimp/llama3_2-1b_arb_langspec_truetie_s44__headtraining.json"
+        ]
+      },
+      "holm_p": 1.0,
+      "significant_raw": false,
+      "significant_holm": false
+    },
+    "llama3_2-1b[truetie+head-training]|hin|langspec_vs_original": {
+      "family": "llama3_2-1b[truetie+head-training]",
+      "lang": "hin",
+      "arm": "langspec",
+      "reference_arm": "original",
+      "mean_delta": -0.00023036166781849796,
+      "sd_delta": 0.003806199410702209,
+      "n_seeds_matched": 3,
+      "matched_seeds": [
+        42,
+        43,
+        44
+      ],
+      "ci_low": -0.0048375950241879755,
+      "ci_high": 0.0048375950241879755,
+      "bootstrap_p": 0.9068,
+      "ci_method": "item+seed percentile bootstrap",
+      "n_files": 6,
+      "files": {
+        "reference": [
+          "eval_results/f15_multiblimp/llama3_2-1b_hin_original_truetie_s42__headtraining.json",
+          "eval_results/f15_multiblimp/llama3_2-1b_hin_original_truetie_s43__headtraining.json",
+          "eval_results/f15_multiblimp/llama3_2-1b_hin_original_truetie_s44__headtraining.json"
+        ],
+        "arm": [
+          "eval_results/f15_multiblimp/llama3_2-1b_hin_langspec_truetie_s42__headtraining.json",
+          "eval_results/f15_multiblimp/llama3_2-1b_hin_langspec_truetie_s43__headtraining.json",
+          "eval_results/f15_multiblimp/llama3_2-1b_hin_langspec_truetie_s44__headtraining.json"
+        ]
+      },
+      "holm_p": 1.0,
+      "significant_raw": false,
+      "significant_holm": false
+    },
+    "llama3_2-1b[truetie+head-training]|hun|langspec_vs_original": {
+      "family": "llama3_2-1b[truetie+head-training]",
+      "lang": "hun",
+      "arm": "langspec",
+      "reference_arm": "original",
+      "mean_delta": 0.008047337278106515,
+      "sd_delta": 0.01049858230353464,
+      "n_seeds_matched": 5,
+      "matched_seeds": [
+        42,
+        43,
+        44,
+        45,
+        46
+      ],
+      "ci_low": -0.003550295857988166,
+      "ci_high": 0.02011834319526627,
+      "bootstrap_p": 0.1868,
+      "ci_method": "item+seed percentile bootstrap",
+      "n_files": 10,
+      "files": {
+        "reference": [
+          "eval_results/f15_multiblimp/llama3_2-1b_hun_original_truetie_s42__headtraining.json",
+          "eval_results/f15_multiblimp/llama3_2-1b_hun_original_truetie_s43__headtraining.json",
+          "eval_results/f15_multiblimp/llama3_2-1b_hun_original_truetie_s44__headtraining.json",
+          "eval_results/f15_multiblimp/llama3_2-1b_hun_original_truetie_s45__headtraining.json",
+          "eval_results/f15_multiblimp/llama3_2-1b_hun_original_truetie_s46__headtraining.json"
+        ],
+        "arm": [
+          "eval_results/f15_multiblimp/llama3_2-1b_hun_langspec_truetie_s42__headtraining.json",
+          "eval_results/f15_multiblimp/llama3_2-1b_hun_langspec_truetie_s43__headtraining.json",
+          "eval_results/f15_multiblimp/llama3_2-1b_hun_langspec_truetie_s44__headtraining.json",
+          "eval_results/f15_multiblimp/llama3_2-1b_hun_langspec_truetie_s45__headtraining.json",
+          "eval_results/f15_multiblimp/llama3_2-1b_hun_langspec_truetie_s46__headtraining.json"
+        ]
+      },
+      "holm_p": 0.5604,
+      "significant_raw": false,
+      "significant_holm": false
+    },
+    "llama3_2-1b[truetie+head-training]|tur|langspec_vs_original": {
+      "family": "llama3_2-1b[truetie+head-training]",
+      "lang": "tur",
+      "arm": "langspec",
+      "reference_arm": "original",
+      "mean_delta": -0.010524301569077651,
+      "sd_delta": 0.005333853756129481,
+      "n_seeds_matched": 3,
+      "matched_seeds": [
+        42,
+        43,
+        44
+      ],
+      "ci_low": -0.02066590126291619,
+      "ci_high": -0.00038270187523918906,
+      "bootstrap_p": 0.0406,
+      "ci_method": "item+seed percentile bootstrap",
+      "n_files": 6,
+      "files": {
+        "reference": [
+          "eval_results/f15_multiblimp/llama3_2-1b_tur_original_truetie_s42__headtraining.json",
+          "eval_results/f15_multiblimp/llama3_2-1b_tur_original_truetie_s43__headtraining.json",
+          "eval_results/f15_multiblimp/llama3_2-1b_tur_original_truetie_s44__headtraining.json"
+        ],
+        "arm": [
+          "eval_results/f15_multiblimp/llama3_2-1b_tur_langspec_truetie_s42__headtraining.json",
+          "eval_results/f15_multiblimp/llama3_2-1b_tur_langspec_truetie_s43__headtraining.json",
+          "eval_results/f15_multiblimp/llama3_2-1b_tur_langspec_truetie_s44__headtraining.json"
+        ]
+      },
+      "holm_p": 0.1624,
+      "significant_raw": true,
+      "significant_holm": false
+    },
+    "qwen2_5-0_5b[truetie+head-training]|arb|base_vs_original": {
+      "family": "qwen2_5-0_5b[truetie+head-training]",
+      "lang": "arb",
+      "arm": "base",
+      "reference_arm": "original",
+      "mean_delta": 0.005212620027434833,
+      "sd_delta": 0.007993855848742695,
+      "n_seeds_matched": 3,
+      "matched_seeds": [
+        42,
+        43,
+        44
+      ],
+      "ci_low": -0.0054869684499314125,
+      "ci_high": 0.01618655692729767,
+      "bootstrap_p": 0.3598,
+      "ci_method": "item+seed percentile bootstrap",
+      "n_files": 6,
+      "files": {
+        "reference": [
+          "eval_results/f15_multiblimp/qwen2_5-0_5b_arb_original_truetie_s42__headtraining.json",
+          "eval_results/f15_multiblimp/qwen2_5-0_5b_arb_original_truetie_s43__headtraining.json",
+          "eval_results/f15_multiblimp/qwen2_5-0_5b_arb_original_truetie_s44__headtraining.json"
+        ],
+        "arm": [
+          "eval_results/f15_multiblimp/qwen2_5-0_5b_arb_base_truetie_s42__headtraining.json",
+          "eval_results/f15_multiblimp/qwen2_5-0_5b_arb_base_truetie_s43__headtraining.json",
+          "eval_results/f15_multiblimp/qwen2_5-0_5b_arb_base_truetie_s44__headtraining.json"
+        ]
+      },
+      "holm_p": 1.0,
+      "significant_raw": false,
+      "significant_holm": false
+    },
+    "qwen2_5-0_5b[truetie+head-training]|arb|langspec_vs_original": {
+      "family": "qwen2_5-0_5b[truetie+head-training]",
+      "lang": "arb",
+      "arm": "langspec",
+      "reference_arm": "original",
+      "mean_delta": 0.007133058984910863,
+      "sd_delta": 0.008645240744356006,
+      "n_seeds_matched": 3,
+      "matched_seeds": [
+        42,
+        43,
+        44
+      ],
+      "ci_low": -0.004115226337448559,
+      "ci_high": 0.018381344307270234,
+      "bootstrap_p": 0.2278,
+      "ci_method": "item+seed percentile bootstrap",
+      "n_files": 6,
+      "files": {
+        "reference": [
+          "eval_results/f15_multiblimp/qwen2_5-0_5b_arb_original_truetie_s42__headtraining.json",
+          "eval_results/f15_multiblimp/qwen2_5-0_5b_arb_original_truetie_s43__headtraining.json",
+          "eval_results/f15_multiblimp/qwen2_5-0_5b_arb_original_truetie_s44__headtraining.json"
+        ],
+        "arm": [
+          "eval_results/f15_multiblimp/qwen2_5-0_5b_arb_langspec_truetie_s42__headtraining.json",
+          "eval_results/f15_multiblimp/qwen2_5-0_5b_arb_langspec_truetie_s43__headtraining.json",
+          "eval_results/f15_multiblimp/qwen2_5-0_5b_arb_langspec_truetie_s44__headtraining.json"
+        ]
+      },
+      "holm_p": 1.0,
+      "significant_raw": false,
+      "significant_holm": false
+    },
+    "qwen2_5-0_5b[truetie+head-training]|arb|placebo_vs_original": {
+      "family": "qwen2_5-0_5b[truetie+head-training]",
+      "lang": "arb",
+      "arm": "placebo",
+      "reference_arm": "original",
+      "mean_delta": -0.0035665294924554316,
+      "sd_delta": 0.011113651083966596,
+      "n_seeds_matched": 3,
+      "matched_seeds": [
+        42,
+        43,
+        44
+      ],
+      "ci_low": -0.01673525377229081,
+      "ci_high": 0.009327846364883402,
+      "bootstrap_p": 0.6224,
+      "ci_method": "item+seed percentile bootstrap",
+      "n_files": 6,
+      "files": {
+        "reference": [
+          "eval_results/f15_multiblimp/qwen2_5-0_5b_arb_original_truetie_s42__headtraining.json",
+          "eval_results/f15_multiblimp/qwen2_5-0_5b_arb_original_truetie_s43__headtraining.json",
+          "eval_results/f15_multiblimp/qwen2_5-0_5b_arb_original_truetie_s44__headtraining.json"
+        ],
+        "arm": [
+          "eval_results/f15_multiblimp/qwen2_5-0_5b_arb_placebo_truetie_s42__headtraining.json",
+          "eval_results/f15_multiblimp/qwen2_5-0_5b_arb_placebo_truetie_s43__headtraining.json",
+          "eval_results/f15_multiblimp/qwen2_5-0_5b_arb_placebo_truetie_s44__headtraining.json"
+        ]
+      },
+      "holm_p": 1.0,
+      "significant_raw": false,
+      "significant_holm": false
+    },
+    "qwen2_5-0_5b[truetie+head-training]|arb|vocab_extend_vs_original": {
+      "family": "qwen2_5-0_5b[truetie+head-training]",
+      "lang": "arb",
+      "arm": "vocab_extend",
+      "reference_arm": "original",
+      "mean_delta": 0.001371742112482847,
+      "sd_delta": 0.007993855848742636,
+      "n_seeds_matched": 3,
+      "matched_seeds": [
+        42,
+        43,
+        44
+      ],
+      "ci_low": -0.009876543209876543,
+      "ci_high": 0.012345679012345678,
+      "bootstrap_p": 0.8216,
+      "ci_method": "item+seed percentile bootstrap",
+      "n_files": 6,
+      "files": {
+        "reference": [
+          "eval_results/f15_multiblimp/qwen2_5-0_5b_arb_original_truetie_s42__headtraining.json",
+          "eval_results/f15_multiblimp/qwen2_5-0_5b_arb_original_truetie_s43__headtraining.json",
+          "eval_results/f15_multiblimp/qwen2_5-0_5b_arb_original_truetie_s44__headtraining.json"
+        ],
+        "arm": [
+          "eval_results/f15_multiblimp/qwen2_5-0_5b_arb_vocab_extend_truetie_s42__headtraining.json",
+          "eval_results/f15_multiblimp/qwen2_5-0_5b_arb_vocab_extend_truetie_s43__headtraining.json",
+          "eval_results/f15_multiblimp/qwen2_5-0_5b_arb_vocab_extend_truetie_s44__headtraining.json"
+        ]
+      },
+      "holm_p": 1.0,
+      "significant_raw": false,
+      "significant_holm": false
+    },
+    "qwen2_5-0_5b[truetie+head-training]|fin|base_vs_original": {
+      "family": "qwen2_5-0_5b[truetie+head-training]",
+      "lang": "fin",
+      "arm": "base",
+      "reference_arm": "original",
+      "mean_delta": -0.004020752269779493,
+      "sd_delta": 0.008109208317686398,
+      "n_seeds_matched": 3,
+      "matched_seeds": [
+        42,
+        43,
+        44
+      ],
+      "ci_low": -0.01414072632944228,
+      "ci_high": 0.00622568093385214,
+      "bootstrap_p": 0.4672,
+      "ci_method": "item+seed percentile bootstrap",
+      "n_files": 6,
+      "files": {
+        "reference": [
+          "eval_results/f15_multiblimp/qwen2_5-0_5b_fin_original_truetie_s42__headtraining.json",
+          "eval_results/f15_multiblimp/qwen2_5-0_5b_fin_original_truetie_s43__headtraining.json",
+          "eval_results/f15_multiblimp/qwen2_5-0_5b_fin_original_truetie_s44__headtraining.json"
+        ],
+        "arm": [
+          "eval_results/f15_multiblimp/qwen2_5-0_5b_fin_base_truetie_s42__headtraining.json",
+          "eval_results/f15_multiblimp/qwen2_5-0_5b_fin_base_truetie_s43__headtraining.json",
+          "eval_results/f15_multiblimp/qwen2_5-0_5b_fin_base_truetie_s44__headtraining.json"
+        ]
+      },
+      "holm_p": 1.0,
+      "significant_raw": false,
+      "significant_holm": false
+    },
+    "qwen2_5-0_5b[truetie+head-training]|fin|langspec_vs_original": {
+      "family": "qwen2_5-0_5b[truetie+head-training]",
+      "lang": "fin",
+      "arm": "langspec",
+      "reference_arm": "original",
+      "mean_delta": -0.002204928664072625,
+      "sd_delta": 0.0067991400373961655,
+      "n_seeds_matched": 3,
+      "matched_seeds": [
+        42,
+        43,
+        44
+      ],
+      "ci_low": -0.011543450064850844,
+      "ci_high": 0.007003891050583658,
+      "bootstrap_p": 0.6464,
+      "ci_method": "item+seed percentile bootstrap",
+      "n_files": 6,
+      "files": {
+        "reference": [
+          "eval_results/f15_multiblimp/qwen2_5-0_5b_fin_original_truetie_s42__headtraining.json",
+          "eval_results/f15_multiblimp/qwen2_5-0_5b_fin_original_truetie_s43__headtraining.json",
+          "eval_results/f15_multiblimp/qwen2_5-0_5b_fin_original_truetie_s44__headtraining.json"
+        ],
+        "arm": [
+          "eval_results/f15_multiblimp/qwen2_5-0_5b_fin_langspec_truetie_s42__headtraining.json",
+          "eval_results/f15_multiblimp/qwen2_5-0_5b_fin_langspec_truetie_s43__headtraining.json",
+          "eval_results/f15_multiblimp/qwen2_5-0_5b_fin_langspec_truetie_s44__headtraining.json"
+        ]
+      },
+      "holm_p": 1.0,
+      "significant_raw": false,
+      "significant_holm": false
+    },
+    "qwen2_5-0_5b[truetie+head-training]|fin|vocab_extend_vs_original": {
+      "family": "qwen2_5-0_5b[truetie+head-training]",
+      "lang": "fin",
+      "arm": "vocab_extend",
+      "reference_arm": "original",
+      "mean_delta": 0.039429312581063525,
+      "sd_delta": 0.007178258937495026,
+      "n_seeds_matched": 3,
+      "matched_seeds": [
+        42,
+        43,
+        44
+      ],
+      "ci_low": 0.029571984435797668,
+      "ci_high": 0.04877107652399477,
+      "bootstrap_p": 0.0,
+      "ci_method": "item+seed percentile bootstrap",
+      "n_files": 6,
+      "files": {
+        "reference": [
+          "eval_results/f15_multiblimp/qwen2_5-0_5b_fin_original_truetie_s42__headtraining.json",
+          "eval_results/f15_multiblimp/qwen2_5-0_5b_fin_original_truetie_s43__headtraining.json",
+          "eval_results/f15_multiblimp/qwen2_5-0_5b_fin_original_truetie_s44__headtraining.json"
+        ],
+        "arm": [
+          "eval_results/f15_multiblimp/qwen2_5-0_5b_fin_vocab_extend_truetie_s42__headtraining.json",
+          "eval_results/f15_multiblimp/qwen2_5-0_5b_fin_vocab_extend_truetie_s43__headtraining.json",
+          "eval_results/f15_multiblimp/qwen2_5-0_5b_fin_vocab_extend_truetie_s44__headtraining.json"
+        ]
+      },
+      "holm_p": 0.0,
+      "significant_raw": true,
+      "significant_holm": true
+    },
+    "qwen2_5-0_5b[truetie+head-training]|hin|base_vs_original": {
+      "family": "qwen2_5-0_5b[truetie+head-training]",
+      "lang": "hin",
+      "arm": "base",
+      "reference_arm": "original",
+      "mean_delta": -0.00046072333563692186,
+      "sd_delta": 0.004496480372251303,
+      "n_seeds_matched": 3,
+      "matched_seeds": [
+        42,
+        43,
+        44
+      ],
+      "ci_low": -0.006680488366735775,
+      "ci_high": 0.0055286800276434,
+      "bootstrap_p": 0.9128,
+      "ci_method": "item+seed percentile bootstrap",
+      "n_files": 6,
+      "files": {
+        "reference": [
+          "eval_results/f15_multiblimp/qwen2_5-0_5b_hin_original_truetie_s42__headtraining.json",
+          "eval_results/f15_multiblimp/qwen2_5-0_5b_hin_original_truetie_s43__headtraining.json",
+          "eval_results/f15_multiblimp/qwen2_5-0_5b_hin_original_truetie_s44__headtraining.json"
+        ],
+        "arm": [
+          "eval_results/f15_multiblimp/qwen2_5-0_5b_hin_base_truetie_s42__headtraining.json",
+          "eval_results/f15_multiblimp/qwen2_5-0_5b_hin_base_truetie_s43__headtraining.json",
+          "eval_results/f15_multiblimp/qwen2_5-0_5b_hin_base_truetie_s44__headtraining.json"
+        ]
+      },
+      "holm_p": 1.0,
+      "significant_raw": false,
+      "significant_holm": false
+    },
+    "qwen2_5-0_5b[truetie+head-training]|hin|langspec_vs_original": {
+      "family": "qwen2_5-0_5b[truetie+head-training]",
+      "lang": "hin",
+      "arm": "langspec",
+      "reference_arm": "original",
+      "mean_delta": 0.0009214466712739178,
+      "sd_delta": 0.0014386081544340674,
+      "n_seeds_matched": 3,
+      "matched_seeds": [
+        42,
+        43,
+        44
+      ],
+      "ci_low": -0.0036857866850956,
+      "ci_high": 0.005298318359824926,
+      "bootstrap_p": 0.7134,
+      "ci_method": "item+seed percentile bootstrap",
+      "n_files": 6,
+      "files": {
+        "reference": [
+          "eval_results/f15_multiblimp/qwen2_5-0_5b_hin_original_truetie_s42__headtraining.json",
+          "eval_results/f15_multiblimp/qwen2_5-0_5b_hin_original_truetie_s43__headtraining.json",
+          "eval_results/f15_multiblimp/qwen2_5-0_5b_hin_original_truetie_s44__headtraining.json"
+        ],
+        "arm": [
+          "eval_results/f15_multiblimp/qwen2_5-0_5b_hin_langspec_truetie_s42__headtraining.json",
+          "eval_results/f15_multiblimp/qwen2_5-0_5b_hin_langspec_truetie_s43__headtraining.json",
+          "eval_results/f15_multiblimp/qwen2_5-0_5b_hin_langspec_truetie_s44__headtraining.json"
+        ]
+      },
+      "holm_p": 1.0,
+      "significant_raw": false,
+      "significant_holm": false
+    },
+    "qwen2_5-0_5b[truetie+head-training]|hin|placebo_vs_original": {
+      "family": "qwen2_5-0_5b[truetie+head-training]",
+      "lang": "hin",
+      "arm": "placebo",
+      "reference_arm": "original",
+      "mean_delta": 0.0009214466712738808,
+      "sd_delta": 0.0007979962255557895,
+      "n_seeds_matched": 3,
+      "matched_seeds": [
+        42,
+        43,
+        44
+      ],
+      "ci_low": -0.0034554250172771257,
+      "ci_high": 0.005298318359824926,
+      "bootstrap_p": 0.701,
+      "ci_method": "item+seed percentile bootstrap",
+      "n_files": 6,
+      "files": {
+        "reference": [
+          "eval_results/f15_multiblimp/qwen2_5-0_5b_hin_original_truetie_s42__headtraining.json",
+          "eval_results/f15_multiblimp/qwen2_5-0_5b_hin_original_truetie_s43__headtraining.json",
+          "eval_results/f15_multiblimp/qwen2_5-0_5b_hin_original_truetie_s44__headtraining.json"
+        ],
+        "arm": [
+          "eval_results/f15_multiblimp/qwen2_5-0_5b_hin_placebo_truetie_s42__headtraining.json",
+          "eval_results/f15_multiblimp/qwen2_5-0_5b_hin_placebo_truetie_s43__headtraining.json",
+          "eval_results/f15_multiblimp/qwen2_5-0_5b_hin_placebo_truetie_s44__headtraining.json"
+        ]
+      },
+      "holm_p": 1.0,
+      "significant_raw": false,
+      "significant_holm": false
+    },
+    "qwen2_5-0_5b[truetie+head-training]|hin|vocab_extend_vs_original": {
+      "family": "qwen2_5-0_5b[truetie+head-training]",
+      "lang": "hin",
+      "arm": "vocab_extend",
+      "reference_arm": "original",
+      "mean_delta": -0.0029947016816401772,
+      "sd_delta": 0.0007979962255558216,
+      "n_seeds_matched": 3,
+      "matched_seeds": [
+        42,
+        43,
+        44
+      ],
+      "ci_low": -0.007601935038009676,
+      "ci_high": 0.001612531674729325,
+      "bootstrap_p": 0.212,
+      "ci_method": "item+seed percentile bootstrap",
+      "n_files": 6,
+      "files": {
+        "reference": [
+          "eval_results/f15_multiblimp/qwen2_5-0_5b_hin_original_truetie_s42__headtraining.json",
+          "eval_results/f15_multiblimp/qwen2_5-0_5b_hin_original_truetie_s43__headtraining.json",
+          "eval_results/f15_multiblimp/qwen2_5-0_5b_hin_original_truetie_s44__headtraining.json"
+        ],
+        "arm": [
+          "eval_results/f15_multiblimp/qwen2_5-0_5b_hin_vocab_extend_truetie_s42__headtraining.json",
+          "eval_results/f15_multiblimp/qwen2_5-0_5b_hin_vocab_extend_truetie_s43__headtraining.json",
+          "eval_results/f15_multiblimp/qwen2_5-0_5b_hin_vocab_extend_truetie_s44__headtraining.json"
+        ]
+      },
+      "holm_p": 1.0,
+      "significant_raw": false,
+      "significant_holm": false
+    },
+    "qwen2_5-0_5b[truetie+head-training]|hun|base_vs_original": {
+      "family": "qwen2_5-0_5b[truetie+head-training]",
+      "lang": "hun",
+      "arm": "base",
+      "reference_arm": "original",
+      "mean_delta": 0.0007889546351084927,
+      "sd_delta": 0.008723212776132527,
+      "n_seeds_matched": 3,
+      "matched_seeds": [
+        42,
+        43,
+        44
+      ],
+      "ci_low": -0.011045364891518738,
+      "ci_high": 0.0126232741617357,
+      "bootstrap_p": 0.9014,
+      "ci_method": "item+seed percentile bootstrap",
+      "n_files": 8,
+      "files": {
+        "reference": [
+          "eval_results/f15_multiblimp/qwen2_5-0_5b_hun_original_truetie_s42__headtraining.json",
+          "eval_results/f15_multiblimp/qwen2_5-0_5b_hun_original_truetie_s43__headtraining.json",
+          "eval_results/f15_multiblimp/qwen2_5-0_5b_hun_original_truetie_s44__headtraining.json"
+        ],
+        "arm": [
+          "eval_results/f15_multiblimp/qwen2_5-0_5b_hun_base_truetie_s42__headtraining.json",
+          "eval_results/f15_multiblimp/qwen2_5-0_5b_hun_base_truetie_s43__headtraining.json",
+          "eval_results/f15_multiblimp/qwen2_5-0_5b_hun_base_truetie_s44__headtraining.json"
+        ]
+      },
+      "holm_p": 1.0,
+      "significant_raw": false,
+      "significant_holm": false
+    },
+    "qwen2_5-0_5b[truetie+head-training]|hun|langspec_vs_original": {
+      "family": "qwen2_5-0_5b[truetie+head-training]",
+      "lang": "hun",
+      "arm": "langspec",
+      "reference_arm": "original",
+      "mean_delta": 0.011597633136094677,
+      "sd_delta": 0.002825405061849313,
+      "n_seeds_matched": 5,
+      "matched_seeds": [
+        42,
+        43,
+        44,
+        45,
+        46
+      ],
+      "ci_low": 0.004970414201183432,
+      "ci_high": 0.018224852071005916,
+      "bootstrap_p": 0.0006,
+      "ci_method": "item+seed percentile bootstrap",
+      "n_files": 10,
+      "files": {
+        "reference": [
+          "eval_results/f15_multiblimp/qwen2_5-0_5b_hun_original_truetie_s42__headtraining.json",
+          "eval_results/f15_multiblimp/qwen2_5-0_5b_hun_original_truetie_s43__headtraining.json",
+          "eval_results/f15_multiblimp/qwen2_5-0_5b_hun_original_truetie_s44__headtraining.json",
+          "eval_results/f15_multiblimp/qwen2_5-0_5b_hun_original_truetie_s45__headtraining.json",
+          "eval_results/f15_multiblimp/qwen2_5-0_5b_hun_original_truetie_s46__headtraining.json"
+        ],
+        "arm": [
+          "eval_results/f15_multiblimp/qwen2_5-0_5b_hun_langspec_truetie_s42__headtraining.json",
+          "eval_results/f15_multiblimp/qwen2_5-0_5b_hun_langspec_truetie_s43__headtraining.json",
+          "eval_results/f15_multiblimp/qwen2_5-0_5b_hun_langspec_truetie_s44__headtraining.json",
+          "eval_results/f15_multiblimp/qwen2_5-0_5b_hun_langspec_truetie_s45__headtraining.json",
+          "eval_results/f15_multiblimp/qwen2_5-0_5b_hun_langspec_truetie_s46__headtraining.json"
+        ]
+      },
+      "holm_p": 0.010199999999999999,
+      "significant_raw": true,
+      "significant_holm": true
+    },
+    "qwen2_5-0_5b[truetie+head-training]|hun|placebo_vs_original": {
+      "family": "qwen2_5-0_5b[truetie+head-training]",
+      "lang": "hun",
+      "arm": "placebo",
+      "reference_arm": "original",
+      "mean_delta": 0.0037869822485206983,
+      "sd_delta": 0.004380297165283247,
+      "n_seeds_matched": 5,
+      "matched_seeds": [
+        42,
+        43,
+        44,
+        45,
+        46
+      ],
+      "ci_low": -0.004023668639053254,
+      "ci_high": 0.011597633136094675,
+      "bootstrap_p": 0.3328,
+      "ci_method": "item+seed percentile bootstrap",
+      "n_files": 10,
+      "files": {
+        "reference": [
+          "eval_results/f15_multiblimp/qwen2_5-0_5b_hun_original_truetie_s42__headtraining.json",
+          "eval_results/f15_multiblimp/qwen2_5-0_5b_hun_original_truetie_s43__headtraining.json",
+          "eval_results/f15_multiblimp/qwen2_5-0_5b_hun_original_truetie_s44__headtraining.json",
+          "eval_results/f15_multiblimp/qwen2_5-0_5b_hun_original_truetie_s45__headtraining.json",
+          "eval_results/f15_multiblimp/qwen2_5-0_5b_hun_original_truetie_s46__headtraining.json"
+        ],
+        "arm": [
+          "eval_results/f15_multiblimp/qwen2_5-0_5b_hun_placebo_truetie_s42__headtraining.json",
+          "eval_results/f15_multiblimp/qwen2_5-0_5b_hun_placebo_truetie_s43__headtraining.json",
+          "eval_results/f15_multiblimp/qwen2_5-0_5b_hun_placebo_truetie_s44__headtraining.json",
+          "eval_results/f15_multiblimp/qwen2_5-0_5b_hun_placebo_truetie_s45__headtraining.json",
+          "eval_results/f15_multiblimp/qwen2_5-0_5b_hun_placebo_truetie_s46__headtraining.json"
+        ]
+      },
+      "holm_p": 1.0,
+      "significant_raw": false,
+      "significant_holm": false
+    },
+    "qwen2_5-0_5b[truetie+head-training]|hun|vocab_extend_vs_original": {
+      "family": "qwen2_5-0_5b[truetie+head-training]",
+      "lang": "hun",
+      "arm": "vocab_extend",
+      "reference_arm": "original",
+      "mean_delta": 0.008520710059171589,
+      "sd_delta": 0.0036857778703899007,
+      "n_seeds_matched": 5,
+      "matched_seeds": [
+        42,
+        43,
+        44,
+        45,
+        46
+      ],
+      "ci_low": 0.0009467455621301774,
+      "ci_high": 0.016094674556213016,
+      "bootstrap_p": 0.0274,
+      "ci_method": "item+seed percentile bootstrap",
+      "n_files": 10,
+      "files": {
+        "reference": [
+          "eval_results/f15_multiblimp/qwen2_5-0_5b_hun_original_truetie_s42__headtraining.json",
+          "eval_results/f15_multiblimp/qwen2_5-0_5b_hun_original_truetie_s43__headtraining.json",
+          "eval_results/f15_multiblimp/qwen2_5-0_5b_hun_original_truetie_s44__headtraining.json",
+          "eval_results/f15_multiblimp/qwen2_5-0_5b_hun_original_truetie_s45__headtraining.json",
+          "eval_results/f15_multiblimp/qwen2_5-0_5b_hun_original_truetie_s46__headtraining.json"
+        ],
+        "arm": [
+          "eval_results/f15_multiblimp/qwen2_5-0_5b_hun_vocab_extend_truetie_s42__headtraining.json",
+          "eval_results/f15_multiblimp/qwen2_5-0_5b_hun_vocab_extend_truetie_s43__headtraining.json",
+          "eval_results/f15_multiblimp/qwen2_5-0_5b_hun_vocab_extend_truetie_s44__headtraining.json",
+          "eval_results/f15_multiblimp/qwen2_5-0_5b_hun_vocab_extend_truetie_s45__headtraining.json",
+          "eval_results/f15_multiblimp/qwen2_5-0_5b_hun_vocab_extend_truetie_s46__headtraining.json"
+        ]
+      },
+      "holm_p": 0.41100000000000003,
+      "significant_raw": true,
+      "significant_holm": false
+    },
+    "qwen2_5-0_5b[truetie+head-training]|tur|base_vs_original": {
+      "family": "qwen2_5-0_5b[truetie+head-training]",
+      "lang": "tur",
+      "arm": "base",
+      "reference_arm": "original",
+      "mean_delta": -0.0082280903176426,
+      "sd_delta": 0.0008768801559425714,
+      "n_seeds_matched": 3,
+      "matched_seeds": [
+        42,
+        43,
+        44
+      ],
+      "ci_low": -0.017795637198622274,
+      "ci_high": 0.0011481056257175663,
+      "bootstrap_p": 0.0878,
+      "ci_method": "item+seed percentile bootstrap",
+      "n_files": 6,
+      "files": {
+        "reference": [
+          "eval_results/f15_multiblimp/qwen2_5-0_5b_tur_original_truetie_s42__headtraining.json",
+          "eval_results/f15_multiblimp/qwen2_5-0_5b_tur_original_truetie_s43__headtraining.json",
+          "eval_results/f15_multiblimp/qwen2_5-0_5b_tur_original_truetie_s44__headtraining.json"
+        ],
+        "arm": [
+          "eval_results/f15_multiblimp/qwen2_5-0_5b_tur_base_truetie_s42__headtraining.json",
+          "eval_results/f15_multiblimp/qwen2_5-0_5b_tur_base_truetie_s43__headtraining.json",
+          "eval_results/f15_multiblimp/qwen2_5-0_5b_tur_base_truetie_s44__headtraining.json"
+        ]
+      },
+      "holm_p": 1.0,
+      "significant_raw": false,
+      "significant_holm": false
+    },
+    "qwen2_5-0_5b[truetie+head-training]|tur|langspec_vs_original": {
+      "family": "qwen2_5-0_5b[truetie+head-training]",
+      "lang": "tur",
+      "arm": "langspec",
+      "reference_arm": "original",
+      "mean_delta": -0.00784538844240342,
+      "sd_delta": 0.00830560061776143,
+      "n_seeds_matched": 3,
+      "matched_seeds": [
+        42,
+        43,
+        44
+      ],
+      "ci_low": -0.01951779563719862,
+      "ci_high": 0.004592422502870264,
+      "bootstrap_p": 0.2148,
+      "ci_method": "item+seed percentile bootstrap",
+      "n_files": 6,
+      "files": {
+        "reference": [
+          "eval_results/f15_multiblimp/qwen2_5-0_5b_tur_original_truetie_s42__headtraining.json",
+          "eval_results/f15_multiblimp/qwen2_5-0_5b_tur_original_truetie_s43__headtraining.json",
+          "eval_results/f15_multiblimp/qwen2_5-0_5b_tur_original_truetie_s44__headtraining.json"
+        ],
+        "arm": [
+          "eval_results/f15_multiblimp/qwen2_5-0_5b_tur_langspec_truetie_s42__headtraining.json",
+          "eval_results/f15_multiblimp/qwen2_5-0_5b_tur_langspec_truetie_s43__headtraining.json",
+          "eval_results/f15_multiblimp/qwen2_5-0_5b_tur_langspec_truetie_s44__headtraining.json"
+        ]
+      },
+      "holm_p": 1.0,
+      "significant_raw": false,
+      "significant_holm": false
+    },
+    "qwen2_5-0_5b[truetie+head-training]|tur|vocab_extend_vs_original": {
+      "family": "qwen2_5-0_5b[truetie+head-training]",
+      "lang": "tur",
+      "arm": "vocab_extend",
+      "reference_arm": "original",
+      "mean_delta": 0.02162265595101413,
+      "sd_delta": 0.009082620961581208,
+      "n_seeds_matched": 3,
+      "matched_seeds": [
+        42,
+        43,
+        44
+      ],
+      "ci_low": 0.008802143130501339,
+      "ci_high": 0.03482587064676617,
+      "bootstrap_p": 0.0008,
+      "ci_method": "item+seed percentile bootstrap",
+      "n_files": 6,
+      "files": {
+        "reference": [
+          "eval_results/f15_multiblimp/qwen2_5-0_5b_tur_original_truetie_s42__headtraining.json",
+          "eval_results/f15_multiblimp/qwen2_5-0_5b_tur_original_truetie_s43__headtraining.json",
+          "eval_results/f15_multiblimp/qwen2_5-0_5b_tur_original_truetie_s44__headtraining.json"
+        ],
+        "arm": [
+          "eval_results/f15_multiblimp/qwen2_5-0_5b_tur_vocab_extend_truetie_s42__headtraining.json",
+          "eval_results/f15_multiblimp/qwen2_5-0_5b_tur_vocab_extend_truetie_s43__headtraining.json",
+          "eval_results/f15_multiblimp/qwen2_5-0_5b_tur_vocab_extend_truetie_s44__headtraining.json"
+        ]
+      },
+      "holm_p": 0.0128,
+      "significant_raw": true,
+      "significant_holm": true
+    }
+  },
+  "directional_test": {
+    "enabled": true,
+    "target_arm": "langspec",
+    "reference_arm": "original",
+    "n_pairs": 9,
+    "spearman_rho": -0.26666666666666666,
+    "sign_test": {
+      "n_concordant": 4,
+      "n_discordant": 5,
+      "n_zero_excluded": 0,
+      "n_trials": 9,
+      "p_exact": 1.0
+    },
+    "pairs": [
+      {
+        "family": "llama3_2-1b[truetie+head-training]",
+        "lang": "arb",
+        "intrinsic_delta": -0.004336352293139001,
+        "downstream_delta": 0.0005486968449931462
+      },
+      {
+        "family": "llama3_2-1b[truetie+head-training]",
+        "lang": "hin",
+        "intrinsic_delta": 0.0010318132477663555,
+        "downstream_delta": -0.00023036166781849796
+      },
+      {
+        "family": "llama3_2-1b[truetie+head-training]",
+        "lang": "hun",
+        "intrinsic_delta": 0.16589652611601624,
+        "downstream_delta": 0.008047337278106515
+      },
+      {
+        "family": "llama3_2-1b[truetie+head-training]",
+        "lang": "tur",
+        "intrinsic_delta": 0.19370308590492152,
+        "downstream_delta": -0.010524301569077651
+      },
+      {
+        "family": "qwen2_5-0_5b[truetie+head-training]",
+        "lang": "arb",
+        "intrinsic_delta": 0.06631343469585449,
+        "downstream_delta": 0.007133058984910863
+      },
+      {
+        "family": "qwen2_5-0_5b[truetie+head-training]",
+        "lang": "fin",
+        "intrinsic_delta": 0.13323215460110327,
+        "downstream_delta": -0.002204928664072625
+      },
+      {
+        "family": "qwen2_5-0_5b[truetie+head-training]",
+        "lang": "hin",
+        "intrinsic_delta": 0.100819486359785,
+        "downstream_delta": 0.0009214466712739178
+      },
+      {
+        "family": "qwen2_5-0_5b[truetie+head-training]",
+        "lang": "hun",
+        "intrinsic_delta": 0.15302417691228676,
+        "downstream_delta": 0.011597633136094677
+      },
+      {
+        "family": "qwen2_5-0_5b[truetie+head-training]",
+        "lang": "tur",
+        "intrinsic_delta": 0.21083541840422682,
+        "downstream_delta": -0.00784538844240342
+      }
+    ],
+    "skipped": []
+  }
+}
