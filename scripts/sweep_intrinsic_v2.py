@@ -103,10 +103,9 @@ if str(REPO_ROOT) not in sys.path:
     sys.path.insert(0, str(REPO_ROOT))
 if str(REPO_ROOT / "scripts") not in sys.path:
     sys.path.insert(0, str(REPO_ROOT / "scripts"))
-# Hoisted to module scope (as eval_results/f15_intrinsic/f15_final_v2.py does),
-# so `from morphscore_patched import MorphScore` resolves from any entry point,
-# not only after score_arms has run.
-_HARNESS_DIR = REPO_ROOT / "eval_results" / "f15_intrinsic" / "harness_patched"
+# Hoisted to module scope so `from morphscore_patched import MorphScore`
+# resolves from any entry point, not only after score_arms has run.
+_HARNESS_DIR = REPO_ROOT / "reproduction" / "harness_patched"
 if str(_HARNESS_DIR) not in sys.path:
     sys.path.insert(0, str(_HARNESS_DIR))
 
@@ -148,11 +147,12 @@ assert (inspect.signature(filter_line_by_script).parameters["threshold"].default
     f"prep.build_corpus calls it with the library default, so the value recorded "
     f"in every cell JSON would be a lie.")
 
-MORPHSCORE_DATA_DIR = "/path/to/store/cmeister/morphscore_data"
-F15_INTRINSIC = REPO_ROOT / "eval_results" / "f15_intrinsic"
-HARNESS_DIR = F15_INTRINSIC / "harness_patched"
+# Resolved lazily in _morphscore_data_dir() so importing this module (or
+# running --help) works without the environment variable set.
+_REPRO = REPO_ROOT / "reproduction"
+HARNESS_DIR = _REPRO / "harness_patched"
 HARNESS_PY = HARNESS_DIR / "morphscore_patched.py"
-ARB_REPAIRED_CSV = F15_INTRINSIC / "arabic_data_repaired.csv"
+ARB_REPAIRED_CSV = _REPRO / "morphscore" / "arabic_data_repaired.csv"
 
 F15_ROOT = REPO_ROOT / "las_tokenizers" / "f15"
 SWEEP_TOK_ROOT = REPO_ROOT / "las_tokenizers" / "intrinsic_sweep_v2"
@@ -713,7 +713,7 @@ def embed_rows_policy(family: str) -> tuple:
             "reason": cfg["embed_rows_gate_reason"],
             "scope": ("this sweep driver only; scripts/prep_f15_tokenizers.py and "
                       "the training pipeline's gate are unmodified"),
-            "approved": "2026-08-28 coordinator decision",
+            "approved": "2026-08-28 filter-policy decision",
         }
     return None, None
 
@@ -978,12 +978,17 @@ def gold_for(short_lang: str) -> dict:
         if not ARB_REPAIRED_CSV.is_file():
             raise RuntimeError(
                 f"Arabic repaired gold {ARB_REPAIRED_CSV} missing; rebuild with "
-                f"eval_results/f15_intrinsic/repair_arabic_gold.py. Refusing to "
+                f"reproduction/morphscore/repair_arabic_gold.py. Refusing to "
                 f"fall back to the original (broken) arabic_data.csv.")
-        return {"gold": "repaired", "data_dir": str(F15_INTRINSIC),
+        return {"gold": "repaired", "data_dir": str(ARB_REPAIRED_CSV.parent),
                 "dataset_key": ARB_REPAIRED_CSV.name, "file": str(ARB_REPAIRED_CSV)}
+    data_dir = os.environ.get("MORPHSCORE_DATA_DIR")
+    if data_dir is None:
+        raise RuntimeError(
+            "MORPHSCORE_DATA_DIR is not set. Point it at a local checkout of "
+            "the MorphScore evaluation data (per-language *_data.csv files).")
     from morphscore_patched import MorphScore
-    first_choice = Path(MORPHSCORE_DATA_DIR) / f"{lang_code.lower()}_data.csv"
+    first_choice = Path(data_dir) / f"{lang_code.lower()}_data.csv"
     if first_choice.exists():
         fpath = first_choice
     else:
@@ -993,10 +998,10 @@ def gold_for(short_lang: str) -> dict:
                 f"{lang_code} has no entry in MorphScore.FLORES_TO_MS_FILES and "
                 f"{first_choice} does not exist; the harness cannot locate a "
                 f"gold file for it.")
-        fpath = Path(MORPHSCORE_DATA_DIR) / fname
+        fpath = Path(data_dir) / fname
     if not fpath.is_file():
         raise RuntimeError(f"gold file {fpath} missing for {lang_code}")
-    return {"gold": "default", "data_dir": MORPHSCORE_DATA_DIR,
+    return {"gold": "default", "data_dir": data_dir,
             "dataset_key": lang_code, "file": str(fpath)}
 
 

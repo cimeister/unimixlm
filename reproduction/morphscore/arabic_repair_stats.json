@@ -1,0 +1,16 @@
+{
+  "n_total": 19126,
+  "n_aligned": 16014,
+  "aligned_frac": 0.8372895534873993,
+  "n_multi": 0,
+  "n_trailing_mark": 54,
+  "n_scored": 10403,
+  "n_stem_eq_lemma": 14472,
+  "repaired_1char_stem_rate": 0.004058948420132384,
+  "repaired_mean_stem_len": 4.476145872361683,
+  "agree_full": 72,
+  "agree_partial": 2498,
+  "agree_none": 13444,
+  "compared": 16014,
+  "normalization_stage": 2
+}

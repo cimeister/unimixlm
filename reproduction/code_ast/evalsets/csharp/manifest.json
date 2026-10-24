@@ -1,0 +1,921 @@
+{
+  "lang": "csharp",
+  "paper_label": "C#",
+  "built": "2026-08-28T06:36:23.716783+00:00",
+  "n_snippets": 100,
+  "eval_snippets_per_lang_constant": 100,
+  "selection_rule": "first N non-blank snippets in eval-parquet row order after CodeDataLoader's own normalisation (_strip_starcoder_metadata, _normalize_source, rstrip) -- identical to CodeDataLoader(max_snippets_per_lang=N) on that parquet",
+  "deterministic": true,
+  "seed": null,
+  "seed_note": "selection is by parquet row order, not sampling, so no seed exists to record; the file list below IS the selection",
+  "eval_parquet": "<local>/tokenizer-intrinsic-evals/starcoder/c-sharp.parquet",
+  "eval_parquet_sha256": "69186b6a63916b3e874596a981d7059a50c7494c13a1e6cee6866a7dbaced347",
+  "eval_parquet_rows": 5499,
+  "rows_scanned_to_fill": 100,
+  "extension": ".cs",
+  "dir": "<repo>/eval_results/code_ast_v1/evalsets/csharp",
+  "total_chars": 287091,
+  "roundtrip_verified_through": "CodeDataLoader(dir).get_code_snippets",
+  "files": [
+    {
+      "file": "snippet_0000.cs",
+      "sha256": "17fdcf16b9f929fab52c39aaee28166adc64e9afd4350610dcc2abc7d30c1db3",
+      "chars": 6199,
+      "source_row_id": "4819",
+      "source_repo_path": "NewLife.Cube.Metronic/Views/Metronic3/_List_Data_Item.cshtml",
+      "source_repo_name": "yangchongyuan/NewLife.Cube",
+      "parquet_row_index": 0
+    },
+    {
+      "file": "snippet_0001.cs",
+      "sha256": "05474f2400491c166c34082157960e78ee2b29e5f58a9e38a14f535c5d4293ae",
+      "chars": 851,
+      "source_row_id": "7893",
+      "source_repo_path": "AutoPauser/Settings.cs",
+      "source_repo_name": "FakeFriend24/pfk-auto-pauser",
+      "parquet_row_index": 1
+    },
+    {
+      "file": "snippet_0002.cs",
+      "sha256": "12aca55fbede8c7c14c8e68d8582079ff02d27a0cc894cb5e8446757330c02fc",
+      "chars": 1525,
+      "source_row_id": "9108",
+      "source_repo_path": "TestWebApp/Controllers/ValuesV2Controller.cs",
+      "source_repo_name": "czimerk/singleton-pattern",
+      "parquet_row_index": 2
+    },
+    {
+      "file": "snippet_0003.cs",
+      "sha256": "da8bdca5d60bb074342e4682ec52f917af05118c02b26b438db6a5e66f55d86a",
+      "chars": 705,
+      "source_row_id": "13765",
+      "source_repo_path": "NBi.Core/Query/Client/AdomdClient.cs",
+      "source_repo_name": "TheAutomatingMrLynch/NBi",
+      "parquet_row_index": 3
+    },
+    {
+      "file": "snippet_0004.cs",
+      "sha256": "f92a33db7cc84bf98c3fdbe067bf4339e3b0c65f3f6ea95934d4ec2091511a9a",
+      "chars": 1754,
+      "source_row_id": "14235",
+      "source_repo_path": "BlueSheep/Core/Storage/Leaving.cs",
+      "source_repo_name": "Sadikk/BlueSheep",
+      "parquet_row_index": 4
+    },
+    {
+      "file": "snippet_0005.cs",
+      "sha256": "6d11132512cc8a061f72688cef0bf8c79dcd9deb98e886d6ba759392053a806a",
+      "chars": 2709,
+      "source_row_id": "16259",
+      "source_repo_path": "src/SimpleMenu.Core/ViewModels/List/IngredientsListViewModel.cs",
+      "source_repo_name": "lewisbennett/simple-menu-net",
+      "parquet_row_index": 5
+    },
+    {
+      "file": "snippet_0006.cs",
+      "sha256": "ec223e43eb9624f5d4a58f1582a8c2f485b6f42ee517c9fd12fea97226dabad0",
+      "chars": 168,
+      "source_row_id": "18225",
+      "source_repo_path": "src/Argo/IPacket.cs",
+      "source_repo_name": "delaco/Argo",
+      "parquet_row_index": 6
+    },
+    {
+      "file": "snippet_0007.cs",
+      "sha256": "0224f7dd47dadaf1a8398510a3be4040c92de4b9f53d63b1731700742c681dc9",
+      "chars": 3510,
+      "source_row_id": "19707",
+      "source_repo_path": "src/core/Microsoft.PowerToys.Settings.UI/Services/ActivationService.cs",
+      "source_repo_name": "m0c1-us/PowerToys",
+      "parquet_row_index": 7
+    },
+    {
+      "file": "snippet_0008.cs",
+      "sha256": "14ce3c1de8c1bdf189e0912a7e3ac23503da1051e190577e66c71725a13285d9",
+      "chars": 786,
+      "source_row_id": "21177",
+      "source_repo_path": "Octgn.Communication/ErrorResponseException.cs",
+      "source_repo_name": "octgn/Octgn.Communication",
+      "parquet_row_index": 8
+    },
+    {
+      "file": "snippet_0009.cs",
+      "sha256": "94194eccdd62d2f91107664a6a9b5149c2832bcd7d7344d8db99e768909d8018",
+      "chars": 728,
+      "source_row_id": "22876",
+      "source_repo_path": "FunctionalTests/WalletServiceTestsStartup .cs",
+      "source_repo_name": "cealer/WalletProject",
+      "parquet_row_index": 9
+    },
+    {
+      "file": "snippet_0010.cs",
+      "sha256": "3fa387df222ece2982b8376adf5a0c5ccbffdc583df02b74cf693f06b6e7870a",
+      "chars": 9826,
+      "source_row_id": "26484",
+      "source_repo_path": "Assets/Scripts/FogOfWar/FogOfWarEffect.cs",
+      "source_repo_name": "qq576067421/FogOfWar",
+      "parquet_row_index": 10
+    },
+    {
+      "file": "snippet_0011.cs",
+      "sha256": "f01bc075d01510d72c77ad6fe8fbd5bd9046a836d4222b255b0a7dff9803c2e0",
+      "chars": 1099,
+      "source_row_id": "32798",
+      "source_repo_path": "Assets/Metro/Scripts/Utilities/AutoRotation.cs",
+      "source_repo_name": "hiroki-kitahara/Metro",
+      "parquet_row_index": 11
+    },
+    {
+      "file": "snippet_0012.cs",
+      "sha256": "2ce9aabfa12f12d9fbf311a17e4f271ec4648dfdf7b06e66468ded5358883588",
+      "chars": 2931,
+      "source_row_id": "33832",
+      "source_repo_path": "Nesteo.Server/Pages/Management/Users.cshtml",
+      "source_repo_name": "Nesteo/Nesteo-Server",
+      "parquet_row_index": 12
+    },
+    {
+      "file": "snippet_0013.cs",
+      "sha256": "f79b83d7bb4bc17082a9f42eefccc18a6455914edf0f04a6b6d72c9404a9ed52",
+      "chars": 11215,
+      "source_row_id": "35018",
+      "source_repo_path": "DapperFantom/Services/ArticleService.cs",
+      "source_repo_name": "Victoralm/AspNetCore5AndVueJSFromZeroToHero",
+      "parquet_row_index": 13
+    },
+    {
+      "file": "snippet_0014.cs",
+      "sha256": "f65c82b2909d9dea6a823af71934292f880b0b125e4bad74110b2be310a21bd2",
+      "chars": 445,
+      "source_row_id": "35751",
+      "source_repo_path": "src/Core/Shared.Core.Validation/Responses/ValidatableResponseBase.cs",
+      "source_repo_name": "murbanowicz/GoldenEye",
+      "parquet_row_index": 14
+    },
+    {
+      "file": "snippet_0015.cs",
+      "sha256": "8081430b56400fc289705e84b5dd8a95ca25b8d2e91931243696e4afaa50cebf",
+      "chars": 419,
+      "source_row_id": "36671",
+      "source_repo_path": "src/AssemblyToProcess/AsyncDisposable.cs",
+      "source_repo_name": "minidfx/ObjectDisposedFodyAddin",
+      "parquet_row_index": 15
+    },
+    {
+      "file": "snippet_0016.cs",
+      "sha256": "ddd460acfc96ab11f4064a5a966512240ab2ddd01f1dd21510cc29217c314691",
+      "chars": 143,
+      "source_row_id": "38690",
+      "source_repo_path": "GeekBurger-HTML/Polly/PolicyContextItems.cs",
+      "source_repo_name": "barrosjcs/GeekBurger-Html",
+      "parquet_row_index": 16
+    },
+    {
+      "file": "snippet_0017.cs",
+      "sha256": "9c597d4ae9e180412ce4ec150f70fed6ff9e662f077c682c16e0061fca4b5ec5",
+      "chars": 553,
+      "source_row_id": "41739",
+      "source_repo_path": "Assets/Scripts/TurretController.cs",
+      "source_repo_name": "th174/UnityTanks",
+      "parquet_row_index": 17
+    },
+    {
+      "file": "snippet_0018.cs",
+      "sha256": "49c8020c55c598d72f476044a9f6e69d95216212553f1261b5165499a86be50e",
+      "chars": 1585,
+      "source_row_id": "44461",
+      "source_repo_path": "LojaSapatos/LojaSapatos/LojaSapatos/App.xaml.cs",
+      "source_repo_name": "zehguilherme/mobile-senac-bauru",
+      "parquet_row_index": 18
+    },
+    {
+      "file": "snippet_0019.cs",
+      "sha256": "7fbdd4e0690093e0f7edcbcdf8cc0080f284bfbb6236b108d4759834bb7aab49",
+      "chars": 1137,
+      "source_row_id": "44808",
+      "source_repo_path": "MTProto.NET/Schema/TL/_generated/TLDialogFolder.cs",
+      "source_repo_name": "Gostareh-Negar/TeleNet",
+      "parquet_row_index": 19
+    },
+    {
+      "file": "snippet_0020.cs",
+      "sha256": "213c8821032aaf53af1a77f1bd8a40466d54f50790d92948d6dad0a1c305bbc1",
+      "chars": 1109,
+      "source_row_id": "47272",
+      "source_repo_path": "Controllers/StatisticParameterController.cs",
+      "source_repo_name": "7is7/SVR2.0",
+      "parquet_row_index": 20
+    },
+    {
+      "file": "snippet_0021.cs",
+      "sha256": "c624288dc06b3f90d6964acb5a214a16c4d07850754ba515d62cde43de8df583",
+      "chars": 2505,
+      "source_row_id": "51294",
+      "source_repo_path": "Assets/Scripts/LogManager.cs",
+      "source_repo_name": "Bozar/AxeMan",
+      "parquet_row_index": 21
+    },
+    {
+      "file": "snippet_0022.cs",
+      "sha256": "d000fee30a049e74bceade0e738e27f6de4d5606589fb9cec8ba866fdc9ded58",
+      "chars": 2606,
+      "source_row_id": "54447",
+      "source_repo_path": "GW2EIEvtcParser/EIData/CombatReplay/CombatReplayDescription/Decorations/MovingPlatformDecorationCombatReplayDescription.cs",
+      "source_repo_name": "enlich/GW2-Elite-Insights-Parser",
+      "parquet_row_index": 22
+    },
+    {
+      "file": "snippet_0023.cs",
+      "sha256": "b30d4da9cc804cec125adbf1cc721228ec5432c3d3c86196a65aeff13fe52643",
+      "chars": 5724,
+      "source_row_id": "56501",
+      "source_repo_path": "source/Web/Features/result/GetResultController.cs",
+      "source_repo_name": "maklipsa/ICanHasDotnetCore",
+      "parquet_row_index": 23
+    },
+    {
+      "file": "snippet_0024.cs",
+      "sha256": "e2b46a2c7cd854635f6f524c724856bdac0470ca3d33efea8d1f7e9f603c7a56",
+      "chars": 1802,
+      "source_row_id": "57131",
+      "source_repo_path": "src/BulkReplace.Console/Controller.cs",
+      "source_repo_name": "jorelius/BulkReplace",
+      "parquet_row_index": 24
+    },
+    {
+      "file": "snippet_0025.cs",
+      "sha256": "d50b5c233020678ac0bd6bb5da3a5f1bf6e75ed5e87331a19ef1ae990a76dbe3",
+      "chars": 1507,
+      "source_row_id": "62242",
+      "source_repo_path": "StyxTests/Pipes/Utils/HasNextPipeTests.cs",
+      "source_repo_name": "Vanaheimr/Styx",
+      "parquet_row_index": 25
+    },
+    {
+      "file": "snippet_0026.cs",
+      "sha256": "703adabd4428379ecd2313527864b67e5eb01a2beac460762f81577f80408465",
+      "chars": 5620,
+      "source_row_id": "62440",
+      "source_repo_path": "src/TorchSharp/Distributions/Uniform.cs",
+      "source_repo_name": "mfagerlund/TorchSharp",
+      "parquet_row_index": 26
+    },
+    {
+      "file": "snippet_0027.cs",
+      "sha256": "753d079c7a88e02a21a243b5618304bcc55b416bd5c01d2f1d571de25ce0d6a6",
+      "chars": 3404,
+      "source_row_id": "63420",
+      "source_repo_path": "MidTerm/Assets/Scripts/PlayerController.cs",
+      "source_repo_name": "AmiraliPak/Game-MidTerm",
+      "parquet_row_index": 27
+    },
+    {
+      "file": "snippet_0028.cs",
+      "sha256": "2188360b747086fef5f297a4fd9ce08052654edc3a660d796f0389514552e793",
+      "chars": 2033,
+      "source_row_id": "68231",
+      "source_repo_path": "src/IServiceCollectionExtension.LazyLoadService.Test/Transient_Test.cs",
+      "source_repo_name": "InsonusK/IServiceCollectionExtension.LazyLoadService",
+      "parquet_row_index": 28
+    },
+    {
+      "file": "snippet_0029.cs",
+      "sha256": "ebfb94c515e7766e5ee00821eee59a498881114d4625b70be8d40a3d0e5826ab",
+      "chars": 480,
+      "source_row_id": "71890",
+      "source_repo_path": "UI/InfinityFictionEditor.Core/Models/TreeViewItem.cs",
+      "source_repo_name": "Blind-Striker/infinityfiction",
+      "parquet_row_index": 29
+    },
+    {
+      "file": "snippet_0030.cs",
+      "sha256": "897a64e49aefc158f44aee23ad45eecacfc349461579652ebbf5720f940a9816",
+      "chars": 4353,
+      "source_row_id": "73322",
+      "source_repo_path": "Assets/Scripts/TowerSelector.cs",
+      "source_repo_name": "Jonnipolar/TDHeartBeat",
+      "parquet_row_index": 30
+    },
+    {
+      "file": "snippet_0031.cs",
+      "sha256": "6530311530e923d522804ee1b51cea0bdf1559a8f8f8ee3b44972f9e4681591d",
+      "chars": 1504,
+      "source_row_id": "75495",
+      "source_repo_path": "Assets/Scripts/Experimental/SpriteReTexture.cs",
+      "source_repo_name": "jackieateacat/full-project",
+      "parquet_row_index": 31
+    },
+    {
+      "file": "snippet_0032.cs",
+      "sha256": "e718260c167ec65a1009bbff2e61717c409f1e7e42ca851456e3ee69a5070978",
+      "chars": 7268,
+      "source_row_id": "75656",
+      "source_repo_path": "Game/Classes/Objects/Structure/Store/bin.cs",
+      "source_repo_name": "GerardSchornagel/DST",
+      "parquet_row_index": 32
+    },
+    {
+      "file": "snippet_0033.cs",
+      "sha256": "7737474da4e0c6ceff9c43584e2680b5a15176790dc6eb20468288d99fe0366c",
+      "chars": 4308,
+      "source_row_id": "77233",
+      "source_repo_path": "sdk/src/Services/MarketplaceCatalog/Generated/Model/Filter.cs",
+      "source_repo_name": "a-leontiev/aws-sdk-net",
+      "parquet_row_index": 33
+    },
+    {
+      "file": "snippet_0034.cs",
+      "sha256": "7d142f50509a77d489073c4dd47d7a5a603a3080cb486453821a7c259e73310a",
+      "chars": 12086,
+      "source_row_id": "79079",
+      "source_repo_path": "P1_RyanArcher/RepositoryLayer/Repository.cs",
+      "source_repo_name": "12142020-dotnet-uta/RyanArcherRepo1",
+      "parquet_row_index": 34
+    },
+    {
+      "file": "snippet_0035.cs",
+      "sha256": "75b8f7d05336eac2267e40a653fa225b45dd6dbaffb6e9ca649078fc41a53f5d",
+      "chars": 10263,
+      "source_row_id": "81021",
+      "source_repo_path": "Rant/Engine/Stringes/Tokens/LexerRules.cs",
+      "source_repo_name": "esaul/Rant",
+      "parquet_row_index": 35
+    },
+    {
+      "file": "snippet_0036.cs",
+      "sha256": "ba934f912576d9299f80707af3d90cca73747c923431f49a1a463480d3b52146",
+      "chars": 4606,
+      "source_row_id": "81716",
+      "source_repo_path": "Pacman/Game.cs",
+      "source_repo_name": "pipe111/Pacman",
+      "parquet_row_index": 36
+    },
+    {
+      "file": "snippet_0037.cs",
+      "sha256": "8e7fd0db77f0ba6bf6e9c00fb33a632aa01ecb870370c68d086bd440f7e94494",
+      "chars": 752,
+      "source_row_id": "84840",
+      "source_repo_path": "Exrin/Exrin.Framework/Abstraction/IViewModelExecute.cs",
+      "source_repo_name": "exrin/exrin",
+      "parquet_row_index": 37
+    },
+    {
+      "file": "snippet_0038.cs",
+      "sha256": "cd261cd6b425b7450ea72f3fe48965a1628a8d1c8b33e50aa372401c0b7f2557",
+      "chars": 1152,
+      "source_row_id": "86558",
+      "source_repo_path": "csharp/src/Org.OpenAPITools/Client/OpenAPIDateConverter.cs",
+      "source_repo_name": "mindviser/keepaSDK",
+      "parquet_row_index": 38
+    },
+    {
+      "file": "snippet_0039.cs",
+      "sha256": "638fb131500ce6b95602594ed75d85422ee54002e98cb65c4f7f6d4fb49f636e",
+      "chars": 1524,
+      "source_row_id": "93237",
+      "source_repo_path": "API Test/RestSharp/BedConfigurationTest.cs",
+      "source_repo_name": "Engin-Boot/alert-to-care-s22b1",
+      "parquet_row_index": 39
+    },
+    {
+      "file": "snippet_0040.cs",
+      "sha256": "c66af1c2fc650accc147e81b2bf5b63b58c083c591ea0bb786e113abf932bf7d",
+      "chars": 890,
+      "source_row_id": "93478",
+      "source_repo_path": "BaseWeb/Services/XpImportRead.cs",
+      "source_repo_name": "bruce68tw/Base",
+      "parquet_row_index": 40
+    },
+    {
+      "file": "snippet_0041.cs",
+      "sha256": "541280d8dc3e6b1f741c7d09b1b1c419e0e322ddc9392d6525a00947737126e3",
+      "chars": 272,
+      "source_row_id": "94583",
+      "source_repo_path": "src/jaytwo.RuntimeRevelation/OSPlatform.cs",
+      "source_repo_name": "jakegough/jaytwo.RuntimeInfo",
+      "parquet_row_index": 41
+    },
+    {
+      "file": "snippet_0042.cs",
+      "sha256": "f0298e8395a25d9bc6a5f550b6dbd8dcde0d63275772ed65ba2e11d8b7a25adf",
+      "chars": 2539,
+      "source_row_id": "96335",
+      "source_repo_path": "SimpleNetwork/Examples/MessagingApp/MessageClient/LoginForm.cs",
+      "source_repo_name": "KaiNet-X/simple-network-library",
+      "parquet_row_index": 42
+    },
+    {
+      "file": "snippet_0043.cs",
+      "sha256": "c1a7b71035948542de67d347138341ffdea3d723bff586f2072c7d2516d81e72",
+      "chars": 1281,
+      "source_row_id": "97453",
+      "source_repo_path": "SexyColor.BusinessComponents/Goods/Category/New/Repository/GoodsCategoryInItemRepository.cs",
+      "source_repo_name": "lxkbest/SexyColor.Net",
+      "parquet_row_index": 43
+    },
+    {
+      "file": "snippet_0044.cs",
+      "sha256": "62c6c942689bb71a71726328fcee8eb86dcc944cbb88f39992f2969db571989a",
+      "chars": 363,
+      "source_row_id": "97535",
+      "source_repo_path": "StegBMP/Struct.cs",
+      "source_repo_name": "kusa-mochi/MochiSteg",
+      "parquet_row_index": 44
+    },
+    {
+      "file": "snippet_0045.cs",
+      "sha256": "99c97c2eddbae68a783bd2ac8a6e135becdf65fa8a974330abf3a0a56145ecdb",
+      "chars": 310,
+      "source_row_id": "98476",
+      "source_repo_path": "src/GameEstate.Graphics/OpenGLGraphic.cs",
+      "source_repo_name": "smorey2/GameEstate",
+      "parquet_row_index": 45
+    },
+    {
+      "file": "snippet_0046.cs",
+      "sha256": "804d9b6d3a820e858ebf1662f3005799edaef3e0a0f250d8947bedcb8a03b36b",
+      "chars": 776,
+      "source_row_id": "102438",
+      "source_repo_path": "UnityEngine/TerrainRenderFlags.cs",
+      "source_repo_name": "SinsofSloth/RF5-global-metadata",
+      "parquet_row_index": 46
+    },
+    {
+      "file": "snippet_0047.cs",
+      "sha256": "e7f27df40819ab4de96b5a4ac85bfa1f1e934b0da6bd277a3ef9f9743da4b0b0",
+      "chars": 3095,
+      "source_row_id": "102452",
+      "source_repo_path": "C#/Examples/Basic Set Pressure/Program.cs",
+      "source_repo_name": "william-richards-idexx/fgt-SDK",
+      "parquet_row_index": 47
+    },
+    {
+      "file": "snippet_0048.cs",
+      "sha256": "e312176f5c7b46f921c07aa0d967c331279b2a642a2da0c9411600155acfdce4",
+      "chars": 7970,
+      "source_row_id": "108226",
+      "source_repo_path": "src/ItLinksBot/Migrations/20210117230341_Product_data.Designer.cs",
+      "source_repo_name": "papersaltserver/ITLinksBot",
+      "parquet_row_index": 48
+    },
+    {
+      "file": "snippet_0049.cs",
+      "sha256": "e37d86bbc39d9d974fab0b43c83cf247abaec3a4ad83fa4f27c9dc82aaa3d535",
+      "chars": 12970,
+      "source_row_id": "110521",
+      "source_repo_path": "src/Compiler/Infer/Transforms/InitializerTransform.cs",
+      "source_repo_name": "ThePiranha/infer",
+      "parquet_row_index": 49
+    },
+    {
+      "file": "snippet_0050.cs",
+      "sha256": "97efccc26a41482635ee0e9bdf43746f41d1e3cd7bc4c28f6bd3fc88eef5e0d1",
+      "chars": 1223,
+      "source_row_id": "111220",
+      "source_repo_path": "src/BugHunter.Core/Extensions/SyntaxNodeExtensions.cs",
+      "source_repo_name": "Suzii/thesis-roslyn",
+      "parquet_row_index": 50
+    },
+    {
+      "file": "snippet_0051.cs",
+      "sha256": "6c4b3149cf279ba201ffa164ca5946cec576af89e3559e44bfa0356a23706a6d",
+      "chars": 404,
+      "source_row_id": "111224",
+      "source_repo_path": "src/Box.cs",
+      "source_repo_name": "moto2002/superWeapon",
+      "parquet_row_index": 51
+    },
+    {
+      "file": "snippet_0052.cs",
+      "sha256": "d74a14a638e6bb86b838b0efad90d5a2152bc031c0c7431ed755fc9e8259710a",
+      "chars": 1569,
+      "source_row_id": "111821",
+      "source_repo_path": "src/Nono.Engine/TaskCollection.cs",
+      "source_repo_name": "dimati93/nononet",
+      "parquet_row_index": 52
+    },
+    {
+      "file": "snippet_0053.cs",
+      "sha256": "781aee92cb5f3abc38783f7de05ae2ad4fbf5bc5e045af724c0e4cf6c108ca8d",
+      "chars": 4171,
+      "source_row_id": "112072",
+      "source_repo_path": "RconSharp/RconMessenger.cs",
+      "source_repo_name": "grilledham/FactorioWebInterface",
+      "parquet_row_index": 53
+    },
+    {
+      "file": "snippet_0054.cs",
+      "sha256": "4945f9c0c1c83185c2ce4fbd284509c781d864b3405398839b1e3aab796a1dec",
+      "chars": 5842,
+      "source_row_id": "112852",
+      "source_repo_path": "src/libraries/System.Speech/src/Internal/SapiInterop/SpAudioStreamWrapper.cs",
+      "source_repo_name": "belav/runtime",
+      "parquet_row_index": 54
+    },
+    {
+      "file": "snippet_0055.cs",
+      "sha256": "d6db868686d55e251679dfcfbbfb13c0c60027c54af70bc7ca8f5af4631d5bd7",
+      "chars": 1385,
+      "source_row_id": "113537",
+      "source_repo_path": "JSONModels/MangaResult.cs",
+      "source_repo_name": "Dusk252/Bardiche",
+      "parquet_row_index": 55
+    },
+    {
+      "file": "snippet_0056.cs",
+      "sha256": "9d2680e8795ee44b99dda178135899d50bb17ad2fecbc15a5069fd3f3a6c4877",
+      "chars": 2377,
+      "source_row_id": "115555",
+      "source_repo_path": "Assignment4.Entities/TagRepository.cs",
+      "source_repo_name": "NikolajWLarsen/Assignment4Extended",
+      "parquet_row_index": 56
+    },
+    {
+      "file": "snippet_0057.cs",
+      "sha256": "bd76027ba99c677b5bb598f3b4d107b79e87e857250e79f24dcb846049764956",
+      "chars": 537,
+      "source_row_id": "115938",
+      "source_repo_path": "MvcPerfmon/MockPerfCounterUtility.cs",
+      "source_repo_name": "PeteW/MvcPerfmon",
+      "parquet_row_index": 57
+    },
+    {
+      "file": "snippet_0058.cs",
+      "sha256": "2578c773f4cbf8494e061d9523d17ffc88d7246216891230ea7abf67fc15b7c8",
+      "chars": 1352,
+      "source_row_id": "121097",
+      "source_repo_path": "Zen.Storage/Cache/Maintenance.cs",
+      "source_repo_name": "bucknellu/zen",
+      "parquet_row_index": 58
+    },
+    {
+      "file": "snippet_0059.cs",
+      "sha256": "f5b2d55c994a072d75cf4f650b9df39f2c271d3fb2adff42e2b7e09b4833a141",
+      "chars": 1727,
+      "source_row_id": "124818",
+      "source_repo_path": "src/Microsoft.Health.Dicom.Api/Web/AspNetCoreMultipartReaderFactory.cs",
+      "source_repo_name": "rohankhera/dicom-server",
+      "parquet_row_index": 59
+    },
+    {
+      "file": "snippet_0060.cs",
+      "sha256": "351faf009a6854b0e38cab315416222c22009e2db58e1bdd8807de7380227037",
+      "chars": 930,
+      "source_row_id": "135474",
+      "source_repo_path": "05. Object Oriented Programming/2019/CryptoMiningSystem/CryptoMiningSystem/Entities/Components/Processors/Processor.cs",
+      "source_repo_name": "dimitarminchev/ITCareer",
+      "parquet_row_index": 60
+    },
+    {
+      "file": "snippet_0061.cs",
+      "sha256": "85a85838f970824a840d01d0ddc82f01c04519f1bb07d8a37a7a8b6f1b8d12df",
+      "chars": 446,
+      "source_row_id": "135861",
+      "source_repo_path": "LINE/gen-csharp/ContactType.cs",
+      "source_repo_name": "Banandana/LineSharp",
+      "parquet_row_index": 61
+    },
+    {
+      "file": "snippet_0062.cs",
+      "sha256": "530889d0bdc42ff2b8905d10b1e3252a499943bb9881159b83508ec24a73fafc",
+      "chars": 2917,
+      "source_row_id": "136218",
+      "source_repo_path": "templates-sdk/components/left_nav.cs",
+      "source_repo_name": "snowman0911/rcsjta",
+      "parquet_row_index": 62
+    },
+    {
+      "file": "snippet_0063.cs",
+      "sha256": "07d564745ee33c60a9e7a9b4730a961e23d6adcf2027bba44e4fc63b711b9e0a",
+      "chars": 325,
+      "source_row_id": "136920",
+      "source_repo_path": "XGENO.Framework.Controls/NavMenu/NavMenuItem.cs",
+      "source_repo_name": "naweed/SeriesTrackerV3",
+      "parquet_row_index": 63
+    },
+    {
+      "file": "snippet_0064.cs",
+      "sha256": "e5c8f859b1884c8bf2aedace0289549a1ed88c049aa75c9704b7215fe25c1858",
+      "chars": 2272,
+      "source_row_id": "139487",
+      "source_repo_path": "Assets/Scripts/Cards/DragDrop/DragDrop.cs",
+      "source_repo_name": "Kruemelkatze/4thWinterKluJam",
+      "parquet_row_index": 64
+    },
+    {
+      "file": "snippet_0065.cs",
+      "sha256": "7d6c96a5016c015b5d3c5eb02afb2bb007568e6b7d2842d90f17224be96b7497",
+      "chars": 534,
+      "source_row_id": "141285",
+      "source_repo_path": "src/ZeroReact/JsPool/ZeroJsPoolConfig.cs",
+      "source_repo_name": "DaniilSokolyuk/ZeroReact",
+      "parquet_row_index": 65
+    },
+    {
+      "file": "snippet_0066.cs",
+      "sha256": "bef9e4e009c47dbd1906552378c598c335a6e4aff28343465ecb67d51cf1d4a1",
+      "chars": 3018,
+      "source_row_id": "142182",
+      "source_repo_path": "Assets/CombineMeshes/MeshCombiner.cs",
+      "source_repo_name": "OmniTracker/movo_webvr",
+      "parquet_row_index": 66
+    },
+    {
+      "file": "snippet_0067.cs",
+      "sha256": "90378b189242a895771c53f9b8a24a7b71c98a1a007d1aa2735dd1ded6f764a3",
+      "chars": 5474,
+      "source_row_id": "143212",
+      "source_repo_path": "src/Microsoft.DncEng.SecretManager.Tests/SettingsFileValidatorTests.cs",
+      "source_repo_name": "garath/arcade-services",
+      "parquet_row_index": 67
+    },
+    {
+      "file": "snippet_0068.cs",
+      "sha256": "80e2867a2b8730a6141df35429373a95f8d3c7fb09ef86256efa8b2b36ead702",
+      "chars": 1342,
+      "source_row_id": "146114",
+      "source_repo_path": "src/SimSharp/Visualization/Processor/JsonWriter.cs",
+      "source_repo_name": "KlaraDurst/SimSharp",
+      "parquet_row_index": 68
+    },
+    {
+      "file": "snippet_0069.cs",
+      "sha256": "4cb29aa66651e7ed25b496d5b4b653f2bcbfbedf12c86eea2a00010efb1ca216",
+      "chars": 266,
+      "source_row_id": "146669",
+      "source_repo_path": "src/SFA.DAS.AdminService.Web/Validators/Roatp/ISearchTermValidator.cs",
+      "source_repo_name": "jack-cloud-platform/das-admin-service",
+      "parquet_row_index": 69
+    },
+    {
+      "file": "snippet_0070.cs",
+      "sha256": "abaf53fdd854ca0ac14fa00f51d3d7b55498148ad44847fd2e2e1a206fbbce34",
+      "chars": 2636,
+      "source_row_id": "148219",
+      "source_repo_path": "ModernHistory/Fhr.ModernHistory.Services/Impl/PictureServiceClass.cs",
+      "source_repo_name": "FanHuaRan/ModernHistory",
+      "parquet_row_index": 70
+    },
+    {
+      "file": "snippet_0071.cs",
+      "sha256": "50ea8fbaa33be07657c58a05d67d5553a5bb7af0a3612c4a8cdfba9a843e97fd",
+      "chars": 3051,
+      "source_row_id": "148604",
+      "source_repo_path": "src/Services/U.ProductService/U.ProductService.BackgroundService/ProductHostedService.cs",
+      "source_repo_name": "SebastianRuzanowski/Ubiquitous",
+      "parquet_row_index": 71
+    },
+    {
+      "file": "snippet_0072.cs",
+      "sha256": "d0be3f3a6dcae0f42194902ffd6362f06c1da538671ead4951794b8e439904f7",
+      "chars": 871,
+      "source_row_id": "152254",
+      "source_repo_path": "Magia/Magia.WebAPI/Controllers/SalaController.cs",
+      "source_repo_name": "rovianbauer/Magia",
+      "parquet_row_index": 72
+    },
+    {
+      "file": "snippet_0073.cs",
+      "sha256": "f27245b1fd381487a987195c0e3b28115da2b7295ffbb08a008bbfcfabe9ee34",
+      "chars": 5733,
+      "source_row_id": "152551",
+      "source_repo_path": "osk/Wikiled.Controls/UI/DelegateCommand.cs",
+      "source_repo_name": "jogibear9988/osk",
+      "parquet_row_index": 73
+    },
+    {
+      "file": "snippet_0074.cs",
+      "sha256": "7cf71cd72ab69ad2bae65f7885f2852898c0a2b607f4656afa45ad29fffba8b0",
+      "chars": 99,
+      "source_row_id": "153368",
+      "source_repo_path": "Automatic Volume Mixer/Storage/MuteStates.cs",
+      "source_repo_name": "ZnAlex2015/Automatic-Volume-Mixer",
+      "parquet_row_index": 74
+    },
+    {
+      "file": "snippet_0075.cs",
+      "sha256": "f2d92be895212cb2f388e479af53afc1d2e2bbf8521a1efd1d45e517a97a767a",
+      "chars": 4807,
+      "source_row_id": "163973",
+      "source_repo_path": "src/Mvc/test/Mvc.FunctionalTests/TestingInfrastructureInheritanceTests.cs",
+      "source_repo_name": "emmagarland/aspnetcore",
+      "parquet_row_index": 75
+    },
+    {
+      "file": "snippet_0076.cs",
+      "sha256": "5f87d33ddc4478c09f3052c7214bece1ee2318b539bc8c466514b804cd557078",
+      "chars": 383,
+      "source_row_id": "165479",
+      "source_repo_path": "src/EstateApp.web/Services/AccountsService.cs",
+      "source_repo_name": "olapsalmist/FLEEKSestate",
+      "parquet_row_index": 76
+    },
+    {
+      "file": "snippet_0077.cs",
+      "sha256": "f0e7905be426d4e928b44db7bd61559a70e3d0a4f1ddb6c1f872bbe5518b567d",
+      "chars": 6659,
+      "source_row_id": "166911",
+      "source_repo_path": "FFImageLoading.Forms.Wpf/FFImageLoading.Forms.Platform/CachedImageRenderer.cs",
+      "source_repo_name": "JohnySeven/FFImageLoading",
+      "parquet_row_index": 77
+    },
+    {
+      "file": "snippet_0078.cs",
+      "sha256": "d8cbf067062d47e41641e281dc5ec61766c5b282931f4bfa2913b6d742b17ab1",
+      "chars": 1736,
+      "source_row_id": "169602",
+      "source_repo_path": "SprintCreator/Common/TFSConnectionSettings.cs",
+      "source_repo_name": "tarunsingh20/SprintCreator",
+      "parquet_row_index": 78
+    },
+    {
+      "file": "snippet_0079.cs",
+      "sha256": "669761270a58a05651daed67a78c44dbfb5094dcd0f17f4e73877ddbb4c90737",
+      "chars": 2466,
+      "source_row_id": "170125",
+      "source_repo_path": "src/trace/NullTracer.cs",
+      "source_repo_name": "pip-services-dotnet/pip-services-components-dotnet",
+      "parquet_row_index": 79
+    },
+    {
+      "file": "snippet_0080.cs",
+      "sha256": "052c5cd46d58e16abe09946d3c05f56c55359bfe28cc267a4556f111bef45cca",
+      "chars": 3963,
+      "source_row_id": "170467",
+      "source_repo_path": "Scripts/SnakeMovement.cs",
+      "source_repo_name": "ArdaGurcan/The-Watermelon",
+      "parquet_row_index": 80
+    },
+    {
+      "file": "snippet_0081.cs",
+      "sha256": "3cfbbbc9f60a9bc65368b679e3fedcf85b3f7a82a6c0b3988c2e33ad9f136739",
+      "chars": 1924,
+      "source_row_id": "177698",
+      "source_repo_path": "Basic Edition/Point.cs",
+      "source_repo_name": "doggan/wallpaper-algorithm",
+      "parquet_row_index": 81
+    },
+    {
+      "file": "snippet_0082.cs",
+      "sha256": "504407b95af76316e5e5e6da98cefe23cf2ebce89d954f6600d62dba9ce63ab2",
+      "chars": 1270,
+      "source_row_id": "179045",
+      "source_repo_path": "LiveCoin.Net/Objects/SocketObjects/WsRequestMsgType.cs",
+      "source_repo_name": "EricGarnier/LiveCoin.Net",
+      "parquet_row_index": 82
+    },
+    {
+      "file": "snippet_0083.cs",
+      "sha256": "a96c98797a481c4b5e342b71d61a1e9fd8405c800b18030a7ff7b22a00080af4",
+      "chars": 1663,
+      "source_row_id": "185885",
+      "source_repo_path": "Property/ProjectilePhysicalProperty.cs",
+      "source_repo_name": "peng-0609/The-Legend-of-Zelda-fangame",
+      "parquet_row_index": 83
+    },
+    {
+      "file": "snippet_0084.cs",
+      "sha256": "3a9184417e183d99501effd086c8300208eb8325a52ec32f239ee996ff89e63b",
+      "chars": 525,
+      "source_row_id": "186109",
+      "source_repo_path": "SecretSaanta/Controllers/LinksController.cs",
+      "source_repo_name": "Ted0-F/SecretSaanta",
+      "parquet_row_index": 84
+    },
+    {
+      "file": "snippet_0085.cs",
+      "sha256": "1e13db71718d790d2871805fe357223e6ec4c44bbfb80fe277f11dff753a34af",
+      "chars": 344,
+      "source_row_id": "190340",
+      "source_repo_path": "Unity/Assets/Scripts/Gun.cs",
+      "source_repo_name": "Twempo/BobbyTime",
+      "parquet_row_index": 85
+    },
+    {
+      "file": "snippet_0086.cs",
+      "sha256": "7df3904e666ff28ae936b94a9c953043e3285e0ac36b2d5338c26cbb2b7ea878",
+      "chars": 5531,
+      "source_row_id": "190390",
+      "source_repo_path": "src/AInq.Optional/TryT.cs",
+      "source_repo_name": "andryushchenko/AInq.Optional",
+      "parquet_row_index": 86
+    },
+    {
+      "file": "snippet_0087.cs",
+      "sha256": "149407d2a6eb81070793fcfb388269bc242a3954736dea40998efa35f5beec99",
+      "chars": 2721,
+      "source_row_id": "191370",
+      "source_repo_path": "TencentCloud/Redis/V20180412/Models/RedisBackupSet.cs",
+      "source_repo_name": "TencentCloud/tencentcloud-sdk-dotnet-intl-en",
+      "parquet_row_index": 87
+    },
+    {
+      "file": "snippet_0088.cs",
+      "sha256": "9b6fa93f41c427d18e2706018ce35d343b6cccef652f182610b4ab1b319aea31",
+      "chars": 11563,
+      "source_row_id": "191837",
+      "source_repo_path": "HoppoAlpha.DataLibrary/DataObject/ConfigSerializeItem.cs",
+      "source_repo_name": "yamadansan/HoppoAlpha",
+      "parquet_row_index": 88
+    },
+    {
+      "file": "snippet_0089.cs",
+      "sha256": "08550aa17405f1085a81a4f66516b988632e793dc46bb3032195043ec9267012",
+      "chars": 902,
+      "source_row_id": "197024",
+      "source_repo_path": "HrSystem/HREntity/User.cs",
+      "source_repo_name": "AbhayVel/vmhr",
+      "parquet_row_index": 89
+    },
+    {
+      "file": "snippet_0090.cs",
+      "sha256": "08c1d46f541db951727f2b23dd35895c1b36064f3a97c974dbbc96a38e093617",
+      "chars": 878,
+      "source_row_id": "197757",
+      "source_repo_path": "TechTalk.SpecFlow/Assist/ValueRetrievers/StringArrayValueRetriever.cs",
+      "source_repo_name": "Eshva/SpecFlow",
+      "parquet_row_index": 90
+    },
+    {
+      "file": "snippet_0091.cs",
+      "sha256": "f9ab3f6f7f2be4fa54ec0b36ac2ea5844435b935f6a97500d9fa535e1c09018a",
+      "chars": 230,
+      "source_row_id": "198306",
+      "source_repo_path": "BlazorContextMenu/MouseButtonTrigger.cs",
+      "source_repo_name": "BionStt/BlazorContextMenu",
+      "parquet_row_index": 91
+    },
+    {
+      "file": "snippet_0092.cs",
+      "sha256": "4180106a06cf3bc3408c63556e6d7150c6fb7f4601f1fb7610a08ad8bff870ef",
+      "chars": 14002,
+      "source_row_id": "199976",
+      "source_repo_path": "DB_Project/Hotel_Management_System/Hotel_Management_System/New_user_add.Designer.cs",
+      "source_repo_name": "NurulAhsan/Database-Project",
+      "parquet_row_index": 92
+    },
+    {
+      "file": "snippet_0093.cs",
+      "sha256": "931d81cd7e7f9da579b40817473ac15d1da161bc280cf5924552c643cf1ca461",
+      "chars": 1348,
+      "source_row_id": "1601308",
+      "source_repo_path": "src/Larva.Core/Serialization/Xml/XmlSerializationModule.cs",
+      "source_repo_name": "freshncp/Larva.Core",
+      "parquet_row_index": 93
+    },
+    {
+      "file": "snippet_0094.cs",
+      "sha256": "50132c0def8a61484036fb14836af96536a8012b1af2a2d058a71778deb9b850",
+      "chars": 2428,
+      "source_row_id": "1601739",
+      "source_repo_path": "src/Gallio/Gallio/Runtime/Extensibility/Schema/Cache.cs",
+      "source_repo_name": "citizenmatt/gallio",
+      "parquet_row_index": 94
+    },
+    {
+      "file": "snippet_0095.cs",
+      "sha256": "a5ba52c576bc1c733f9ad2cf2112395a7b635a3f6dd8ce2d31c6b817f926bd7c",
+      "chars": 1123,
+      "source_row_id": "1601855",
+      "source_repo_path": "test/IEManageSystem.Tests/TestDatas/DBBuilder.cs",
+      "source_repo_name": "IceEmblem/IEManageSystem",
+      "parquet_row_index": 95
+    },
+    {
+      "file": "snippet_0096.cs",
+      "sha256": "49d22b0c71e831663a822ee656ad3a2b5838930e51ce2ec76e4c17de1c9d5da9",
+      "chars": 5480,
+      "source_row_id": "1606914",
+      "source_repo_path": "test/AspNetSeo.CoreMvc.Tests/TagAttributeTest.cs",
+      "source_repo_name": "danielMd2805/AspNetSeo",
+      "parquet_row_index": 96
+    },
+    {
+      "file": "snippet_0097.cs",
+      "sha256": "c093e04238be521ba24f9e12e974fb336d5a06a0cc019202f3e94b1532c0ceca",
+      "chars": 431,
+      "source_row_id": "1607372",
+      "source_repo_path": "src/Core.KeyValues.InMemory/InMemoryKeyValueExtensions.cs",
+      "source_repo_name": "MaiReo/MicroServiceInfrastructure",
+      "parquet_row_index": 97
+    },
+    {
+      "file": "snippet_0098.cs",
+      "sha256": "9dbf026ff062b211e960cda4d25e649cf661717fac819c077f6327efb6702e60",
+      "chars": 9990,
+      "source_row_id": "1615867",
+      "source_repo_path": "cleanArchitecture.UnitTests/Controllers/ProductController.cs",
+      "source_repo_name": "harisrkhan7/cleanArchitecture",
+      "parquet_row_index": 98
+    },
+    {
+      "file": "snippet_0099.cs",
+      "sha256": "c6562ad6c6421c3396a9031c5371481096d0f10aff3451ae6b5c5d0cbe7e8c2f",
+      "chars": 863,
+      "source_row_id": "1620253",
+      "source_repo_path": "Shared/Sensor.cs",
+      "source_repo_name": "djaus2/SensorBlazor",
+      "parquet_row_index": 99
+    }
+  ]
+}

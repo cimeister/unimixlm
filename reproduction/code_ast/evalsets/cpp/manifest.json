@@ -1,0 +1,921 @@
+{
+  "lang": "cpp",
+  "paper_label": "C++",
+  "built": "2026-08-28T06:35:54.971266+00:00",
+  "n_snippets": 100,
+  "eval_snippets_per_lang_constant": 100,
+  "selection_rule": "first N non-blank snippets in eval-parquet row order after CodeDataLoader's own normalisation (_strip_starcoder_metadata, _normalize_source, rstrip) -- identical to CodeDataLoader(max_snippets_per_lang=N) on that parquet",
+  "deterministic": true,
+  "seed": null,
+  "seed_note": "selection is by parquet row order, not sampling, so no seed exists to record; the file list below IS the selection",
+  "eval_parquet": "<local>/tokenizer-intrinsic-evals/starcoder/cpp.parquet",
+  "eval_parquet_sha256": "33a20f38201882339e2ead33002f6e1dbd3812853c49d0ebf79fe2954c603554",
+  "eval_parquet_rows": 2841,
+  "rows_scanned_to_fill": 100,
+  "extension": ".cpp",
+  "dir": "<repo>/eval_results/code_ast_v1/evalsets/cpp",
+  "total_chars": 753606,
+  "roundtrip_verified_through": "CodeDataLoader(dir).get_code_snippets",
+  "files": [
+    {
+      "file": "snippet_0000.cpp",
+      "sha256": "c1190457978d72bc4836a437b94c778f98bdb5cb4afabb1bb793a0e24f207c80",
+      "chars": 5935,
+      "source_row_id": "2879",
+      "source_repo_path": "src/athena/MemoryWriter.cpp",
+      "source_repo_name": "encounter/athena",
+      "parquet_row_index": 0
+    },
+    {
+      "file": "snippet_0001.cpp",
+      "sha256": "0e628815cbbfc3da228092612b5e86097ddecd3f3660eae34fad9b7e57cb0885",
+      "chars": 7991,
+      "source_row_id": "4153",
+      "source_repo_path": "eprp/eprp.cpp",
+      "source_repo_name": "milad621/livehd",
+      "parquet_row_index": 1
+    },
+    {
+      "file": "snippet_0002.cpp",
+      "sha256": "73d553dfc7ca1672ed63611033d4b58b3dc47a373c32e234aae96e5a105410af",
+      "chars": 770,
+      "source_row_id": "7074",
+      "source_repo_path": "Codeforces/PetyaAndCountryyard.cpp",
+      "source_repo_name": "canis-majoris123/CompetitiveProgramming",
+      "parquet_row_index": 2
+    },
+    {
+      "file": "snippet_0003.cpp",
+      "sha256": "1d4b516d7a6e9d886b52b147e63aa475a1f6298ac5db58994f1dd1da4a21e69e",
+      "chars": 1203,
+      "source_row_id": "10227",
+      "source_repo_path": "src/main/cpp/commands/SetBallHolder.cpp",
+      "source_repo_name": "Team7433/2021InfiniteRecharge",
+      "parquet_row_index": 3
+    },
+    {
+      "file": "snippet_0004.cpp",
+      "sha256": "9dbe0194d0c6b99024888b8917013af895525dc5d97f4a86b20ac45efd65435c",
+      "chars": 2906,
+      "source_row_id": "11439",
+      "source_repo_path": "miditool/miditool.cpp",
+      "source_repo_name": "DannyHavenith/miditool",
+      "parquet_row_index": 4
+    },
+    {
+      "file": "snippet_0005.cpp",
+      "sha256": "8981406edf8bf1941f6f65e7275976975c50b372426f3795b27c8c4a20ae3dc9",
+      "chars": 2242,
+      "source_row_id": "14503",
+      "source_repo_path": "CCF/CCSP/2017/3-serial/brute.cpp",
+      "source_repo_name": "cnsteven/online-judge",
+      "parquet_row_index": 5
+    },
+    {
+      "file": "snippet_0006.cpp",
+      "sha256": "c624cbaaf2fdf87faf7dec4aefc3e061ca504ac58716eac3db549e3cace6ca63",
+      "chars": 760,
+      "source_row_id": "18742",
+      "source_repo_path": "test/src/Algorithm/FindIf.hpp",
+      "source_repo_name": "changjurhee/CppML",
+      "parquet_row_index": 6
+    },
+    {
+      "file": "snippet_0007.cpp",
+      "sha256": "e71b627b42cce3d0c0f53608baa6103019c6770fa7a3fa6a799fbda71c79ce7e",
+      "chars": 1255,
+      "source_row_id": "19434",
+      "source_repo_path": "src/hidden_layer.hh",
+      "source_repo_name": "WaizungTaam/neural_network",
+      "parquet_row_index": 7
+    },
+    {
+      "file": "snippet_0008.cpp",
+      "sha256": "594a56422818a918d3ac288d6651c89be64ec6708cbee99ad16e9c2d1d322b09",
+      "chars": 14062,
+      "source_row_id": "21546",
+      "source_repo_path": "src/obstruction_free_dictionary.cpp",
+      "source_repo_name": "cconklin/nonblocking-tables",
+      "parquet_row_index": 8
+    },
+    {
+      "file": "snippet_0009.cpp",
+      "sha256": "501c5a0ee140eff041089fa2e10ca9df6e107f0a568509ccd2085ce9af672fed",
+      "chars": 4106,
+      "source_row_id": "24208",
+      "source_repo_path": "gitiles_test.cc",
+      "source_repo_name": "dancerj/gitlstreefs",
+      "parquet_row_index": 9
+    },
+    {
+      "file": "snippet_0010.cpp",
+      "sha256": "076de11698dac992d14013437584d8cff0f4dc8c6140a1dd46b0c3f3dae1a1c4",
+      "chars": 35737,
+      "source_row_id": "25876",
+      "source_repo_path": "omnetpy/bindings/bind_ccomponent.cc",
+      "source_repo_name": "ranarashadmahmood/OMNETPY",
+      "parquet_row_index": 10
+    },
+    {
+      "file": "snippet_0011.cpp",
+      "sha256": "0ab550018176e9611ca0ba09d76f5ba8168bb8b0dbc5472b9e7d875428b3eef7",
+      "chars": 2472,
+      "source_row_id": "39167",
+      "source_repo_path": "IA20-CommonLib/src/ia20/commonlib/net/conn/udp/Base.cpp",
+      "source_repo_name": "InvenireAude/IA20-BuilderTools",
+      "parquet_row_index": 11
+    },
+    {
+      "file": "snippet_0012.cpp",
+      "sha256": "0b32d5df5a4a0fe05ecd2241d47716b66d7866d14adea4858fad8edb68202860",
+      "chars": 19304,
+      "source_row_id": "41599",
+      "source_repo_path": "src/Providers/ManagedSystem/IP/NextHopIPRouteProvider.cpp",
+      "source_repo_name": "natronkeltner/openpegasus",
+      "parquet_row_index": 12
+    },
+    {
+      "file": "snippet_0013.cpp",
+      "sha256": "b22227772353cfe3c9b0692485bf41e4b8920ad8291ca70f2f3b3737330fcfa8",
+      "chars": 1057,
+      "source_row_id": "43733",
+      "source_repo_path": "Skeleton/src/OpenGL/main.cpp",
+      "source_repo_name": "heesok2/OpenGL",
+      "parquet_row_index": 13
+    },
+    {
+      "file": "snippet_0014.cpp",
+      "sha256": "efe7bc5d7760f9a5b099c7c9a6fb78dd184f8501631eff5ee4724ef93625f5fc",
+      "chars": 10746,
+      "source_row_id": "45152",
+      "source_repo_path": "src/SX1276/SX1276.cpp",
+      "source_repo_name": "jspark311/ManuvrDrivers",
+      "parquet_row_index": 14
+    },
+    {
+      "file": "snippet_0015.cpp",
+      "sha256": "b64ad935f9e9bbc84cd4885f98c530a1d5a689095281522ebfd4a4534b69ae4a",
+      "chars": 905,
+      "source_row_id": "48239",
+      "source_repo_path": "linux/HoloLens_Localization/src/anchor_localizer/main.cpp",
+      "source_repo_name": "microsoft/HoloLensNavigationForRobots",
+      "parquet_row_index": 15
+    },
+    {
+      "file": "snippet_0016.cpp",
+      "sha256": "31f7e65b84053a20934ff102678953193948823e0b1378dc5bab9340d3c58f54",
+      "chars": 9033,
+      "source_row_id": "53264",
+      "source_repo_path": "dune/xt/functions/base/derivatives-of-element-functions.hh",
+      "source_repo_name": "dune-community/dune-xt-functions",
+      "parquet_row_index": 16
+    },
+    {
+      "file": "snippet_0017.cpp",
+      "sha256": "5b7468cf60374a0ca4ec98ce6c08d40c58d27f71fdf8f64abc0b1a457f09c74b",
+      "chars": 9145,
+      "source_row_id": "55468",
+      "source_repo_path": "TeamT2_ARC2017_src/t2_robot_vision/src/normal_vector.cpp",
+      "source_repo_name": "warehouse-picking-automation-challenges/Team_T2",
+      "parquet_row_index": 17
+    },
+    {
+      "file": "snippet_0018.cpp",
+      "sha256": "6062370465b8fee19431efdb51bd388766552b0cb824873f974796474c0dd962",
+      "chars": 25226,
+      "source_row_id": "55563",
+      "source_repo_path": "lib/matrices/wimax_1248_0_75A.cc",
+      "source_repo_name": "iamviji/wimax_ldpc_lib",
+      "parquet_row_index": 18
+    },
+    {
+      "file": "snippet_0019.cpp",
+      "sha256": "68898faa34e2c829a492a62d12d06aeda1a721798e8400d942047b66b56f6e51",
+      "chars": 982,
+      "source_row_id": "56426",
+      "source_repo_path": "examples/Switch.System/ArrayList2/ArrayList2.cpp",
+      "source_repo_name": "victor-timoshin/Switch",
+      "parquet_row_index": 19
+    },
+    {
+      "file": "snippet_0020.cpp",
+      "sha256": "c0b2300d88f26d527e60fb9cf6d44a3d074596ebace299faf67d5d241f9bf5ef",
+      "chars": 29589,
+      "source_row_id": "58503",
+      "source_repo_path": "FindSecret/Classes/Native/Bulk_DOTween43_0.cpp",
+      "source_repo_name": "GodIsWord/NewFindSecret",
+      "parquet_row_index": 20
+    },
+    {
+      "file": "snippet_0021.cpp",
+      "sha256": "beed2f512a8f2cde6e3cc3efc79191023ca98706a64340ee9b6ea98ac1d1466f",
+      "chars": 2667,
+      "source_row_id": "59427",
+      "source_repo_path": "src/gui/searchdialog.cc",
+      "source_repo_name": "grencez/protocon",
+      "parquet_row_index": 21
+    },
+    {
+      "file": "snippet_0022.cpp",
+      "sha256": "91f03679bd7e939dd8c9a2e42d0613b68aee2dc32131d0e62d66e49767751fbe",
+      "chars": 15731,
+      "source_row_id": "66748",
+      "source_repo_path": "VCECore/rgy_filter_mpdecimate.cpp",
+      "source_repo_name": "rigaya/VCEEnc",
+      "parquet_row_index": 22
+    },
+    {
+      "file": "snippet_0023.cpp",
+      "sha256": "ec38f8436e5f258930a2af77845c371a35e052b3d55e68d2959c3f55f535b300",
+      "chars": 10235,
+      "source_row_id": "66862",
+      "source_repo_path": "src/magnetic-model.cpp",
+      "source_repo_name": "paleolimbot/headings",
+      "parquet_row_index": 23
+    },
+    {
+      "file": "snippet_0024.cpp",
+      "sha256": "2928cf7586578c3f1d8e3b3d7ea9cf9324ec19382dc245f94dcbca05726812b5",
+      "chars": 3816,
+      "source_row_id": "68597",
+      "source_repo_path": "firmware/library/L1_Drivers/gpio_test.cpp",
+      "source_repo_name": "2721Aperez/SJSU-Dev2",
+      "parquet_row_index": 24
+    },
+    {
+      "file": "snippet_0025.cpp",
+      "sha256": "731a7a9c4d248ed8c0e72e2bcb41500ee4cd41ec34ad4fb78ebb6ccad85e8dc7",
+      "chars": 1966,
+      "source_row_id": "71124",
+      "source_repo_path": "libcaf_core/src/detail/behavior_stack.cpp",
+      "source_repo_name": "dosuperuser/actor-framework",
+      "parquet_row_index": 25
+    },
+    {
+      "file": "snippet_0026.cpp",
+      "sha256": "1bdeb6d7f68a00cbf7c0ca5d3c57f861fd51c3182183c63ffec6fa238197f635",
+      "chars": 67603,
+      "source_row_id": "80910",
+      "source_repo_path": "WRK-V1.2/clr/src/vm/assemblynative.cpp",
+      "source_repo_name": "intj-t/openvmsft",
+      "parquet_row_index": 26
+    },
+    {
+      "file": "snippet_0027.cpp",
+      "sha256": "f4cb6cc00e2b89b9b93bf2ee93c640be3833fe145f55869db6b9193d5fbbeed0",
+      "chars": 1392,
+      "source_row_id": "85233",
+      "source_repo_path": "Source/GD101_Audio.cpp",
+      "source_repo_name": "Game-Dev-101/GD101_Library",
+      "parquet_row_index": 27
+    },
+    {
+      "file": "snippet_0028.cpp",
+      "sha256": "c118be10fdf851970f62bc43e7642b08e420d52af254f9973dbe00bf7d974364",
+      "chars": 614,
+      "source_row_id": "87566",
+      "source_repo_path": "1200/20/1223b.cpp",
+      "source_repo_name": "actium/cf",
+      "parquet_row_index": 28
+    },
+    {
+      "file": "snippet_0029.cpp",
+      "sha256": "c49ce2293bd522ee178583b7b8de3da49b077e14b0be67dcbaa077ca624c71c4",
+      "chars": 126785,
+      "source_row_id": "95593",
+      "source_repo_path": "dashplayer/DashCodec.cpp",
+      "source_repo_name": "urris/android_device_casio_gzone",
+      "parquet_row_index": 29
+    },
+    {
+      "file": "snippet_0030.cpp",
+      "sha256": "212f5c585f0e1730fc7ec138d04a99b08c2bab26a515ed44354ff2a3b145fd25",
+      "chars": 1135,
+      "source_row_id": "97212",
+      "source_repo_path": "camera/common/still_capture_processor_impl_fuzzer.cc",
+      "source_repo_name": "Toromino/chromiumos-platform2",
+      "parquet_row_index": 30
+    },
+    {
+      "file": "snippet_0031.cpp",
+      "sha256": "d4d57742cc2d766f672658332424b8320e4d7a39f27da2daa103bdf983d23138",
+      "chars": 40337,
+      "source_row_id": "98512",
+      "source_repo_path": "tools/ipc_fuzzer/mutate/generate.cc",
+      "source_repo_name": "iplo/Chain",
+      "parquet_row_index": 31
+    },
+    {
+      "file": "snippet_0032.cpp",
+      "sha256": "391ea11a7fb57883fe9f97bd88da8d057b78814a0963fe25785a93f7297f6c43",
+      "chars": 1033,
+      "source_row_id": "802381",
+      "source_repo_path": "test/performance-regression/full-apps/qmcpack/src/QMCTools/ppconvert/src/CubicSpline.cc",
+      "source_repo_name": "JKChenFZ/hclib",
+      "parquet_row_index": 32
+    },
+    {
+      "file": "snippet_0033.cpp",
+      "sha256": "1f2f027fa5e4f31104b786839798cb61892eec1cd4300e117ced554241f41f01",
+      "chars": 1133,
+      "source_row_id": "802889",
+      "source_repo_path": "src/framework.cpp",
+      "source_repo_name": "timcogames/Sway.Framework",
+      "parquet_row_index": 33
+    },
+    {
+      "file": "snippet_0034.cpp",
+      "sha256": "9f7ddbbc85a5d7e25c0e2c348de3b321a01e9367553a2aa0a632f526babcf1a1",
+      "chars": 2218,
+      "source_row_id": "805826",
+      "source_repo_path": "utils/Vector2.cpp",
+      "source_repo_name": "lwesterl/PhysicsEngine",
+      "parquet_row_index": 34
+    },
+    {
+      "file": "snippet_0035.cpp",
+      "sha256": "d82b828c94352c37d9ed45608629917e46fd36203929bde63145c1cc466cb8f8",
+      "chars": 500,
+      "source_row_id": "809403",
+      "source_repo_path": "tests/internal/src/HeaderOnly.hpp",
+      "source_repo_name": "nkoukpaizan/blt",
+      "parquet_row_index": 35
+    },
+    {
+      "file": "snippet_0036.cpp",
+      "sha256": "1f2316c5854d8272da03aabb5b04168a427024edb89150bc3005e5185c9091f2",
+      "chars": 481,
+      "source_row_id": "813634",
+      "source_repo_path": "310/test310/mp4.cpp",
+      "source_repo_name": "shi-bash-cmd/qtTest",
+      "parquet_row_index": 36
+    },
+    {
+      "file": "snippet_0037.cpp",
+      "sha256": "aed2b5a408e8af127e0ccd3579d8f4ab9dad8de6d457281d937e5c5c68f57d22",
+      "chars": 5714,
+      "source_row_id": "814495",
+      "source_repo_path": "third_party/blink/renderer/core/svg/svg_resource.cc",
+      "source_repo_name": "mghgroup/Glide-Browser",
+      "parquet_row_index": 37
+    },
+    {
+      "file": "snippet_0038.cpp",
+      "sha256": "2732154c689bb8673bf0da21d08e076dc29c3fa2c445063825f6ab32d4b53069",
+      "chars": 4116,
+      "source_row_id": "816399",
+      "source_repo_path": "quizGame.cpp",
+      "source_repo_name": "Ghayasuddin/Cpp-console-game",
+      "parquet_row_index": 38
+    },
+    {
+      "file": "snippet_0039.cpp",
+      "sha256": "0380719b1825274c0c3bd09f5c47baad47613cd927cb168e77cc9d57d7326faf",
+      "chars": 633,
+      "source_row_id": "819211",
+      "source_repo_path": "Longest_Valid_Parentheses.cpp",
+      "source_repo_name": "xiekc/leetcode",
+      "parquet_row_index": 39
+    },
+    {
+      "file": "snippet_0040.cpp",
+      "sha256": "49fe1feb57bb192191f52d64743a7dfc3a9b540b99366d76773b0f12e47f4b4d",
+      "chars": 4685,
+      "source_row_id": "826201",
+      "source_repo_path": "spell-check/spellcheck.cpp",
+      "source_repo_name": "rayphee/Data-Structures-Algorithms",
+      "parquet_row_index": 40
+    },
+    {
+      "file": "snippet_0041.cpp",
+      "sha256": "fac0e3ccb16797eab7b071d51e2342a38964897e1fdf180c571e8d7303ca806c",
+      "chars": 2041,
+      "source_row_id": "830801",
+      "source_repo_path": "openbmc/build/tmp/deploy/sdk/witherspoon-2019-08-08/sysroots/armv6-openbmc-linux-gnueabi/usr/src/debug/boost/1.69.0-r0/boost_1_69_0/boost/spirit/home/classic/attribute/closure_context.hpp",
+      "source_repo_name": "sotaoverride/backup",
+      "parquet_row_index": 41
+    },
+    {
+      "file": "snippet_0042.cpp",
+      "sha256": "6a900ef53c18a7e2ac60de3f9b2ea800d30ff673f9de9f375eb126acc7524540",
+      "chars": 1726,
+      "source_row_id": "831766",
+      "source_repo_path": "minesweeperwelcomeview.cpp",
+      "source_repo_name": "colajam93/Minesweeper",
+      "parquet_row_index": 42
+    },
+    {
+      "file": "snippet_0043.cpp",
+      "sha256": "6b954709cda787893bf43e3b8e595a3ed80f25decf88df57a01d43b3811dd2d9",
+      "chars": 18387,
+      "source_row_id": "832315",
+      "source_repo_path": "IO/src/rtmp/src/NvV4l2Decoder.cpp",
+      "source_repo_name": "tlalexander/stitchEm",
+      "parquet_row_index": 43
+    },
+    {
+      "file": "snippet_0044.cpp",
+      "sha256": "129f60685242323792dfff46953e89ebe943b7b4bcd654ebd2284e50d7559e5f",
+      "chars": 15665,
+      "source_row_id": "835209",
+      "source_repo_path": "third_party/WebKit/Source/web/tests/WebFrameSerializerSanitizationTest.cpp",
+      "source_repo_name": "metux/chromium-deb",
+      "parquet_row_index": 44
+    },
+    {
+      "file": "snippet_0045.cpp",
+      "sha256": "40042255516087f26c8f6ead73fbf75fb7045230ef065f85271d16bea57d288e",
+      "chars": 391,
+      "source_row_id": "835822",
+      "source_repo_path": "Arrays/ND-Array/driver.cpp",
+      "source_repo_name": "cyy1991/Common-Cplusplus-DataStructures-Implementations",
+      "parquet_row_index": 45
+    },
+    {
+      "file": "snippet_0046.cpp",
+      "sha256": "f1408f06452e5981f2de49f157d0125912c3af454cf2aa7544254cecb11f1ef3",
+      "chars": 501,
+      "source_row_id": "836062",
+      "source_repo_path": "testing_utilities/algebra_test.cpp",
+      "source_repo_name": "tnuvoletta/Principia",
+      "parquet_row_index": 46
+    },
+    {
+      "file": "snippet_0047.cpp",
+      "sha256": "f94327a2123d4a95d0737e6c94ebd0b9d31d5868173dcb741e7db38326d6fac1",
+      "chars": 2389,
+      "source_row_id": "841078",
+      "source_repo_path": "accumulate.hpp",
+      "source_repo_name": "EdenReuveni/IterTools",
+      "parquet_row_index": 47
+    },
+    {
+      "file": "snippet_0048.cpp",
+      "sha256": "390272952249547d364786c3723f986427ada7fb09515eadad2b6c450afa84ca",
+      "chars": 19748,
+      "source_row_id": "841310",
+      "source_repo_path": "inetcore/mshtml/src/dxt/msft/src/dropshadow.cpp",
+      "source_repo_name": "npocmaka/Windows-Server-2003",
+      "parquet_row_index": 48
+    },
+    {
+      "file": "snippet_0049.cpp",
+      "sha256": "2cca3a20a9913332c6a9c35071a5b41ae6c2278e88258b0c359a7611b79c6017",
+      "chars": 2750,
+      "source_row_id": "843510",
+      "source_repo_path": "content/renderer/render_widget_mouse_lock_dispatcher.cc",
+      "source_repo_name": "zipated/src",
+      "parquet_row_index": 49
+    },
+    {
+      "file": "snippet_0050.cpp",
+      "sha256": "0d37551fb4b3f92a656afd2c8a1f062e7fb3f91af2f43a81bfcb3676974018fd",
+      "chars": 6409,
+      "source_row_id": "843829",
+      "source_repo_path": "benchmarks/decodebenchmark.cpp",
+      "source_repo_name": "lemire/dictionary",
+      "parquet_row_index": 50
+    },
+    {
+      "file": "snippet_0051.cpp",
+      "sha256": "89e3e4c4a2ec69ac06d4d2594146cfa4483a58466e24c76e4879f02768250cb0",
+      "chars": 4673,
+      "source_row_id": "844646",
+      "source_repo_path": "Chainreaction.cpp",
+      "source_repo_name": "Nik6198/chain-reaction-game",
+      "parquet_row_index": 51
+    },
+    {
+      "file": "snippet_0052.cpp",
+      "sha256": "e8dcf95e03b7beadbd839148dc40e846da3a687899dda0db56c67380ac27a22a",
+      "chars": 13277,
+      "source_row_id": "846794",
+      "source_repo_path": "sdk/storage/azure-storage-blobs/src/blob_service_client.cpp",
+      "source_repo_name": "JinmingHu-MSFT/azure-sdk-for-cpp",
+      "parquet_row_index": 52
+    },
+    {
+      "file": "snippet_0053.cpp",
+      "sha256": "8471b7a87f1d7b9e98e4bd3c35dc07620e9f566fcdec33007fd332e96af710f2",
+      "chars": 1329,
+      "source_row_id": "851606",
+      "source_repo_path": "LeetCode/Problems/Algorithms/#154_FindMinimumInRotatedSortedArrayII_sol1_16ms_12.4MB.cpp",
+      "source_repo_name": "Tudor67/Competitive-Programming",
+      "parquet_row_index": 53
+    },
+    {
+      "file": "snippet_0054.cpp",
+      "sha256": "c0f4e67860c09425e361e3ff90eb9da3690688e5793ee73341f65c6554ecbd67",
+      "chars": 1188,
+      "source_row_id": "862700",
+      "source_repo_path": "tests/Basic/Context/main.cpp",
+      "source_repo_name": "cash2/cash2",
+      "parquet_row_index": 54
+    },
+    {
+      "file": "snippet_0055.cpp",
+      "sha256": "10cc7a959020e4f19412bbd0491680bbc2f5dd11b46e093fcdaed3b1be5a626d",
+      "chars": 4978,
+      "source_row_id": "865644",
+      "source_repo_path": "iocore/net/quic/QUICPacketPayloadProtector.cc",
+      "source_repo_name": "heroku-miraheze/trafficserver",
+      "parquet_row_index": 55
+    },
+    {
+      "file": "snippet_0056.cpp",
+      "sha256": "a93b8b6d95e8117182283b1b727afa5fb1e60cabd150894a959f2b4346ce007d",
+      "chars": 309,
+      "source_row_id": "871146",
+      "source_repo_path": "Project_GPS/myrandom.cpp",
+      "source_repo_name": "yoannvigolo/Genetique_GPS",
+      "parquet_row_index": 56
+    },
+    {
+      "file": "snippet_0057.cpp",
+      "sha256": "3b470b0671e3bfd8585205fc2dd9dc02b4df038dbd846a96136602b79b3928de",
+      "chars": 115,
+      "source_row_id": "873873",
+      "source_repo_path": "src_client/Creature.cpp",
+      "source_repo_name": "Naftoreiclag/VS7C",
+      "parquet_row_index": 57
+    },
+    {
+      "file": "snippet_0058.cpp",
+      "sha256": "7c7bee15321ee57890fcbcf569108c749f0af7cebbe94d16de8de0c68c55085e",
+      "chars": 201,
+      "source_row_id": "874957",
+      "source_repo_path": "node_modules/lzz-gyp/lzz-source/smtc_ClassDeclPtr.cpp",
+      "source_repo_name": "SuperDizor/dizornator",
+      "parquet_row_index": 58
+    },
+    {
+      "file": "snippet_0059.cpp",
+      "sha256": "eba87ade86b59ec609cec702800afc8841875b6b742a30726ae40723618ada0c",
+      "chars": 1323,
+      "source_row_id": "875630",
+      "source_repo_path": "OrionUO/GUI/GUITilepicScaled.cpp",
+      "source_repo_name": "shiryux/UOA-OrionUO",
+      "parquet_row_index": 59
+    },
+    {
+      "file": "snippet_0060.cpp",
+      "sha256": "b0e89026f29c3debf061aed6daf973c9852059f3b7b1844c65506bbce5c2e3c9",
+      "chars": 2830,
+      "source_row_id": "880206",
+      "source_repo_path": "src/ring_msg/receiver.hh",
+      "source_repo_name": "wxdwfc/r2",
+      "parquet_row_index": 60
+    },
+    {
+      "file": "snippet_0061.cpp",
+      "sha256": "f28628afe97e768d834f19ee15324b50c85cdc37c1ec89e4fe177a36a9ebf1a9",
+      "chars": 403,
+      "source_row_id": "880288",
+      "source_repo_path": "codechef september long challenge 2016/Chef and digits of a number.cpp",
+      "source_repo_name": "DevGithub007/My_Codes",
+      "parquet_row_index": 61
+    },
+    {
+      "file": "snippet_0062.cpp",
+      "sha256": "6c4e5e577f96e9201c5072d0c3ed7c2211e3aab0fb678dce5c252b7cb8af6420",
+      "chars": 1567,
+      "source_row_id": "881258",
+      "source_repo_path": "src/CheckerBoard.cpp",
+      "source_repo_name": "petedishman/RayTracer",
+      "parquet_row_index": 62
+    },
+    {
+      "file": "snippet_0063.cpp",
+      "sha256": "e43f7ca5460e20f37faa505d34663a67afb6d3a62c7f215bdc169ab09195b0cd",
+      "chars": 1183,
+      "source_row_id": "881870",
+      "source_repo_path": "MyObjectExplorer/Source/MyObjectExplorer/MyObjectTreeNode.cpp",
+      "source_repo_name": "sharpwind612/UnrealCookbook",
+      "parquet_row_index": 63
+    },
+    {
+      "file": "snippet_0064.cpp",
+      "sha256": "0861c24c833559e7229831195d67df337da6f6973b4025e06bfc1910839ad6f5",
+      "chars": 1037,
+      "source_row_id": "883969",
+      "source_repo_path": "luogu/CF670C.cpp",
+      "source_repo_name": "delphi122/knowledge_planet",
+      "parquet_row_index": 64
+    },
+    {
+      "file": "snippet_0065.cpp",
+      "sha256": "033e05f711ba38ad3ef0e256af3846bd70ba4bd82bf4cb136c01ef3cce9a4eeb",
+      "chars": 1944,
+      "source_row_id": "884042",
+      "source_repo_path": "SarvLibrary/Kmerize/dsk/thirdparty/gatb-core/gatb-core/examples/debruijn/debruijn5.cpp",
+      "source_repo_name": "cwright7101/llvm_sarvavid",
+      "parquet_row_index": 65
+    },
+    {
+      "file": "snippet_0066.cpp",
+      "sha256": "f401013c14fae1c8e65918f271baadba327eff266a003b6d057c1b7fc6428c3e",
+      "chars": 2660,
+      "source_row_id": "886438",
+      "source_repo_path": "aff3ct-server/src/aff3ct-addons/simulation/Codec.cpp",
+      "source_repo_name": "simonrus/aff3ct-bfe",
+      "parquet_row_index": 66
+    },
+    {
+      "file": "snippet_0067.cpp",
+      "sha256": "d26aa29b1601c3c8c7fc95b5db26ed90bbcccc37cbf8948e451c50e559057aae",
+      "chars": 2203,
+      "source_row_id": "887766",
+      "source_repo_path": "src/errors.cpp",
+      "source_repo_name": "agnat/n2o",
+      "parquet_row_index": 67
+    },
+    {
+      "file": "snippet_0068.cpp",
+      "sha256": "22531d522d7cafd6ab067b91851ba0d804e0956b8fb15b075fac79b08845a4a6",
+      "chars": 2325,
+      "source_row_id": "889457",
+      "source_repo_path": "src/link.cc",
+      "source_repo_name": "davidchall/fs",
+      "parquet_row_index": 68
+    },
+    {
+      "file": "snippet_0069.cpp",
+      "sha256": "8d333eb2237634402ee294859353e1de9211039091faa8b97c97d7d5633a315f",
+      "chars": 7373,
+      "source_row_id": "890500",
+      "source_repo_path": "Arduino-master-Customized/hardware/arduino/sam/libraries/SPI/SPI.cpp",
+      "source_repo_name": "MOHAMED-OKASHA/-",
+      "parquet_row_index": 69
+    },
+    {
+      "file": "snippet_0070.cpp",
+      "sha256": "7e1a89f22b3b39a64d40c8daf64056158aed1a4bf4276ef900267c8de76717f6",
+      "chars": 2513,
+      "source_row_id": "893162",
+      "source_repo_path": "src/+cv/findHomography.cpp",
+      "source_repo_name": "rokm/mexopencv",
+      "parquet_row_index": 70
+    },
+    {
+      "file": "snippet_0071.cpp",
+      "sha256": "5785be4bcc148509b055d4136afa78555ee1614a7e4de54281511cb758974ac5",
+      "chars": 786,
+      "source_row_id": "896665",
+      "source_repo_path": "bacs/archive/src/web/content/form/base.cpp",
+      "source_repo_name": "bacsorg/bacs",
+      "parquet_row_index": 71
+    },
+    {
+      "file": "snippet_0072.cpp",
+      "sha256": "b95eede38ec864ce8836a088036e543348e8081591cd7e4cb38a163c13377982",
+      "chars": 393,
+      "source_row_id": "897846",
+      "source_repo_path": "vol1/14.cpp",
+      "source_repo_name": "EdisonAlgorithms/ProjectEuler",
+      "parquet_row_index": 72
+    },
+    {
+      "file": "snippet_0073.cpp",
+      "sha256": "2a5bff7be0b22b58b91c5b0133d5d10a5dcc84f97f9bdc7e901c6e3ffcc2b240",
+      "chars": 2291,
+      "source_row_id": "899753",
+      "source_repo_path": "unit_tests/test_blockdelayline.cpp",
+      "source_repo_name": "mgeier/apf",
+      "parquet_row_index": 73
+    },
+    {
+      "file": "snippet_0074.cpp",
+      "sha256": "a3af1cb5b7e12a5daff6efbaecf73b32f17e77abe675f29044e360b647a82223",
+      "chars": 713,
+      "source_row_id": "1600751",
+      "source_repo_path": "tests/kbm.cpp",
+      "source_repo_name": "MarkCWirt/libscala-file",
+      "parquet_row_index": 74
+    },
+    {
+      "file": "snippet_0075.cpp",
+      "sha256": "5faa928bcaa0e026b28e635e6d5a8a98b7fb3de27dd7d46d2824952aef572bed",
+      "chars": 2731,
+      "source_row_id": "1601523",
+      "source_repo_path": "puzzle-solver.cpp",
+      "source_repo_name": "schanur/36-cube-solver",
+      "parquet_row_index": 75
+    },
+    {
+      "file": "snippet_0076.cpp",
+      "sha256": "fc724d14a43b44a715cb70710c6e4fda50597fcdd471b387a4d09fd349f9adc8",
+      "chars": 3202,
+      "source_row_id": "1602219",
+      "source_repo_path": "SDK/BP_Shipwright_functions.cpp",
+      "source_repo_name": "alxalx14/Sea-Of-Thieves-SDK",
+      "parquet_row_index": 76
+    },
+    {
+      "file": "snippet_0077.cpp",
+      "sha256": "d25bcaa8155553f04b51e9c933934e6d0f9b8f3406418af330127fd5d679f680",
+      "chars": 685,
+      "source_row_id": "1607954",
+      "source_repo_path": "test/t-NodeRef.cpp",
+      "source_repo_name": "iboB/kuzco",
+      "parquet_row_index": 77
+    },
+    {
+      "file": "snippet_0078.cpp",
+      "sha256": "16c14104e4c93f0e7894e698d79871a3fcc5954fc62470f6cc12be1a76643913",
+      "chars": 877,
+      "source_row_id": "1612312",
+      "source_repo_path": "chrome/browser/search_engines/template_url_service_factory_android.cc",
+      "source_repo_name": "chromium/chromium",
+      "parquet_row_index": 78
+    },
+    {
+      "file": "snippet_0079.cpp",
+      "sha256": "7ba974e891171cd2a0782ca1783f6aa0a3e1b40867cb3ae3704a4df2a020fcc3",
+      "chars": 1667,
+      "source_row_id": "1614205",
+      "source_repo_path": "lib/sys/os/Apple/SocketApi.cpp",
+      "source_repo_name": "carnegie-technologies/pravala-toolkit",
+      "parquet_row_index": 79
+    },
+    {
+      "file": "snippet_0080.cpp",
+      "sha256": "970ad1679e706aea82079c37708a9184f85933e6173679ffb118197d1c8f61b8",
+      "chars": 34646,
+      "source_row_id": "1616678",
+      "source_repo_path": "src/update-client.cc",
+      "source_repo_name": "stream-labs/a-files-updater",
+      "parquet_row_index": 80
+    },
+    {
+      "file": "snippet_0081.cpp",
+      "sha256": "c19ba5c2f3284b88f20a57f1704df21ac965f84c8d37494ccb18a38c087e2843",
+      "chars": 6678,
+      "source_row_id": "1617376",
+      "source_repo_path": "src/SFGUI/LayoutPanel.cpp",
+      "source_repo_name": "pL0ck/SFGUI",
+      "parquet_row_index": 81
+    },
+    {
+      "file": "snippet_0082.cpp",
+      "sha256": "6a20d755a91d32f4db3be491fce7fbb1f31207626acf599122c303ee09ceaeda",
+      "chars": 2449,
+      "source_row_id": "1619766",
+      "source_repo_path": "v8_7_5/src/code-desc.cc",
+      "source_repo_name": "wenfeifei/miniblink49",
+      "parquet_row_index": 82
+    },
+    {
+      "file": "snippet_0083.cpp",
+      "sha256": "b17fa2bef4f63cb67b1dfaf172fe4d8294b7fe9a7a5a22f135a92dbe3d8e5315",
+      "chars": 1448,
+      "source_row_id": "1620233",
+      "source_repo_path": "TextureBuilder.cpp",
+      "source_repo_name": "melzareix/dmet502-cr-runner",
+      "parquet_row_index": 83
+    },
+    {
+      "file": "snippet_0084.cpp",
+      "sha256": "d6c362b7d0734b0af0468116ee22ca160ef858e36d9c1c8f6a5fe491923e1b07",
+      "chars": 475,
+      "source_row_id": "1621164",
+      "source_repo_path": "1-100/11. Container With Most Water.cpp",
+      "source_repo_name": "erichuang1994/leetcode-solution",
+      "parquet_row_index": 84
+    },
+    {
+      "file": "snippet_0085.cpp",
+      "sha256": "e351a697bdf1ebab38e1a8393da091c77bb773aca3fd79b4c8827e47f1b9942e",
+      "chars": 5786,
+      "source_row_id": "1624385",
+      "source_repo_path": "src/cegis/jsa/learn/insert_counterexample.cpp",
+      "source_repo_name": "manasij7479/cbmc",
+      "parquet_row_index": 85
+    },
+    {
+      "file": "snippet_0086.cpp",
+      "sha256": "5f6b6b7d6db2242932146816deb2d7a8590cb5d763ab5446808b866edea66c2a",
+      "chars": 2106,
+      "source_row_id": "1626210",
+      "source_repo_path": "src/perception/segmentation/ground_truth_detections/include/ground_truth_detections/ground_truth_detections_node.hpp",
+      "source_repo_name": "11Takanori/AutowareAuto_",
+      "parquet_row_index": 86
+    },
+    {
+      "file": "snippet_0087.cpp",
+      "sha256": "6f28d6070cfad0562a6c836146befa12ae6711b1b7f29276dd92bbaf86747fdf",
+      "chars": 410,
+      "source_row_id": "1629147",
+      "source_repo_path": "src/link/link.cpp",
+      "source_repo_name": "sigsegv-mvm/sigsegv-mvm",
+      "parquet_row_index": 87
+    },
+    {
+      "file": "snippet_0088.cpp",
+      "sha256": "ce00ac854e730928b73508398d270d200b6005d7dbc50e2f92b42a05804faf68",
+      "chars": 6316,
+      "source_row_id": "1629387",
+      "source_repo_path": "code_reading/oceanbase-master/src/sql/optimizer/ob_log_topk.cpp",
+      "source_repo_name": "wangcy6/weekly_read",
+      "parquet_row_index": 88
+    },
+    {
+      "file": "snippet_0089.cpp",
+      "sha256": "07bcc60ca9bfccce819b67f65cb3e1e3b6592d8d275e830a86ba40e98793d1d2",
+      "chars": 849,
+      "source_row_id": "1634412",
+      "source_repo_path": "src/iface/1t/set.cxx",
+      "source_repo_name": "flame/tblis-strassen",
+      "parquet_row_index": 89
+    },
+    {
+      "file": "snippet_0090.cpp",
+      "sha256": "5896053d8eba737a81fc0f53b8dd2ebe7ddde8b619145dea17ff6e372aafcbc5",
+      "chars": 3046,
+      "source_row_id": "1643633",
+      "source_repo_path": "Libs/ModuleDescription/Testing/Cpp/ctkModuleDescriptionTest.cpp",
+      "source_repo_name": "lassoan/CTK",
+      "parquet_row_index": 90
+    },
+    {
+      "file": "snippet_0091.cpp",
+      "sha256": "6c32bb80a702bd263109abcc8a73ffdb85acaab6e54853d43981f83fb4b50fc0",
+      "chars": 70,
+      "source_row_id": "1649669",
+      "source_repo_path": "Include/FireEngine/Utility/Bitset.hpp",
+      "source_repo_name": "storm20200/CMakeTesting",
+      "parquet_row_index": 91
+    },
+    {
+      "file": "snippet_0092.cpp",
+      "sha256": "6607d79f14167cd6510264e6f97b2d0d5c2148a295e75b8fc77a0a89899381a5",
+      "chars": 1662,
+      "source_row_id": "1650800",
+      "source_repo_path": "public/mathlib/idVec3.cpp",
+      "source_repo_name": "4tl0renz0/lambda-engine",
+      "parquet_row_index": 92
+    },
+    {
+      "file": "snippet_0093.cpp",
+      "sha256": "8ccf11eb2454a033ff3f1e2cedec2ee08f504d5f597cfea9707f14fb20381c27",
+      "chars": 3668,
+      "source_row_id": "1654741",
+      "source_repo_path": "TinTin/CookTop/src/ofApp.cpp",
+      "source_repo_name": "3dtof/DemoApplications",
+      "parquet_row_index": 93
+    },
+    {
+      "file": "snippet_0094.cpp",
+      "sha256": "eb5b66d2ec7e104c726a4fbb45fe69d174c669c60e869cfe6c18875152461362",
+      "chars": 2547,
+      "source_row_id": "1656023",
+      "source_repo_path": "C++/src/biopsy/python/python_environment.cpp",
+      "source_repo_name": "JohnReid/biopsy",
+      "parquet_row_index": 94
+    },
+    {
+      "file": "snippet_0095.cpp",
+      "sha256": "1f8fc77b36677053258fad538f087a3fd79e5044c4351f14b477b07be4e50ba3",
+      "chars": 475,
+      "source_row_id": "1658878",
+      "source_repo_path": "Source/test27cpp/test27cppGameMode.cpp",
+      "source_repo_name": "Antares0982/HighAngularVelocityBallSimulator",
+      "parquet_row_index": 95
+    },
+    {
+      "file": "snippet_0096.cpp",
+      "sha256": "d705d9b6ef8353b84ca431581417f2f90e4aae33ac334608c23a7f80871fbe7d",
+      "chars": 218,
+      "source_row_id": "1659122",
+      "source_repo_path": "Userland/yes.cpp",
+      "source_repo_name": "JamiKettunen/serenity",
+      "parquet_row_index": 96
+    },
+    {
+      "file": "snippet_0097.cpp",
+      "sha256": "b83e2bd68dbee6dea2e61dd77c9fb54fc0d6dd215b6399d3313d372f418b2f0c",
+      "chars": 42312,
+      "source_row_id": "1660385",
+      "source_repo_path": "rtp_gui/src/nodes/rtp_teleop.cpp",
+      "source_repo_name": "wumin199/KeMotion-ROS-Teach-Pendant",
+      "parquet_row_index": 97
+    },
+    {
+      "file": "snippet_0098.cpp",
+      "sha256": "49ceea6890786ff5af27acbe6eb970ed72259a35f6e83623f789e0d096307b65",
+      "chars": 21229,
+      "source_row_id": "1662614",
+      "source_repo_path": "main/l10ntools/source/xrmmerge.cxx",
+      "source_repo_name": "Grosskopf/openoffice",
+      "parquet_row_index": 98
+    },
+    {
+      "file": "snippet_0099.cpp",
+      "sha256": "33c39e2b7843226547f877ef6e68151a58de211907b2d72b6c149116146db550",
+      "chars": 2213,
+      "source_row_id": "1663394",
+      "source_repo_path": "src/config/LogglyWriterConfig.cc",
+      "source_repo_name": "homer6/jetstream",
+      "parquet_row_index": 99
+    }
+  ]
+}

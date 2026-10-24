@@ -1,0 +1,53 @@
+{
+  "pool_dir": "<repo>/las_tokenizers/f15/llama3.2-1b/pool",
+  "family": "llama3.2-1b",
+  "pool_manifest_git_commit": "84378a7f91b96013be64b36ae6f9014ff4ff32db",
+  "langs": [
+    "tur",
+    "fin",
+    "hun",
+    "arb",
+    "hin"
+  ],
+  "n_sentences": {
+    "tur": 997,
+    "fin": 997,
+    "hun": 997,
+    "arb": 997,
+    "hin": 997
+  },
+  "confusion_counts": {
+    "tur": {
+      "tur_Latn": 997
+    },
+    "fin": {
+      "fin_Latn": 997
+    },
+    "hun": {
+      "hun_Latn": 997
+    },
+    "arb": {
+      "arb_Arab": 997
+    },
+    "hin": {
+      "hin_Deva": 997
+    }
+  },
+  "routing_accuracy": {
+    "tur": 1.0,
+    "fin": 1.0,
+    "hun": 1.0,
+    "arb": 1.0,
+    "hin": 1.0
+  },
+  "cells_using_pool": [
+    "llama3_2-1b_joint5_langspec_truetie_s42",
+    "llama3_2-1b_joint5_langspec_truetie_s43",
+    "llama3_2-1b_joint5_langspec_truetie_s44"
+  ],
+  "eval_git": {
+    "commit": "7cf40e5e65565b9cb197d2676abc890be04d92ae",
+    "dirty": true
+  },
+  "timestamp": "2026-08-24T20:49:57.060169"
+}
