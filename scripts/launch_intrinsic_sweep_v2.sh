@@ -63,7 +63,7 @@ FAMILIES=(bloom-3b gemma3-1b granite3.0-8b llama3.2-1b mistral-7b-v0.3
 # phi-3-mini is EXCLUDED: its tokenizer.json has pre_tokenizer: null, so the
 # base-Unigram conversion cannot run on it. The driver refuses it by name.
 # gemma2-2b is NOT in the sweep: the paper's Gemma row is Gemma 3 (proved by
-# reproducing tab:deva-eng-subwords' Devanagari count).
+# reproducing the paper's Devanagari subword count).
 LANGS=(deu fin hun tur hin arb tam)
 
 echo "=== intrinsic sweep v2 START $(date -Is) ==="

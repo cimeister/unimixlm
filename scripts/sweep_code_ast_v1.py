@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 """Driver for the 8-family x 9-programming-language AST-leaf-boundary-alignment
-grid that replaces appendix.tex `tab:code-overall-grid` / `tab:code-overall-values`
+grid that replaces the paper's overall code alignment table and its values table
 with artifact-backed measurements.
 
 WHY THIS EXISTS
@@ -11,8 +11,8 @@ artifact:
 
   * ZERO LangMAP code overlays exist anywhere in the repo, so the LM column
     cannot be checked against anything.
-  * The Base column's snippet selection is unrecoverable. The item-30
-    re-verification (`eval_results/f15_intrinsic/ast_base_reverify.json`)
+  * The Base column's snippet selection is unrecoverable. The earlier
+    AST re-verification (`eval_results/f15_intrinsic/ast_base_reverify.json`)
     reproduced the *phenomenon* the table shows (at reproducible corpus scales
     the Base value is essentially tokenizer-invariant across large-vocab
     families -- bit-identical for Llama-3.2-1B / Phi-4 / Qwen-2.5-0.5B) but
@@ -55,7 +55,7 @@ A cell is:
 
 CORPUS POLICY (fitting) -- and the disjointness guarantee
 ---------------------------------------------------------
-Established empirically, 2026-08-28: for all 9 languages the AST evaluation
+Established empirically: for all 9 languages the AST evaluation
 parquet (`tokenizer-intrinsic-evals/starcoder/<lang>.parquet`, the file
 `starcoder_ast_config.json` names) is an exact `id`-SUBSET of the repo's own
 code-tokenizer-training sample
@@ -138,7 +138,7 @@ EVALUATION SET
 `EVAL_SNIPPETS_PER_LANG` files per language, taken as the FIRST N snippets in
 eval-parquet row order after the loader's own normalisation -- i.e. exactly what
 `CodeDataLoader(max_snippets_per_lang=N)` yields from that parquet, which is what
-the item-30 re-verification's `cap100` configuration measured, so the Base column
+the earlier AST re-verification's `cap100` configuration measured, so the Base column
 here is directly comparable with `ast_base_reverify_raw_cap100.json`.
 
 They are MATERIALISED to `eval_results/code_ast_v1/evalsets/<lang>/` as
@@ -244,8 +244,8 @@ from tokenizer_analysis.metrics.code_ast import ASTBoundaryMetrics  # noqa: E402
 def _load_run_ast_only():
     """Import `_AstOnlyProvider` from the eval repo's own run_ast_only.py.
 
-    Not reimplemented here: that file is the entry point the item-30
-    re-verification used, and a local copy of its provider could drift from it
+    Not reimplemented here: that file is the entry point the earlier
+    AST re-verification used, and a local copy of its provider could drift from it
     silently."""
     path = TOKEVAL_REPO / "scripts" / "run_ast_only.py"
     if not path.is_file():
@@ -269,7 +269,7 @@ _AstOnlyProvider = _RUN_AST_ONLY._AstOnlyProvider
 
 # NEW CONSTANT. Files per language in the evaluation snippet set. 100 is the
 # documented PRE-1.0.0 CodeDataLoader.DEFAULT_MAX_SNIPPETS_PER_LANG, and the cap
-# the item-30 re-verification measured its `cap100` column at, so this grid's
+# the earlier AST re-verification measured its `cap100` column at, so this grid's
 # Base column is directly comparable with
 # eval_results/f15_intrinsic/ast_base_reverify_raw_cap100.json. It is also what
 # makes 72 cells tractable: the uncapped corpus is 2.2-3.7M leaf spans per
@@ -311,8 +311,8 @@ OUT_ROOT = REPO_ROOT / "eval_results" / "code_ast_v1"
 CELL_DIR = OUT_ROOT / "cells"
 EVALSET_DIR = OUT_ROOT / "evalsets"
 
-# The paper's nine programming languages (appendix tab:code-overall-grid column
-# order), each mapped to the file the AST config names, the fitting-sample
+# The paper's nine programming languages (column order of the paper's
+# overall code alignment table), each mapped to the file the AST config names, the fitting-sample
 # directory, and the script-filter policy that applies to it.
 #
 # `in_repo_code_langs` records whether
@@ -337,13 +337,13 @@ CODE_LANGS = {
     "typescript": {"label": "TS",      "eval_parquet": "typescript.parquet", "fit_dir": "typescript"},
 }
 
-# writeup.tex's nine code model families, post-relabel (audit items 33/34), each
+# The paper's nine code model families, each
 # mapped to its key in scripts/sweep_intrinsic_v2.FAMILIES.
 #
-# Phi-3-mini is EXCLUDED, re-verified in this session: microsoft/Phi-3-mini-4k-instruct
+# Phi-3-mini is EXCLUDED: microsoft/Phi-3-mini-4k-instruct
 # and microsoft/Phi-3-mini-128k-instruct both ship "pre_tokenizer": null, and unlike
-# Yi-1.5-6B transformers' save_pretrained does NOT synthesise one (checked 2026-08-28:
-# the saved tokenizer.json is still null, its space handling staying in a
+# Yi-1.5-6B transformers' save_pretrained does NOT synthesise one
+# (the saved tokenizer.json is still null, its space handling staying in a
 # Prepend+Replace normalizer). The base-Unigram conversion pre-tokenises the corpus
 # with the pre-tokenizer and validate_tokenizers requires it non-null, so the family
 # cannot be converted by this pipeline. Microsoft published no non-instruct Phi-3-mini:
@@ -353,9 +353,9 @@ CODE_FAMILIES = {
     "bloom-3b":         {"paper_row": "BLOOM-3B"},
     "gemma2-2b":        {"paper_row": "Gemma 2-2B",
                          # ASYMMETRY, declared: the natural-language sweep excluded
-                         # gemma2-2b because the paper's tab:tokenizers row is Gemma 3
-                         # (proved by reproducing tab:deva-eng-subwords' Devanagari
-                         # count). writeup.tex's CODE family list names "Gemma 2-2b"
+                         # gemma2-2b because the paper's tokenizer table row is Gemma 3
+                         # (established by reproducing the paper's Devanagari
+                         # subword count). The paper's code family list names "Gemma 2-2b"
                          # explicitly, so the code grid uses gemma2-2b. Its base
                          # conversion already exists -- it was built during the NL
                          # sweep and then dropped from that grid -- and is reused
@@ -386,7 +386,7 @@ PHI3_MINI_EXCLUSION = {
                    "Phi-3.5-mini-instruct and gguf/onnx repackagings; no non-instruct "
                    "base variant is published."),
     "consequence": "grid is 8 families x 9 languages = 72 cells, not 81",
-    "verified": "2026-08-28, this driver's session",
+    "verified": "re-measured by this driver",
 }
 
 # The three scored arms, in the order they are reported.
@@ -407,8 +407,8 @@ _Lock = sw._Lock
 
 # `gemma2-2b` has artifacts under the natural-language sweep's protocol tag --
 # its base conversion was built during that sweep and then dropped from that
-# grid, because the paper's tab:tokenizers Gemma row is Gemma 3 -- but it is NOT
-# a key in sweep_intrinsic_v2.FAMILIES (only a comment there). writeup.tex's CODE
+# grid, because the paper's tokenizer table Gemma row is Gemma 3 -- but it is NOT
+# a key in sweep_intrinsic_v2.FAMILIES (only a comment there). The paper's code
 # family list names "Gemma 2-2b", so this grid needs it, and sw.family_root /
 # sw.ensure_model_tokenizer both read sw.FAMILIES.
 #
@@ -422,7 +422,7 @@ _GEMMA2_REGISTRATION = {
     "paper_V": 256000,
     "provenance": "new",
     "registered_by": "scripts/sweep_code_ast_v1.py",
-    "why": ("writeup.tex's code family list names Gemma 2-2b; the NL sweep's Gemma "
+    "why": ("The paper's code family list names Gemma 2-2b; the NL sweep's Gemma "
             "row is gemma3-1b. Different tokenizers, so the two grids' Gemma rows "
             "are not the same family."),
 }

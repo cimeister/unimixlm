@@ -6,7 +6,7 @@
 #   Regime: unfrozen embeddings + LoRA, 500M tokens, 1 epoch,
 #           5 checkpoints (~one per 100M tokens), seq 1024.
 #   Arms  : original (runs now). langspec runs ONLY if an overlay
-#           tokenizer dir exists for the model (see scripts/LANGMAP_README.md);
+#           tokenizer dir exists for the model;
 #           otherwise that arm is skipped with a clear message — no GPU spend.
 #
 # Resumable: a per-cell JSON manifest under $RUNS; completed cells skip.

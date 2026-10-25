@@ -20,7 +20,7 @@ under --cells-root:
      status == "completed", tokenizer.las_mode == arm, model.true_tie is
      True; plus `_assert_checkpoint_provenance` (las_experiment.
      downstream_eval) for the base-model-id and eos/pad-tokenizer-mismatch
-     guards (project_qwen3_eos_model_tokenizer_bug). The las_tokenizer_path
+     guards. The las_tokenizer_path
      half of that guard is self-referential here (las_dir is READ from the
      same metadata file), so it can never fire on its own; the las_mode and
      eos-bug halves are the live checks. NO ASSERT FROM THE IMPORTED HELPERS
@@ -100,7 +100,7 @@ from las_experiment.downstream_eval import (
 
 # ---------------------------------------------------------------------------
 # Cell-tag schema. Joint cells exist for two model families (Qwen wave-2,
-# Llama 2026-08-24); the tag's model prefix selects the base model id,
+# Llama); the tag's model prefix selects the base model id,
 # mirroring eval_f14_multiblimp.py's MODEL_MAP.
 # ---------------------------------------------------------------------------
 MODEL_MAP = {
@@ -164,8 +164,8 @@ def find_derived(cell_dir: Path) -> Path:
 
 
 def check_joint_provenance(tag: str, arm: str, meta: dict) -> None:
-    """Loud, fail-fast provenance gate specific to this driver (spec item
-    1): completed status, las_mode == arm, true_tie == True. Distinct from
+    """Loud, fail-fast provenance gate specific to this driver:
+    completed status, las_mode == arm, true_tie == True. Distinct from
     (and in addition to) `_assert_checkpoint_provenance`'s base-model-id and
     eos-bug checks, which are called separately -- this function does not
     replace or weaken those."""
@@ -250,7 +250,7 @@ def load_and_verify_pool_manifest(pool_dir: Path) -> dict:
 
 
 def compute_routing_accuracy(pool_dir: Path, langs: list, manifest: dict) -> dict:
-    """Standalone routing accuracy (spec item 4): no model, no GPU. Loads
+    """Standalone routing accuracy: no model, no GPU. Loads
     the pool's base + langspec tokenizers directly through
     LanguageSpecificUnigramLMTokenizer and routes the FLORES+ parallel
     sentences for each language, reporting the 5x5 confusion matrix (rows =
@@ -379,7 +379,7 @@ def main() -> None:
         )
 
     # -----------------------------------------------------------------
-    # Item 4: standalone routing accuracy, once per UNIQUE pool dir (a pool
+    # Standalone routing accuracy, once per UNIQUE pool dir (a pool
     # is shared across every seed of a family -- see module docstring).
     # Also builds the pool-manifest cache reused by the per-cell loop below.
     # -----------------------------------------------------------------

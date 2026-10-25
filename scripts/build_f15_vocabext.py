@@ -1,13 +1,12 @@
 #!/usr/bin/env python3
 """Build the A4 (F15) vocabulary-extension tokenizers for Qwen2.5-0.5B.
 
-Wave-1 integration owner: see the F15 experiment plan
-("Arms" A4 row and "Implementation work items" #3). This script is the driver for
+This script is the driver for
 ``las_experiment.vocab_extend.build_extended_tokenizer`` — it does not
 implement the extension logic itself (that lives in vocab_extend.py, owned by
 the same wave). It is scoped to the Qwen2.5-0.5B family only; Llama-3.2-1B A4
-tokenizers are out of scope for this task (F15 plan: "A3/A4 shown on Qwen
-only").
+tokenizers are out of scope (A3/A4 are shown on Qwen
+only).
 
 For each of the 5 F15 languages (tur, fin, hun, arb, hin), this:
   1. Calls build_extended_tokenizer(model tokenizer.json, mono32k_<lang>.json,
@@ -46,13 +45,13 @@ from las_experiment.vocab_extend import (  # noqa: E402
 # ---------------------------------------------------------------------------
 # Constants (named per project convention)
 # ---------------------------------------------------------------------------
-TOP_K = 16000  # F15 plan A4 row: "top-16k new per-language pieces"
+TOP_K = 16000  # A4: top-16k new per-language pieces
 assert TOP_K == DEFAULT_TOP_K, (
     f"scripts/build_f15_vocabext.py TOP_K={TOP_K} != "
-    f"las_experiment.vocab_extend.DEFAULT_TOP_K={DEFAULT_TOP_K} — the plan's "
-    f"16k figure and the module default have drifted apart; reconcile before running."
+    f"las_experiment.vocab_extend.DEFAULT_TOP_K={DEFAULT_TOP_K}; the "
+    f"two defaults have drifted apart; reconcile before running."
 )
-ROUNDTRIP_LINES = 5  # plan verification: "roundtrip 5 corpus lines"
+ROUNDTRIP_LINES = 5  # roundtrip 5 corpus lines
 EXPECTED_EOS_ID = 151643  # Qwen2.5-0.5B <|endoftext|>, per manifest.json's existing overlays
 
 FAMILY = "qwen2_5-0_5b"

@@ -2,16 +2,14 @@
 # launch_f15_llamahunext.sh — F15 adaptive seed extension: Llama-3.2-1B hun
 # original+langspec, seeds 45-46 (4 cells). Derived from launch_f15_llamahun.sh
 #
-# Per the F15 experiment plan, sections "Models"
-# ("Llama-3.2-1B (tied): arms A0/A1/A2 x 3 langs (tur, arb, hin) x 3 seeds"),
-# "Joint-multilingual arm (C6)" and "Execution order" step 3 ("Wave 2: Llama
-# cells + joint-multilingual").
+# Llama-3.2-1B (tied): arms A0/A1/A2 x 3 langs (tur, arb, hin) x 3 seeds,
+# plus the joint-multilingual arm (C6).
 #
 # Grid:
 #   (A) Llama-3.2-1B single-language:
 #         arms {original, langspec} x langs {tur, arb, hin} x seeds {42,43,44}
 #         = 18 cells.
-#       A5 (base-Unigram) is NOT run here. The plan makes Llama A5 adaptive:
+#       A5 (base-Unigram) is NOT run here. Llama A5 is adaptive:
 #       base ~= langspec is already established on OLMo-3, Qwen3 and
 #       from-scratch, and wave 1 measures it once more true-tie on Qwen2.5;
 #       a third family only runs if that Qwen A5-vs-A2 contrast is nonzero
@@ -54,12 +52,12 @@
 # families as well as across arms.
 #
 # VRAM (GH200, 97,871 MiB/GPU, one cell per GPU), MEASURED on a login-node
-# GPU rather than estimated, 2026-08-18: a Llama-3.2-1B langspec cell at
+# GPU rather than estimated: a Llama-3.2-1B langspec cell at
 # per_device_batch_size=3, grad_accum=16, max_seq_len=1024 peaks at
 # 21,473 MiB with a 2,055 MiB pre-existing baseline on that GPU, i.e. ~19.4 GB
 # for the cell. The same cell at per_device_batch_size=2 peaks at ~14.2 GB.
-# 19.4 GB against 96 GB leaves the 2 x 24 factorization contemplated during
-# planning unnecessary. Training throughput measured in the same probe:
+# 19.4 GB against 96 GB leaves a 2 x 24 factorization
+# unnecessary. Training throughput measured in the same probe:
 # 22.5k tokens/s at 3 x 16, so the 3561-step budget (175M padded positions)
 # takes roughly 2.2 h of compute plus corpus load and tokenization. The 12 h
 # walltime below therefore has a large margin, which is deliberate: login-GPU
@@ -80,8 +78,8 @@ SCRATCH_DIR="${SCRATCH_DIR:?set SCRATCH_DIR to your cluster scratch root}"
 PYTHON="${VENV_DIR:?set VENV_DIR to the project virtualenv}/bin/python"
 TOK_ROOT="${REPO_DIR}/las_tokenizers/f15"
 OUT_ROOT="${SCRATCH_DIR}/f15_wave2"
-# Same offline cache as wave 1. Llama-3.2-1B's weights were added to it on
-# 2026-08-18 (prep_f15_tokenizers.py had cached only the tokenizer files);
+# Same offline cache as wave 1. Llama-3.2-1B's weights must be present in it
+# (prep_f15_tokenizers.py caches only the tokenizer files);
 # the preflight below re-checks that model.safetensors is present, because
 # HF_HUB_OFFLINE=1 turns a cache miss into a mid-job failure.
 HF_CACHE="${SCRATCH_DIR}/hf_cache_pr21"
@@ -156,7 +154,7 @@ declare -A FAM_HF_REPO=(
   [llama3_2-1b]="models--meta-llama--Llama-3.2-1B"
 )
 # Walltime: Llama-3.2-1B measures ~2x the per-step cost of Qwen2.5-0.5B
-# (plan's rate table: ~6.5 vs ~3.5 GPU-h/cell), so its 3561 steps get the
+# (~6.5 vs ~3.5 GPU-h/cell), so its 3561 steps get the
 # 12h maximum while the Qwen joint cells keep wave 1's 8h.
 declare -A FAM_WALLTIME=(
   [qwen2_5-0_5b]="08:00:00"
@@ -172,7 +170,7 @@ for seed in "${SEEDS[@]}"; do
     done
   done
 done
-# llamahun derivation (2026-08-19): joint cells excluded entirely — this
+# llamahun: joint cells excluded entirely, this
 # launcher runs ONLY the Llama hun A1/A2 cross-family check cells.
 JOINT_FAMILIES=()
 echo "Total cells: ${#CELLS[@]}"
@@ -383,4 +381,4 @@ fi
 # has tur/arb/hin). The joint tags <family>_joint5_<arm>_truetie_s<seed> do NOT:
 # TAG_RE's language alternation is built from that script's 5-language
 # LANG_SUFFIX map, so "joint5" fails to match and those cells would be skipped
-# by the eval driver until it grows a joint/routed mode (plan work item 5).
+# by the eval driver until it grows a joint/routed mode.

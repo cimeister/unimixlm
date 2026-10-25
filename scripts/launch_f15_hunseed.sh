@@ -1,17 +1,12 @@
 #!/usr/bin/env bash
 # launch_f15_wave1.sh — F15 wave 1: Qwen2.5-0.5B new cells (A1/A2/A3/A5/A4).
 #
-# Per the F15 experiment plan ("Arms" table,
-# "Execution order" step 2: "Wave 1: Qwen2.5 new cells"). Pre-launch review
-# finding S1 (2026-08-17) found the tur/fin/hun langspec overlays previously
-# in use were PR21-era HF artifacts, not fit from THIS family's F15
-# base_tokenizer.json, which made the A2-vs-A5 control unclean for those 3
-# languages (A2=A5+language-specific-EM only holds when both descend from
-# the identical base vocab -- see scripts/prep_f15_tokenizers.py FAMILIES
-# comment). Resolution: tur/fin/hun overlays are refit from the F15 base
-# (scripts/prep_f15_tokenizers.py, run by a separate concurrent
-# process/session), and this launcher now trains FRESH A1/A2 tur/fin/hun
-# cells here rather than reusing the F14c (S18) tur/fin/hun A1/A2 cells --
+# The tur/fin/hun langspec overlays must be fit from THIS family's F15
+# base_tokenizer.json (scripts/prep_f15_tokenizers.py): the A2-vs-A5 control
+# is clean only when both descend from the identical base vocab
+# (A2=A5+language-specific-EM; see the FAMILIES comment in that script).
+# This launcher therefore trains FRESH A1/A2 tur/fin/hun
+# cells here rather than reusing the F14c tur/fin/hun A1/A2 cells --
 # those remain a valid but PROTOCOL-DIFFERENT comparison point (see the
 # EVAL_TOKEN_BUDGETS note below), used only in the mechanism analysis, not
 # folded into the wave-1 headline numbers.
@@ -24,7 +19,7 @@
 #   A4 vocab_extend x {tur,fin,hun,arb,hin}   (5/seed)
 # = 22 cells/seed x 3 seeds = 66 cells.
 #
-# Protocol (F15 plan "Arms" row, EXPERIMENTAL_SETUP.md S19): true_tie
+# Protocol: true_tie
 # throughout, LoRA r16-k32 + fully-trained tied embedding, lr 2e-4, eff.
 # batch 48 (per_device_batch=6 x grad_accum=8, single GPU/cell — matches
 # config/finetune/model/qwen2_5-0_5b.yaml), 100M target-lang tokens (design
@@ -59,7 +54,7 @@
 # tokens_per_step = per_device_batch_size(6) x world_size(1, single GPU/cell,
 # no torch.distributed) x gradient_accumulation_steps(8) x max_seq_len(1024)
 # = 49,152 tokens/step (las_experiment/finetune.py, eval_token_budgets block;
-# unchanged from F14c/PR21 -- only the budget values below changed).
+# unchanged from F14c -- only the budget values below changed).
 # With EVAL_TOKEN_BUDGETS=[17500000,87500000,175000000], observation_steps =
 # [ceil(17.5e6/49152), ceil(87.5e6/49152), ceil(175e6/49152)] = [357, 1781,
 # 3561] (math.ceil, as finetune.py actually computes it -- a round()-based
@@ -77,7 +72,7 @@
 # eng corpus, not a separate token budget.
 #
 # WAVE-1 vs F14c COMPARABILITY: wave-1 A1/A2 tur/fin/hun cells (this
-# launcher) and F14c's (S18) tur/fin/hun A1/A2 cells are BOTH true_tie, but
+# launcher) and F14c's tur/fin/hun A1/A2 cells are BOTH true_tie, but
 # use DIFFERENT stopping protocols -- F14c used epochs=1 with NO
 # eval_token_budgets (single checkpoint at end of one epoch, real-token
 # count = whatever one epoch of that corpus contains); wave-1 uses the
@@ -96,9 +91,9 @@ SCRATCH_DIR="${SCRATCH_DIR:?set SCRATCH_DIR to your cluster scratch root}"
 PYTHON="${VENV_DIR:?set VENV_DIR to the project virtualenv}/bin/python"
 TOK_ROOT="${REPO_DIR}/las_tokenizers/f15/qwen2_5-0_5b"
 OUT_ROOT="${SCRATCH_DIR}/f15_wave1"
-# Verified complete (2026-08-17): all 5 F15 lang repos, the eng repo, and
-# the Qwen2.5-0.5B snapshot are cached here (shared with the PR#21 rerun --
-# same hub repos, see finetune.py resolve_fineweb2_lang).
+# The cache must hold all 5 F15 lang repos, the eng repo, and the
+# Qwen2.5-0.5B snapshot (shared with the F14 reruns, which use the same hub
+# repos; see finetune.py resolve_fineweb2_lang).
 HF_CACHE="${SCRATCH_DIR}/hf_cache_pr21"
 LOG_DIR="${REPO_DIR}/logs/f15_wave1"
 JID_FILE="${REPO_DIR}/.f15_hunseed_jids"
@@ -108,7 +103,7 @@ DRY_RUN="${1:-}"
 
 SEEDS=(45 46)
 
-# Per-arm language lists (F15 plan "Arms"/"Seeds and cell count" sections).
+# Per-arm language lists.
 declare -A ARM_LANGS
 ARM_LANGS[original]="hun"
 ARM_LANGS[langspec]="hun"

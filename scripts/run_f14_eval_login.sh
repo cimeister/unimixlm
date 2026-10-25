@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 # run_f14_eval_login.sh — MultiBLiMP/Belebele-eng eval of F14/F14b/F15 cells
 # on login-node GPUs. 4 parallel shards (one per GPU).
-# Wiring (2026-08-14 user decision): training wiring only — frozen-original
+# Wiring: training wiring only — frozen-original
 # output head, the configuration the optimizer actually saw. (F15 note: for
 # true-tie cells 'training' and 'reshared' are numerically identical, see
 # eval_f14_multiblimp.py --head-wiring help.)

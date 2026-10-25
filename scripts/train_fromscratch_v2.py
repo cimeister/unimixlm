@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """From-scratch GPT-2 training driver (multi-track, multi-set).
 
-This is the Part C2 driver of the ★ ACTIVE plan (2026-05-19). Trains ONE
+This is the Part C2 (training) driver of the from-scratch pipeline. Trains ONE
 GPT-2 model per (track, set, tokenizer_type) combination — 16 runs total to
 cover the full design:
     track ∈ {morph, code} × set ∈ {A, B} × tokenizer ∈ {bpe, base,
@@ -83,7 +83,7 @@ TARGET_PARAMS_BY_SET = {"A": 125_000_000, "A5B": 125_000_000, "B": 500_000_000}
 # for rank-0 to finish building each language's cache. PER-LANGUAGE, not total,
 # so it only needs to cover the single largest cache (SET-B English ≈ 5B tokens
 # ⇒ up to a few hours). Default 8h (well inside the 12h walltime); override with
-# FROMSCRATCH_CACHE_TIMEOUT_S. NOTE: new magic number introduced 2026-05-21.
+# FROMSCRATCH_CACHE_TIMEOUT_S.
 CACHE_BUILD_TIMEOUT_S = int(os.environ.get("FROMSCRATCH_CACHE_TIMEOUT_S", str(8 * 3600)))
 
 
@@ -170,7 +170,7 @@ def _load_training_data_perlang(tok_paths: dict, manifest_path: Path,
         # process group is not yet initialized at data-load time (HF Trainer
         # inits it later), so a dist.barrier() here is silently skipped and
         # ranks 1..N race to open a not-yet-built json_path → FileNotFoundError
-        # (observed 2026-05-21, smoke job 2328436). Instead we poll the json
+        # (seen in smoke runs). Instead we poll the json
         # sentinel, which `_build_memmap_cache` writes LAST and atomically
         # (os.replace) — so its existence guarantees bin+npz are complete too.
         if local_rank == 0:
@@ -340,7 +340,7 @@ def main():
     langs = track_langs(args.track)
     ec.LANGUAGES = langs
     ec.TEXT_COL = {l: text_col(args.track, l) for l in langs}
-    # M1 (review-fix 2026-05-19): defensively delete OTHER engcode module
+    # Defensively delete OTHER engcode module
     # globals so any future engcode refactor that reads them from the reused
     # helpers (_build_memmap_cache, MemmappedEngcodeDataset, etc.) crashes
     # loudly instead of silently using engcode's eng+python defaults.
@@ -363,9 +363,8 @@ def main():
     main_tok_path = tok_paths.get("train") or tok_paths.get("base")
     main_tok = Tokenizer.from_file(main_tok_path)
     vocab_size = main_tok.get_vocab_size()
-    # C3 (review-fix 2026-05-19): explicit fail-loud on missing <pad>; the
-    # earlier `or 0` clause matched the Qwen3 eos-bug failure class (silent
-    # collision with id 0). See memory/project_qwen3_eos_model_tokenizer_bug.
+    # Explicit fail-loud on missing <pad>; an `or 0` fallback would match the
+    # Qwen3 eos-bug failure class (silent collision with id 0).
     pad_id = main_tok.token_to_id("<pad>")
     if pad_id is None:
         raise RuntimeError(
@@ -386,7 +385,7 @@ def main():
     else:
         model_config, training_adj = get_vocab_aware_config_500m(vocab_size, pad_id)
     target_p = TARGET_PARAMS_BY_SET[args.set_name]
-    # C1 (review-fix 2026-05-21): force adamw_torch. get_vocab_aware_config sets
+    # Force adamw_torch. get_vocab_aware_config sets
     # optim="adamw_8bit" for vocab<=65000 (i.e. SET-A @ 50k), but bitsandbytes
     # is NOT installed in the venv — Trainer.create_optimizer() would raise
     # AFTER the multi-hour memmap cache build, crashing all 8 SET-A runs. We do
@@ -402,8 +401,8 @@ def main():
         training_adj["optim"] = "adamw_torch"
     model_config.n_positions = args.max_seq_len
     model_config.n_ctx = args.max_seq_len
-    # M3 (review-fix 2026-05-19): build the model ONCE and assert on the
-    # instantiated object (the original assert_param_count instantiated a
+    # Build the model ONCE and assert on the
+    # instantiated object (assert_param_count would instantiate a
     # second model internally, costing ~2 GB on the 500M arch).
     model = GPT2LMHeadModel(model_config)
     num_params = sum(p.numel() for p in model.parameters())
@@ -429,14 +428,14 @@ def main():
     # the HF tokenizer save and the run_metadata write target SHARED single-file
     # paths, so doing them on every rank races (e.g. _write_run_metadata's
     # os.replace(tmp→json): one rank consumes the tmp, the others crash with
-    # FileNotFoundError — observed smoke 2344885, 2026-05-23). Only rank 0 writes
+    # FileNotFoundError). Only rank 0 writes
     # these shared artifacts. Non-zero ranks don't need them before training
     # (the model is in-memory; the Trainer coordinates via the process group;
     # the tokenizer + metadata are eval-time artifacts).
     _local_rank = int(os.environ.get("LOCAL_RANK", "0"))
 
     if _local_rank == 0:
-        # ── C2 (review-fix 2026-05-19): save a HF PreTrainedTokenizerFast
+        # ── Save a HF PreTrainedTokenizerFast
         # wrapping `main_tok` to model_dir so the downstream evaluator's
         # AutoTokenizer-from-checkpoint path succeeds. Done BEFORE training so
         # even a crashed/partial run still has a tokenizer for partial-eval.

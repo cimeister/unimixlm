@@ -1,6 +1,5 @@
 #!/usr/bin/env python3
-"""Prepare tokenizers/overlays for the F15 campaign (see the F15 experiment
-plan, "Arms" section and "Implementation work items" #1).
+"""Prepare tokenizers/overlays for the F15 campaign.
 
 Deliverables, all under ``las_tokenizers/f15/<family>/`` where family is one
 of ``qwen2_5-0_5b`` (Qwen/Qwen2.5-0.5B) or ``llama3.2-1b``
@@ -40,22 +39,19 @@ in file order to collect the first 50k lines that pass. Devanagari
 explicit instruction (ranges 0x0900-0x097F + 0xA8E0-0xA8FF), noted in the
 manifest.
 
-IMPORTANT DEVIATION FROM THIS BRANCH'S DEFAULT, REQUIRED BY THE PLAN:
-``code/language_specific_unigramlm.py`` on this branch (log_space) seeds
-the per-language SentencePiece EM UNIFORMLY (memory:
-project_langmap_branch_seedscore_divergence.md). The plan requires seeding
+IMPORTANT DEVIATION FROM THE LIBRARY DEFAULT, REQUIRED BY THE F15 PROTOCOL:
+``code/language_specific_unigramlm.py`` seeds
+the per-language SentencePiece EM UNIFORMLY. The F15 protocol requires seeding
 with the shared base tokenizer's already-trained log-scores instead --
-the behavior of the code-tokenizer branch (PR #21) that produced the
-writeup's tokenizers -- and calls this out as a "CRITICAL setting". This
+the behavior of the earlier code-tokenizer pipeline that produced the
+paper's tokenizers -- and treats this as a critical setting. This
 script's ownership is scoped to itself and ``las_tokenizers/f15/`` only
 (not ``code/language_specific_unigramlm.py``), so the change is made via a
 local subclass, ``BaseScoreSeededLASTokenizer`` below, which overrides only
 the seed-vocab-construction step of ``train_with_sentencepiece_direct``
 (one line changed; everything else copied verbatim from the parent). See
 that class's docstring for the exact diff. This is a significant,
-consequential decision made without interactive confirmation because this
-script cannot pause mid-run for a check-in; it is the first thing flagged
-in this script's final report.
+consequential choice.
 
 Do NOT commit any artifact under las_tokenizers/f15/. No HF Hub push.
 """
@@ -126,14 +122,14 @@ logging.basicConfig(
 logger = logging.getLogger("prep_f15_tokenizers")
 
 # ---------------------------------------------------------------------------
-# Constants (named per project convention -- flagged to user, not buried)
+# Constants (named per project convention)
 # ---------------------------------------------------------------------------
-LINES_PER_LANG = 50_000          # plan work item 1: "50k lines per language"
+LINES_PER_LANG = 50_000          # 50k lines per language
 PLACEBO_SEED = 1234              # matches scripts/prep_qwen25_las_rerun_tokenizers.py
-PLACEBO_MODE = "bucketed"        # plan work item 1: bucketed placebo control
-PLACEBO_BUCKET_SIZE = 500        # plan work item 1: --bucket-size 500
-MONO_BPE_VOCAB_SIZE = 32_000     # plan work item 3 (A4 builder input)
-ENCODE_PROBE_LINES = 5           # plan verification: "encode probe on 5 real lines"
+PLACEBO_MODE = "bucketed"        # bucketed placebo control
+PLACEBO_BUCKET_SIZE = 500        # --bucket-size 500
+MONO_BPE_VOCAB_SIZE = 32_000     # A4 builder input
+ENCODE_PROBE_LINES = 5           # encode probe on 5 real lines
 
 LANG_CODES = {
     "tur": "tur_Latn",
@@ -148,22 +144,21 @@ HUB_REPO_TMPL = "MultilingualUnigramLM/FineWeb2-{lang_code}-100M"
 FAMILIES = {
     "qwen2_5-0_5b": {
         "model_name": "Qwen/Qwen2.5-0.5B",
-        # Extended 2026-08-17 (review finding S1): tur/fin/hun overlays now
-        # also fit from THIS family's F15 base_tokenizer.json (previously
-        # only arb/hin were; the tur/fin/hun overlays in use elsewhere were
-        # PR21-era HF artifacts from a different pipeline, which made the
+        # tur/fin/hun overlays are fit from THIS family's F15
+        # base_tokenizer.json (overlays from the earlier code-tokenizer
+        # pipeline come from a different pipeline, which would make the
         # A5-vs-A2 control unclean for those three languages). No placebos
-        # for tur/fin/hun -- see placebo_langs below, unchanged.
+        # for tur/fin/hun, see placebo_langs below.
         "overlay_langs": ["arb", "hin", "tur", "fin", "hun"],
         "placebo_langs": ["arb", "hin"],
         "mono_langs": ["tur", "fin", "hun", "arb", "hin"],
     },
     "llama3.2-1b": {
         "model_name": "meta-llama/Llama-3.2-1B",
-        # Extended 2026-08-18 (wave-2 prep): fin/hun added so all 5 langs
-        # have a langspec overlay, unblocking the 6 Llama joint-multilingual
-        # cells (scripts/launch_f15_wave2.sh INCLUDE_LLAMA_JOINT). No
-        # placebos/mono32k for llama -- unchanged, not requested.
+        # fin/hun are included so all 5 langs
+        # have a langspec overlay, as the 6 Llama joint-multilingual
+        # cells need (scripts/launch_f15_wave2.sh INCLUDE_LLAMA_JOINT). No
+        # placebos/mono32k for llama.
         "overlay_langs": ["tur", "arb", "hin", "fin", "hun"],
         "placebo_langs": [],
         "mono_langs": [],
@@ -182,7 +177,7 @@ MAKE_PLACEBO = REPO_ROOT / "scripts" / "make_placebo.py"
 
 assert NUM_FINETUNE_EM_ITERATIONS == 10, (
     f"code/constants.py NUM_FINETUNE_EM_ITERATIONS={NUM_FINETUNE_EM_ITERATIONS}, "
-    f"expected 10 per plan work item 1 ('do NOT reduce'). Aborting rather than "
+    f"expected 10 (the F15 protocol value). Aborting rather than "
     f"silently training with a different EM sub-iteration count."
 )
 
@@ -208,17 +203,16 @@ class BaseScoreSeededLASTokenizer(LanguageSpecificUnigramLMTokenizer):
     passed into the method and used only for special-token scores and the
     post-hoc missing-token fallback.
 
-    The code-tokenizer branch (PR #21) (memory:
-    project_langmap_branch_seedscore_divergence.md), which produced the
-    writeup's tokenizers, seeds the SAME seed-vocab file with
+    The earlier code-tokenizer pipeline, which produced the
+    paper's tokenizers, seeds the SAME seed-vocab file with
     ``vocab_dict.get(t, initial_log_score)`` instead -- i.e. each piece's EM
     starting point is the base tokenizer's own trained log-score, falling
     back to the uniform value only for pieces the base tokenizer has no
     score for (there should be none, since every piece here comes from
     ``_load_vocab_from_hf_tokenizer(self.base_tokenizer)``).
 
-    The F15 plan requires the PR#21 behavior ("CRITICAL settings: seed the
-    per-language EM with base log-scores"). This script's ownership is
+    The F15 protocol requires that behavior (seed the
+    per-language EM with base log-scores). This script's ownership is
     scoped to itself and ``las_tokenizers/f15/`` only, so rather than edit
     the shared library file, this subclass overrides
     ``train_with_sentencepiece_direct`` with the SP->HF handoff logic
@@ -479,7 +473,7 @@ def verify_and_patch_specials(
     missing added_tokens from the model's own tokenizer.json (mirrors
     scripts/prep_qwen25_las_rerun_tokenizers.py). Since dest_path is built
     from the SAME model's own tokenizer (not a cross-model transplant like
-    prep_qwen25's PR#21 rerun), no patch is expected in practice -- this is
+    prep_qwen25's code-tokenizer rerun), no patch is expected in practice -- this is
     a verification gate, and the patch path exists as a safety net.
     """
     tok = Tokenizer.from_file(str(dest_path))

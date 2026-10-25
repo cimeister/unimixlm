@@ -3,19 +3,20 @@
 # The intended protocol (fully trainable tied embedding, peft
 # ensure_weight_tying) with pretrained embeddings. Serves as (i) the
 # wiring-matched baseline for the F14b re-init gap and (ii) the first
-# replication of tab:extrinsic under the protocol the paper intends.
+# replication of the paper's table of extrinsic results under the protocol the
+# paper intends.
 #
 # Grid: {tur,fin,hun} x {original,langspec} x seeds {42,43,44} = 18 cells.
-# Protocol matches the code-tokenizer branch's (PR #21) _run_cell4.sh except:
+# Protocol matches the earlier code-tokenizer pipeline except:
 #   - finetune.py is the mainline tie-preserving version (bug-4 fixed):
 #     tied Qwen2.5 embeddings stay tied; modules_to_save=[embed_tokens] only.
 #   - checkpointing: final model per epoch only (no 10-step cadence).
-#   - placebo arm added (never actually ran on the branch).
+#   - placebo arm added (never actually ran in that pipeline).
 # Everything else identical: data repos, tokenizers (prep_manifest.json),
 # lr 2e-4, LoRA r16-k32 + unfrozen embeddings, eff. batch 48, 1 epoch,
 # max_seq_len 1024, val_fraction 0.05, langs {lang:1.0, eng:0.2}.
 #
-# Usage: bash scripts/launch_pr21_rerun.sh [--dry-run]
+# Usage: bash scripts/launch_pr21_truetie.sh [--dry-run]
 set -euo pipefail
 
 REPO_DIR="$(cd "$(dirname "$0")/.." && pwd)"

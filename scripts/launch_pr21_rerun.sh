@@ -1,13 +1,13 @@
 #!/usr/bin/env bash
-# launch_pr21_rerun.sh — tie-preserving rerun of the PR #21 / writeup
-# tab:extrinsic Qwen2.5-0.5B cells, plus placebo arm and seed replicates.
+# launch_pr21_rerun.sh — tie-preserving rerun of the earlier code-tokenizer
+# pipeline's Qwen2.5-0.5B cells, plus placebo arm and seed replicates.
 #
 # Grid: {tur,fin,hun} x {original,langspec,placebo} x seeds {42,43,44} = 27 cells.
-# Protocol matches the code-tokenizer branch's (PR #21) _run_cell4.sh except:
+# Protocol matches the earlier code-tokenizer pipeline except:
 #   - finetune.py is the mainline tie-preserving version (bug-4 fixed):
 #     tied Qwen2.5 embeddings stay tied; modules_to_save=[embed_tokens] only.
 #   - checkpointing: final model per epoch only (no 10-step cadence).
-#   - placebo arm added (never actually ran on the branch).
+#   - placebo arm added (never actually ran in that pipeline).
 # Everything else identical: data repos, tokenizers (prep_manifest.json),
 # lr 2e-4, LoRA r16-k32 + unfrozen embeddings, eff. batch 48, 1 epoch,
 # max_seq_len 1024, val_fraction 0.05, langs {lang:1.0, eng:0.2}.

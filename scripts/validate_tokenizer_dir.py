@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """Validate a saved LAS tokenizer directory end-to-end.
 
-Runs the following tests (see proposal in conversation 2026-04-21):
+Runs the following tests:
 
 - T1  pretokenized-form invariance. "".join(tok.encode(raw).tokens) must equal
       "".join(pretok(norm(raw))). If not, the Unigram scores were trained on a
@@ -60,7 +60,7 @@ FLORES_ROOT = Path(_FLORES_DATA_DIR)
 DEFAULT_SAMPLE = 100
 # Don't demand that every probe sample take the target language --- a
 # "perfect" score isn't realistic for short sentences that overlap other
-# languages. 80% matches the threshold discussed with the user.
+# languages. 80% is the chosen threshold.
 MIN_PCT_ROUTING_CORRECT = 0.80
 
 

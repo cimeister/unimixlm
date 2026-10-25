@@ -43,9 +43,9 @@ logging.basicConfig(level=logging.INFO, format="%(asctime)s | %(message)s")
 #
 # Two tiers of data:
 #   - TOKENIZER-TRAINING data: small sample, fine for fitting a tokenizer.
-#   - MODEL-TRAINING data: full LM-scale corpus. Previous version pointed at
-#     the tokenizer-training sample (2 GB across 80+ code languages, ~96M
-#     total tokens for a 125M model) — an earlier defect, now fixed.
+#   - MODEL-TRAINING data: full LM-scale corpus. The tokenizer-training sample
+#     (2 GB across 80+ code languages, ~96M total tokens) is too small for
+#     a 125M model.
 #
 # The tokenizer is still trained from the small sample (CORPUS_LINES_PER_LANG
 # below); the model training iterates over the FULL corpora below.
@@ -362,10 +362,10 @@ def _stream_texts_for_lang(manifest_path: Path, lang: str):
         # col goes out of scope at the next loop iteration — one file in RAM at a time.
 
 
-# ------------------- Memmap-backed tokenized dataset (bug-fix 2026-04-19) -----
-# Previous implementation built a Python list of per-example dicts on every
-# rank. At engcode scale (3.8M eng docs × max_seq_len=512 × 3 lists of Python
-# ints ≈ 150 GB per rank) this OOM'd the 120 GB node. Fix:
+# ------------------- Memmap-backed tokenized dataset -----
+# A Python list of per-example dicts on every rank does not fit in memory.
+# At engcode scale (3.8M eng docs × max_seq_len=512 × 3 lists of Python
+# ints ≈ 150 GB per rank) it would exceed the 120 GB node. Instead:
 #   1. Rank 0 tokenizes once; writes input_ids to a scratch .bin memmap and
 #      {lengths, num_bytes} to a small .npz; all metadata to a .json.
 #   2. All ranks (including rank 0) torch.distributed.barrier(), then mmap
@@ -658,8 +658,8 @@ def load_training_data(tokenizer_paths, manifest_path: Path,
             # Must NOT rely on dist.barrier(): under `torch.distributed.run` the
             # process group is not initialized at data-load time, so the barrier
             # below is skipped and ranks 1..N would race to open a not-yet-built
-            # json_path → FileNotFoundError (fixed 2026-05-21; mirrors the
-            # train_fromscratch_v2.py fix). json is written LAST + atomically.
+            # json_path → FileNotFoundError (mirrors the
+            # train_fromscratch_v2.py approach). json is written LAST + atomically.
             import time as _time
             _timeout = int(os.environ.get("FROMSCRATCH_CACHE_TIMEOUT_S", str(8 * 3600)))
             _deadline = _time.time() + _timeout
@@ -719,7 +719,7 @@ def main():
     parser.add_argument("--eval_steps", type=int, default=500)
     parser.add_argument("--per_device_batch_size", type=int, default=12)
     parser.add_argument("--gradient_accumulation_steps", type=int, default=2)
-    # New: token-budget + shared-seed manifest args (Part E of recovery plan).
+    # New: token-budget + shared-seed manifest args.
     parser.add_argument("--tokens_per_lang", type=int, default=DEFAULT_TOKENS_PER_LANG,
                         help="Target post-truncation tokens per language. "
                              "Default: Chinchilla (~2.5B total for 125M model).")
@@ -742,7 +742,7 @@ def main():
         args.output_dir = str(Path(scratch_dir) / "unimix_fromscratch_engcode")
 
     output_dir = Path(args.output_dir)
-    # Per naming policy: encode settings in path (§Part H).
+    # Per naming policy: encode settings in path.
     tokens_label = f"{args.tokens_per_lang // 1_000_000}M" if args.tokens_per_lang < 1_000_000_000 \
         else f"{args.tokens_per_lang / 1e9:.1f}B"
     run_name = (
@@ -839,7 +839,7 @@ def main():
     import wandb
     is_main = int(os.environ.get("LOCAL_RANK", 0)) == 0
     if is_main:
-        # Descriptive tag taxonomy (see memory/feedback_wandb_tagging.md).
+        # Descriptive tag taxonomy.
         _wandb_entity = os.environ.get("WANDB_ENTITY")
         if not _wandb_entity:
             raise RuntimeError(

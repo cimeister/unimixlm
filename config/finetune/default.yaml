@@ -26,19 +26,18 @@ las_mode: "langspec"
 # Required for las_mode "base" or "langspec", ignored for "original".
 las_tokenizer_path: ./las_tokenizers/olmo3-7b_v100k_fineweb2sample_10klines_afr-ind-ron-swh_softem
 # model_tokenizer_path interpolates the active model group's `model_name`
-# so it can never silently disagree with the model. A 2026-05-14 ordering
-# bug had `_self_` last in `defaults`, which silently overwrote model-group
-# values with the OLMo default — invalidating every Qwen3/Gemma3 BPE training
-# run done up to that point. Interpolation tracks model_name automatically,
-# so the bug pattern is structurally impossible now.
+# so it can never silently disagree with the model. `_self_` must come first
+# in `defaults` so model-group values take precedence; otherwise Hydra
+# overwrites them with the top-level defaults. Interpolation tracks model_name
+# automatically, so the two cannot diverge.
 model_tokenizer_path: ${model.model_name}
 
 seed: 42
 epochs: 1
 # Interpolated from the active model group so a model's memory profile
 # (vocab × hidden = embedding size) can't be silently overridden by a
-# global default. 2026-05-15 bug: gemma3-1b.yaml's batch override landed
-# in cfg.model.* (unread) and Hydra served the 4/8 default → OOM. Every
+# global default. A batch override placed only in cfg.model.* is never read,
+# and Hydra would serve the 4/8 default (OOM on Gemma3). Every
 # model config MUST declare per_device_batch_size + gradient_accumulation_steps;
 # Hydra errors loudly if one is missing. Effective batch is kept at 128
 # across all models (per_device × 4 GPUs × grad_accum) for comparability.
@@ -75,7 +74,7 @@ reinit_embeddings: false
 # Genuinely tied trainable embedding (peft ensure_weight_tying): ONE trained
 # Parameter feeds both input lookup and output head. Without this, modules_to_save
 # trains an input-only copy while lm_head stays the FROZEN original (measured
-# 2026-08-14; memory modules-to-save-tie-not-preserved). Requires
+# with peft 0.18.1). Requires
 # unfreeze_embeddings=true on a tied model. Output-dir name gains _truetie.
 true_tie: false
 
@@ -89,7 +88,7 @@ use_lora: true
 #   require - error if no checkpoint is present (for verifying resume)
 resume_policy: never
 
-# Optional EXPERIMENTS.md section identifier this run contributes to (e.g. "§8").
+# Optional experiment-section identifier this run contributes to (e.g. "8").
 # When set, a `section:<value>` tag is emitted to WandB so runs are easy to
 # group by the section they belong to. Leave null unless you know the mapping;
 # better to omit than mis-tag.
@@ -101,8 +100,8 @@ dataset:
   #   "local"                - use entire local_dir as-is
   #   "target:500M"          - first-N tokens from local_dir up to the budget
   #                            (suffix K/M/B). This is the only way to cap a
-  #                            local corpus; previous silent cap-to-local has
-  #                            been removed (bug 1 of 2026-04-13 audit).
+  #                            local corpus; a silent cap-to-local is not
+  #                            performed.
   size: local
   max_seq_len: 1024
   text_column: text  # Column name in parquet (text for FineWeb2, content for StarCoder)
