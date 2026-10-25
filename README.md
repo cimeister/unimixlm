@@ -73,7 +73,7 @@ The run writes, into `data.output_dir`:
 | `pathpiece_tokenizer.json` | A tokenizer over the same vocabulary that picks the segmentation with the fewest pieces, used as a baseline. |
 | `corpora/` | The text used for estimation. Set `LAS_TOK_CORPORA_ROOT` to write this directory elsewhere. |
 
-Validation runs at the end of the fit and raises on any mismatch between the model tokenizer, the shared tokenizer, and the per-language tokenizers in pre-tokenizer, normalizer, decoder, or token order. `scripts/validate_tokenizer_dir.py` runs the same checks plus a routing check on a saved directory.
+Validation runs at the end of the fit and raises on any mismatch between the model tokenizer, the shared tokenizer, and the per-language tokenizers in pre-tokenizer, normalizer, decoder, or token order. `scripts/validate_tokenizer_dir.py` runs the same checks plus a routing check on a saved directory. It reads its probe sentences from `FLORES_DATA_DIR`.
 
 ### Using a fitted tokenizer
 
@@ -146,7 +146,7 @@ Every machine-specific location is read from an environment variable or a comman
 | `LAS_TOK_CORPORA_ROOT` | tokenizer fitting | Optional directory for estimation corpora, in place of `{output_dir}/corpora`. |
 | `MORPHSCORE_DATA_DIR` | MorphScore scripts | Directory holding the per-language `*_data.csv` files from the [MorphScore dataset](https://huggingface.co/datasets/catherinearnett/morphscore). |
 | `MORPHSCORE_PARTS_DIR`, `BOOTSTRAP_PARTS_DIR` | `reproduction/morphscore/` | Scratch directories for per-cell part files. |
-| `FLORES_DATA_DIR` | bits-per-byte scripts | Directory of FLORES+ sentence files. |
+| `FLORES_DATA_DIR` | bits-per-byte scripts, `scripts/validate_tokenizer_dir.py` | Directory of FLORES+ sentence files, one `{lang}.txt` per language. |
 | `SCRATCH_DIR`, `ENGCODE_CACHE_ROOT` | from-scratch pipeline | Scratch roots for checkpoints and tokenized caches. |
 | `CODE_AST_FIT_PARQUET_ROOT` | `scripts/sweep_code_ast_v1.py` | Directory of The Stack samples, one `<lang>/data.parquet` per language. |
 | `TOKEVAL_REPO` | `scripts/sweep_code_ast_v1.py`, `reproduction/convergence/` | Checkout of `tokenizer-intrinsic-evals`, which holds the AST alignment and fertility metrics. |
